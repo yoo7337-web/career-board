@@ -231,6 +231,21 @@ function isAncestor(ancId, nodeId) {
   while (cur && cur.parent && guard++ < 100) { if (cur.parent === ancId) return true; cur = boardById(cur.parent); }
   return false;
 }
+// 상하 연결 + 프로젝트 통일: 연결된 트리는 같은 프로젝트 소속이 되도록
+// (부모 쪽 트리에 프로젝트가 있으면 그걸로, 없는데 자식이 갖고 있으면 트리 전체가 자식의 프로젝트로 편입)
+function setParent(childId, parentId) {
+  const child = boardById(childId), parent = boardById(parentId);
+  if (!child || !parent) return;
+  const childG = child.group || null;
+  child.parent = parentId;
+  let root = parent, guard = 0;
+  while (root.parent && boardById(root.parent) && guard++ < 100) root = boardById(root.parent);
+  const g = root.group || childG || null;
+  descendantsOf(root.id).forEach(id => { const b = boardById(id); if (b) b.group = g; });
+}
+function setGroupDeep(boardId, gid) {
+  descendantsOf(boardId).forEach(id => { const b = boardById(id); if (b) b.group = gid; });
+}
 
 /* ---------- cards (post-its) ---------- */
 function dueBadge(due) {
@@ -317,9 +332,10 @@ function renderBoardView() {
     </div>`);
   }
   return legendHtml()
-    + `<div class="addbar"><button class="pill" data-action="group-add">📁 + 프로젝트 추가</button><button class="pill" data-action="proj-add">+ 보드 추가</button><span class="board-hint">프로젝트=분류 폴더(To-do 없음) · 보드 드래그: 위=상위/아래=하위/왼쪽 영역=분리</span></div>`
+    + `<div class="addbar"><button class="pill" data-action="group-add">📁 + 프로젝트 추가</button><button class="pill" data-action="proj-add">+ 보드 추가</button><span class="board-hint">보드 드래그: 위=상위 / 아래=하위 / 📁헤더=그 프로젝트로 / 왼쪽=분리 / 오른쪽=삭제</span></div>`
     + sections.join('')
-    + `<div class="detach-lane"><span>◀<br>여기에 놓으면<br>보드 분리<br>(독립)</span></div>`;
+    + `<div class="detach-lane"><span>◀<br>여기에 놓으면<br>보드 분리<br>(독립)</span></div>`
+    + `<div class="delete-lane"><span>🗑<br>여기에 놓으면<br>보드 삭제</span></div>`;
 }
 
 /* ---------- structure map ---------- */
@@ -469,7 +485,7 @@ function initMap() {
         const other = tnode.dataset.id;
         const parentId = role === 'bot' ? id : other;
         const childId = role === 'bot' ? other : id;
-        if (!isAncestor(childId, parentId)) { boardById(childId).parent = parentId; save(); }
+        if (!isAncestor(childId, parentId)) { setParent(childId, parentId); save(); }
       }
       render();
     } else if (mode === 'move') {
@@ -477,7 +493,7 @@ function initMap() {
       const b = boardById(id), cur = b.group || null;
       const cx = b.x + 75, cy = b.y + 22;
       const hit = regionRects().filter(r => r.gid !== cur).find(r => cx >= r.x && cx <= r.x + r.w && cy >= r.y && cy <= r.y + r.h);
-      if (hit) { b.group = hit.gid; render(); }   // 다른 프로젝트 구역 안에 놓으면 소속 변경
+      if (hit) { setGroupDeep(id, hit.gid); render(); }   // 다른 프로젝트 구역 안에 놓으면 소속 변경(하위 포함)
       else { save(); drawLines(); }
     } else if (mode === 'pending') {
       const nid = id, now = Date.now();
@@ -902,9 +918,11 @@ document.addEventListener('click', e => {
     if (b) {
       const t = document.getElementById('m-title').value.trim();
       if (t) b.name = t;
-      b.group = document.getElementById('m-bgroup').value || null;
+      setGroupDeep(b.id, document.getElementById('m-bgroup').value || null);
       const par = document.getElementById('m-parent').value || null;
-      if (par !== b.id && !isAncestor(b.id, par)) b.parent = par;
+      if (par !== b.id && !isAncestor(b.id, par)) {
+        if (par) setParent(b.id, par); else b.parent = null;
+      }
       b.start = document.getElementById('m-start').value || null;
       b.end = document.getElementById('m-end').value || null;
     }
@@ -1019,7 +1037,7 @@ document.addEventListener('submit', e => {
 let dragItem = null; // { kind:'card'|'board', id }
 function clearDropHints() {
   document.querySelectorAll('.dragover,.over').forEach(el => el.classList.remove('dragover', 'over'));
-  document.querySelectorAll('.drop-child,.drop-parent').forEach(el => el.classList.remove('drop-child', 'drop-parent'));
+  document.querySelectorAll('.drop-child,.drop-parent,.drop-into').forEach(el => el.classList.remove('drop-child', 'drop-parent', 'drop-into'));
 }
 document.addEventListener('dragstart', e => {
   const c = e.target.closest('.card');
@@ -1030,8 +1048,10 @@ document.addEventListener('dragstart', e => {
 document.addEventListener('dragend', () => { dragItem = null; document.body.classList.remove('dragging-board'); clearDropHints(); });
 document.addEventListener('dragover', e => {
   if (dragItem && dragItem.kind === 'board') {
-    const lane = e.target.closest('.detach-lane');
+    const lane = e.target.closest('.detach-lane,.delete-lane');
     if (lane) { e.preventDefault(); lane.classList.add('over'); return; }
+    const ghead = e.target.closest('.group-head');
+    if (ghead && ghead.querySelector('[data-action="group-edit"]')) { e.preventDefault(); ghead.classList.add('drop-into'); return; }
     const panel = e.target.closest('.board-panel');
     if (panel && panel.dataset.board !== dragItem.id) {
       e.preventDefault();
@@ -1048,8 +1068,10 @@ document.addEventListener('dragover', e => {
 document.addEventListener('dragleave', e => {
   const col = e.target.closest('.col');
   if (col) col.classList.remove('dragover');
-  const lane = e.target.closest('.detach-lane');
+  const lane = e.target.closest('.detach-lane,.delete-lane');
   if (lane && !lane.contains(e.relatedTarget)) lane.classList.remove('over');
+  const ghead = e.target.closest('.group-head');
+  if (ghead && !ghead.contains(e.relatedTarget)) ghead.classList.remove('drop-into');
   const panel = e.target.closest('.board-panel');
   if (panel && !panel.contains(e.relatedTarget)) panel.classList.remove('drop-child', 'drop-parent');
 });
@@ -1057,8 +1079,20 @@ document.addEventListener('drop', e => {
   if (dragItem && dragItem.kind === 'board') {
     e.preventDefault();
     const draggedId = dragItem.id, dragged = boardById(draggedId);
+    const ghead = e.target.closest('.group-head');
     if (e.target.closest('.detach-lane')) {
       dragged.parent = null;                               // 왼쪽 분리 영역 → 독립
+    } else if (e.target.closest('.delete-lane')) {         // 오른쪽 삭제 영역
+      const cardCnt = state.cards.filter(c => c.project === draggedId).length;
+      if (confirm(`'${dragged.name}' 보드를 삭제할까요?${cardCnt ? `\n(포스트잇 ${cardCnt}개도 함께 삭제)` : ''}`)) {
+        state.projects.forEach(x => { if (x.parent === draggedId) x.parent = dragged.parent || null; });
+        state.projects = state.projects.filter(x => x.id !== draggedId);
+        state.cards = state.cards.filter(c => c.project !== draggedId);
+      }
+    } else if (ghead && ghead.querySelector('[data-action="group-edit"]')) {
+      const gid = ghead.querySelector('[data-action="group-edit"]').dataset.id;  // 프로젝트 헤더에 드롭 → 소속
+      dragged.parent = null;
+      setGroupDeep(draggedId, gid);
     } else {
       const panel = e.target.closest('.board-panel');
       if (panel && panel.dataset.board !== draggedId) {
@@ -1066,11 +1100,11 @@ document.addEventListener('drop', e => {
         const r = panel.getBoundingClientRect();
         const lower = (e.clientY - r.top) > r.height / 2;
         if (lower) {                                       // 아래 절반 → dragged를 target의 하위로
-          if (isAncestor(draggedId, target.id)) { target.parent = dragged.parent; dragged.parent = target.id; }
-          else dragged.parent = target.id;
+          if (isAncestor(draggedId, target.id)) { target.parent = dragged.parent; }
+          setParent(draggedId, target.id);
         } else {                                           // 위 절반 → dragged를 target의 상위로
-          if (isAncestor(target.id, draggedId)) { dragged.parent = target.parent; target.parent = draggedId; }
-          else target.parent = draggedId;
+          if (isAncestor(target.id, draggedId)) { dragged.parent = target.parent; }
+          setParent(target.id, draggedId);
         }
       }
     }
