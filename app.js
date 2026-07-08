@@ -816,7 +816,7 @@ document.addEventListener('submit', e => {
   const input = form.querySelector('input');
   const t = input.value.trim();
   if (!t) return;
-  state.cards.push({ id: uid(), project: form.dataset.project, title: t, status: 'todo', priority: 'none', due: null, doneAt: null });
+  state.cards.push({ id: uid(), project: form.dataset.project, title: t, status: 'todo', priority: 'none', due: todayStr(), doneAt: null });
   render();
   const again = document.querySelector(`.board-panel[data-board="${form.dataset.project}"] .quick input`);
   if (again) again.focus();
