@@ -77,6 +77,34 @@ function ensureDevlog() {
   return false;
 }
 
+/* ---------- backups (separate cloud doc + local, protects against overwrite) ---------- */
+const SNAP_KEY = 'board-v2-snaps', SNAP_MAX = 30, SNAP_LOCAL_MAX = 12, SNAP_MIN_MS = 90000;
+let backupSnaps = [], unsubBackup = null, lastSnapHash = '', lastSnapTime = 0;
+function localSnaps() { try { return JSON.parse(localStorage.getItem(SNAP_KEY) || '[]'); } catch (e) { return []; } }
+function stateHash(s) { try { return JSON.stringify([s.projects, s.cards, s.devlog]); } catch (e) { return 't' + Date.now(); } }
+function snapSummary(st) {
+  const p = st && st.projects ? st.projects.length : 0;
+  const c = st && st.cards ? st.cards.length : 0;
+  return `보드 ${p} · 카드 ${c}`;
+}
+function pushSnapshot(force) {
+  const h = stateHash(state), now = Date.now();
+  if (!force && (h === lastSnapHash || now - lastSnapTime < SNAP_MIN_MS)) return;
+  lastSnapHash = h; lastSnapTime = now;
+  const snap = { ts: new Date().toISOString(), state: JSON.parse(JSON.stringify(state)) };
+  try { const l = localSnaps(); l.push(snap); localStorage.setItem(SNAP_KEY, JSON.stringify(l.slice(-SNAP_LOCAL_MAX))); } catch (e) { /* quota */ }
+  if (CLOUD && db && authUser) {
+    backupSnaps = backupSnaps.concat([snap]).slice(-SNAP_MAX);
+    db.collection('backups').doc(authUser.uid).set({ snaps: backupSnaps }).catch(e => console.warn('backup write failed', e));
+  }
+}
+function subscribeBackups(uid) {
+  if (unsubBackup) unsubBackup();
+  unsubBackup = db.collection('backups').doc(uid).onSnapshot(s => {
+    const d = s.data(); backupSnaps = (d && d.snaps) || [];
+  }, e => console.warn('backup sub failed', e));
+}
+
 function save() {
   localStorage.setItem(LS_KEY, JSON.stringify(state));
   if (CLOUD && db && authUser && !applyingRemote) {
@@ -85,7 +113,10 @@ function save() {
       db.collection('boards').doc(authUser.uid)
         .set({ state, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
         .catch(e => console.warn('sync write failed', e));
+      pushSnapshot();
     }, 600);
+  } else if (!CLOUD) {
+    pushSnapshot();
   }
 }
 
@@ -101,8 +132,8 @@ async function initCloud() {
     db = firebase.firestore();
     firebase.auth().onAuthStateChanged(user => {
       authUser = user;
-      if (user) subscribeBoard(user.uid);
-      else { if (unsubDoc) { unsubDoc(); unsubDoc = null; } showAuthGate(); }
+      if (user) { subscribeBoard(user.uid); subscribeBackups(user.uid); }
+      else { if (unsubDoc) { unsubDoc(); unsubDoc = null; } if (unsubBackup) { unsubBackup(); unsubBackup = null; } showAuthGate(); }
     });
   } catch (e) {
     console.warn('cloud init failed → 로컬 모드', e);
@@ -123,6 +154,7 @@ function subscribeBoard(uid) {
       render();
       applyingRemote = false;
       if (ensureDevlog()) { save(); render(); }
+      pushSnapshot();
     } else {
       ensureDevlog();
       db.collection('boards').doc(uid).set({ state, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
@@ -543,6 +575,7 @@ function render() {
     </header>
     ${view === 'map' ? renderMap() : view === 'cal' ? renderCal() : view === 'devlog' ? renderDevlog() : renderBoardView()}
     <footer>
+      <button data-action="restore-open">🛟 백업·복원</button>
       <button data-action="export">JSON 내보내기</button>
       <button data-action="import">가져오기</button>
       <button data-action="ics" title="Google Calendar에서 '설정 > 가져오기'로 등록">.ics 내보내기</button>
@@ -623,6 +656,24 @@ function openCalAddModal(date) {
     <div class="m-actions">
       <button class="ghost" data-action="modal-close">취소</button>
       <button class="primary" data-action="caladd-save" data-date="${date}">추가</button>
+    </div>`);
+}
+function openRestoreModal() {
+  const src = (CLOUD && authUser) ? backupSnaps : localSnaps();
+  const list = src.slice().reverse(); // newest first
+  const fmt = ts => { try { return new Date(ts).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }); } catch (e) { return ts; } };
+  const rows = list.map(s => `<div class="snap-row">
+      <div><div class="snap-ts">${fmt(s.ts)}</div><div class="snap-sum">${snapSummary(s.state)}</div></div>
+      <button class="ghost" data-action="restore-apply" data-ts="${s.ts}">복원</button>
+    </div>`).join('') || '<div class="empty">아직 백업이 없어요. 잠시 사용하면 자동으로 쌓입니다.</div>';
+  showModal(`
+    <h3>백업 · 복원</h3>
+    <p class="restore-note">변경 시 자동으로 백업됩니다(최근 ${SNAP_MAX}개, 클라우드+기기 이중 보관). 특정 시점으로 되돌리거나 지금 즉시 백업할 수 있어요.</p>
+    <div class="snap-list">${rows}</div>
+    <div class="m-actions">
+      <button class="ghost" data-action="backup-now">지금 백업</button>
+      <button class="ghost" data-action="export">JSON 파일로</button>
+      <button class="primary" data-action="modal-close">닫기</button>
     </div>`);
 }
 function openProjModal() {
@@ -827,6 +878,20 @@ document.addEventListener('click', e => {
     URL.revokeObjectURL(a.href);
   }
   else if (act === 'import') document.getElementById('import-file').click();
+  else if (act === 'restore-open') openRestoreModal();
+  else if (act === 'backup-now') { pushSnapshot(true); openRestoreModal(); }
+  else if (act === 'restore-apply') {
+    const ts = el.dataset.ts;
+    const src = (CLOUD && authUser) ? backupSnaps : localSnaps();
+    const snap = src.find(s => s.ts === ts);
+    if (snap && confirm('이 시점 상태로 되돌릴까요?\n(현재 상태도 백업에 남아 다시 되돌릴 수 있어요)')) {
+      pushSnapshot(true);                       // 현재 상태 먼저 백업
+      state = JSON.parse(JSON.stringify(snap.state));
+      state.sel = state.sel || { view: 'board' };
+      lastSnapHash = '';                         // 복원 결과도 곧 백업되도록
+      closeModal(); render();
+    }
+  }
 });
 
 document.getElementById('import-file').addEventListener('change', e => {
