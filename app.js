@@ -254,7 +254,7 @@ function legendHtml() {
 function renderBoardView() {
   const items = orderedBoards();
   return legendHtml()
-    + `<div class="addbar"><button class="pill" data-action="proj-add">+ 보드 추가</button><span class="board-hint">보드 이름을 끌어 다른 보드 아래쪽=하위, 위쪽=상위</span></div>`
+    + `<div class="addbar"><button class="pill" data-action="proj-add">+ 보드 추가</button><span class="board-hint">보드 이름을 끌어 → 다른 보드 아래쪽=하위, 위쪽=상위, 왼쪽/빈 곳=분리</span></div>`
     + `<div class="boards">${items.map(({ board, depth }) => panelHtml(board, depth)).join('')}</div>`;
 }
 
@@ -268,6 +268,32 @@ function ensurePositions() {
     i++;
   });
 }
+function autoLayout() {
+  const COLW = 175, ROWH = 110, PADX = 30, PADY = 30;
+  const ids = new Set(state.projects.map(b => b.id));
+  const byParent = {};
+  state.projects.forEach(b => { const p = (b.parent && ids.has(b.parent)) ? b.parent : 'root'; (byParent[p] = byParent[p] || []).push(b); });
+  const xOf = {}, depthOf = {}, visited = new Set();
+  let leaf = 0;
+  const assign = (id, depth) => {
+    if (visited.has(id)) return; visited.add(id);
+    depthOf[id] = depth;
+    const kids = byParent[id] || [];
+    if (!kids.length) { xOf[id] = leaf++; }
+    else {
+      kids.forEach(k => assign(k.id, depth + 1));
+      const xs = kids.map(k => xOf[k.id]).filter(v => typeof v === 'number');
+      xOf[id] = xs.length ? (xs[0] + xs[xs.length - 1]) / 2 : leaf++;
+    }
+  };
+  (byParent.root || []).forEach(r => assign(r.id, 0));
+  state.projects.forEach(b => { if (!visited.has(b.id)) assign(b.id, 0); });
+  state.projects.forEach(b => {
+    b.x = PADX + (xOf[b.id] || 0) * COLW;
+    b.y = PADY + (depthOf[b.id] || 0) * ROWH;
+  });
+  save();
+}
 let focusBoard = null;   // board to scroll to in board view after nav
 let pendingMapPos = null; // {x,y} for add-board-at-click
 function renderMap() {
@@ -278,8 +304,12 @@ function renderMap() {
       <div class="mapnode-name">${esc(b.name)}</div>
       <div class="mp mp-bot" data-id="${b.id}" data-role="bot" title="하위 연결점 — 여기서 자식 보드로 끌기"></div>
     </div>`).join('');
-  return `<div class="maphint">빈 곳 클릭 = 보드 추가 · 노드 아무 데나 끌어 이동 · 클릭 = 설정, 더블클릭 = 보드 탭으로 이동 · 위/아래 점을 다른 보드로 끌어 상하 연결</div>
-    <div class="map" id="map"><svg class="maplines" id="maplines"></svg>${nodes}</div>`;
+  const h = Math.max(520, state.projects.reduce((m, b) => Math.max(m, b.y || 0), 0) + 100);
+  return `<div class="map-toolbar">
+      <button class="pill" data-action="map-arrange" title="상위→하위 순으로 위아래 자동 배치">⟲ 자동정렬</button>
+      <span class="maphint">빈 곳 클릭 = 보드 추가 · 노드 끌어 이동 · 클릭 = 설정, 더블클릭 = 보드로 이동 · 위/아래 점을 끌어 상하 연결</span>
+    </div>
+    <div class="map" id="map" style="height:${h}px"><svg class="maplines" id="maplines"></svg>${nodes}</div>`;
 }
 function drawLines(temp) {
   const map = document.getElementById('map');
@@ -686,6 +716,7 @@ document.addEventListener('click', e => {
   else if (act === 'signup') { doAuth('signup'); }
   else if (act === 'logout') { if (window.firebase) firebase.auth().signOut(); }
   else if (act === 'view') { state.sel.view = el.dataset.view; render(); }
+  else if (act === 'map-arrange') { autoLayout(); render(); }
   else if (act === 'cal-prev') calShift(-1);
   else if (act === 'cal-next') calShift(1);
   else if (act === 'cal-today') { state.sel.calYm = todayStr().slice(0, 7); render(); }
@@ -826,7 +857,7 @@ document.addEventListener('submit', e => {
 let dragItem = null; // { kind:'card'|'board', id }
 function clearDropHints() {
   document.querySelectorAll('.dragover').forEach(el => el.classList.remove('dragover'));
-  document.querySelectorAll('.drop-child,.drop-parent').forEach(el => el.classList.remove('drop-child', 'drop-parent'));
+  document.querySelectorAll('.drop-child,.drop-parent,.drop-detach').forEach(el => el.classList.remove('drop-child', 'drop-parent', 'drop-detach'));
 }
 document.addEventListener('dragstart', e => {
   const c = e.target.closest('.card');
@@ -841,9 +872,12 @@ document.addEventListener('dragover', e => {
     if (panel && panel.dataset.board !== dragItem.id) {
       e.preventDefault();
       const r = panel.getBoundingClientRect();
+      const relX = (e.clientX - r.left) / (r.width || 1);
       const lower = (e.clientY - r.top) > r.height / 2;
-      panel.classList.toggle('drop-child', lower);
-      panel.classList.toggle('drop-parent', !lower);
+      panel.classList.remove('drop-child', 'drop-parent', 'drop-detach');
+      panel.classList.add(relX < 0.22 ? 'drop-detach' : lower ? 'drop-child' : 'drop-parent');
+    } else if (!panel && e.target.closest('.boards')) {
+      e.preventDefault();  // 빈 곳에 놓으면 분리
     }
     return;
   }
@@ -854,20 +888,28 @@ document.addEventListener('dragleave', e => {
   const col = e.target.closest('.col');
   if (col) col.classList.remove('dragover');
   const panel = e.target.closest('.board-panel');
-  if (panel && !panel.contains(e.relatedTarget)) panel.classList.remove('drop-child', 'drop-parent');
+  if (panel && !panel.contains(e.relatedTarget)) panel.classList.remove('drop-child', 'drop-parent', 'drop-detach');
 });
 document.addEventListener('drop', e => {
   if (dragItem && dragItem.kind === 'board') {
+    e.preventDefault();
+    const draggedId = dragItem.id, dragged = boardById(draggedId);
     const panel = e.target.closest('.board-panel');
-    if (panel && panel.dataset.board !== dragItem.id) {
-      e.preventDefault();
+    if (!panel) {
+      if (e.target.closest('.boards')) dragged.parent = null;   // 빈 곳 → 분리
+    } else if (panel.dataset.board !== draggedId) {
+      const target = boardById(panel.dataset.board);
       const r = panel.getBoundingClientRect();
+      const relX = (e.clientX - r.left) / (r.width || 1);
       const lower = (e.clientY - r.top) > r.height / 2;
-      const draggedId = dragItem.id, targetId = panel.dataset.board;
-      if (lower) { // 아래쪽 → 대상의 하위로
-        if (!isAncestor(draggedId, targetId)) boardById(draggedId).parent = targetId;
-      } else {     // 위쪽 → 대상의 상위로
-        if (!isAncestor(targetId, draggedId)) boardById(targetId).parent = draggedId;
+      if (relX < 0.22) {                     // 왼쪽 → 분리(최상위)
+        dragged.parent = null;
+      } else if (lower) {                    // 아래쪽 → dragged를 target의 하위로
+        if (isAncestor(draggedId, target.id)) { target.parent = dragged.parent; dragged.parent = target.id; }
+        else dragged.parent = target.id;
+      } else {                               // 위쪽 → dragged를 target의 상위로
+        if (isAncestor(target.id, draggedId)) { dragged.parent = target.parent; target.parent = draggedId; }
+        else target.parent = draggedId;
       }
     }
     dragItem = null; clearDropHints(); render();
