@@ -225,7 +225,7 @@ function panelHtml(b, depth) {
   const done = cardsOf(b.id, 'done').sort((a, c) => (c.doneAt || '').localeCompare(a.doneAt || ''));
   return `<section class="board-panel" data-board="${b.id}" style="margin-left:${depth * 22}px">
     <div class="panel-head">
-      <span class="bname c-${b.color}" data-action="board-edit" data-id="${b.id}" title="클릭하면 이름·상위·삭제">${esc(b.name)}</span>
+      <span class="bname board-drag c-${b.color}" draggable="true" data-action="board-edit" data-id="${b.id}" title="클릭=설정 · 끌어서 다른 보드 위/아래에 놓으면 상하 구조">${esc(b.name)}</span>
       ${parent ? `<span class="bcrumb">▸ 상위 ${esc(parent.name)}</span>` : ''}
     </div>
     <div class="panel-cols">
@@ -254,7 +254,7 @@ function legendHtml() {
 function renderBoardView() {
   const items = orderedBoards();
   return legendHtml()
-    + `<div class="addbar"><button class="pill" data-action="proj-add">+ 보드 추가</button></div>`
+    + `<div class="addbar"><button class="pill" data-action="proj-add">+ 보드 추가</button><span class="board-hint">보드 이름을 끌어 다른 보드 아래쪽=하위, 위쪽=상위</span></div>`
     + `<div class="boards">${items.map(({ board, depth }) => panelHtml(board, depth)).join('')}</div>`;
 }
 
@@ -822,20 +822,57 @@ document.addEventListener('submit', e => {
   if (again) again.focus();
 });
 
-/* ---------- card drag & drop (across boards + columns) ---------- */
+/* ---------- drag & drop: cards (columns) + boards (hierarchy) ---------- */
+let dragItem = null; // { kind:'card'|'board', id }
+function clearDropHints() {
+  document.querySelectorAll('.dragover').forEach(el => el.classList.remove('dragover'));
+  document.querySelectorAll('.drop-child,.drop-parent').forEach(el => el.classList.remove('drop-child', 'drop-parent'));
+}
 document.addEventListener('dragstart', e => {
   const c = e.target.closest('.card');
-  if (c) e.dataTransfer.setData('text/plain', c.dataset.id);
+  if (c) { dragItem = { kind: 'card', id: c.dataset.id }; e.dataTransfer.setData('text/plain', c.dataset.id); return; }
+  const bd = e.target.closest('.board-drag');
+  if (bd) { dragItem = { kind: 'board', id: bd.dataset.id }; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', 'board'); }
 });
+document.addEventListener('dragend', () => { dragItem = null; clearDropHints(); });
 document.addEventListener('dragover', e => {
+  if (dragItem && dragItem.kind === 'board') {
+    const panel = e.target.closest('.board-panel');
+    if (panel && panel.dataset.board !== dragItem.id) {
+      e.preventDefault();
+      const r = panel.getBoundingClientRect();
+      const lower = (e.clientY - r.top) > r.height / 2;
+      panel.classList.toggle('drop-child', lower);
+      panel.classList.toggle('drop-parent', !lower);
+    }
+    return;
+  }
   const col = e.target.closest('.col');
   if (col) { e.preventDefault(); col.classList.add('dragover'); }
 });
 document.addEventListener('dragleave', e => {
   const col = e.target.closest('.col');
   if (col) col.classList.remove('dragover');
+  const panel = e.target.closest('.board-panel');
+  if (panel && !panel.contains(e.relatedTarget)) panel.classList.remove('drop-child', 'drop-parent');
 });
 document.addEventListener('drop', e => {
+  if (dragItem && dragItem.kind === 'board') {
+    const panel = e.target.closest('.board-panel');
+    if (panel && panel.dataset.board !== dragItem.id) {
+      e.preventDefault();
+      const r = panel.getBoundingClientRect();
+      const lower = (e.clientY - r.top) > r.height / 2;
+      const draggedId = dragItem.id, targetId = panel.dataset.board;
+      if (lower) { // 아래쪽 → 대상의 하위로
+        if (!isAncestor(draggedId, targetId)) boardById(draggedId).parent = targetId;
+      } else {     // 위쪽 → 대상의 상위로
+        if (!isAncestor(targetId, draggedId)) boardById(targetId).parent = draggedId;
+      }
+    }
+    dragItem = null; clearDropHints(); render();
+    return;
+  }
   const col = e.target.closest('.col');
   if (!col) return;
   e.preventDefault();

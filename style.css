@@ -31,7 +31,8 @@ header h1{font-size:20px;margin:0;font-weight:600}
 .legend .lg i{width:13px;height:13px;border-radius:3px;display:inline-block}
 .legend .lg i.plain{background:var(--surface);border:1px solid var(--border)}
 
-.addbar{margin-bottom:12px}
+.addbar{margin-bottom:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.board-hint{font-size:12px;color:var(--faint)}
 .pill{border:1px solid var(--border);background:var(--surface);color:var(--muted);font-size:13px;padding:6px 14px;border-radius:999px;cursor:pointer;font-family:inherit}
 .pill:hover{border-color:var(--accent);color:var(--text)}
 
@@ -60,7 +61,10 @@ header h1{font-size:20px;margin:0;font-weight:600}
 .boards{display:flex;flex-direction:column;gap:14px}
 .board-panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px}
 .panel-head{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
-.bname{font-weight:600;font-size:14px;padding:4px 12px;border-radius:999px;cursor:pointer}
+.bname{font-weight:600;font-size:14px;padding:4px 12px;border-radius:999px;cursor:grab}
+.bname:active{cursor:grabbing}
+.board-panel.drop-child{box-shadow:inset 0 -5px 0 -1px var(--accent)}
+.board-panel.drop-parent{box-shadow:inset 0 5px 0 -1px var(--accent)}
 .bcrumb{font-size:12px;color:var(--faint)}
 .head-sp{flex:1}
 .mini-btn{border:1px solid var(--border);background:transparent;color:var(--muted);font:inherit;font-size:12px;padding:4px 10px;border-radius:999px;cursor:pointer}
