@@ -15,6 +15,7 @@ const SEED = {
   projects: [
     { id: 'work-main', name: '회사 업무', color: 'blue', parent: null, x: 40, y: 40 },
   ],
+  groups: [],
   cards: [],
   sel: { view: 'board' },
 };
@@ -45,6 +46,7 @@ function load() {
       const s = JSON.parse(raw);
       s.sel = s.sel || {};
       if (!s.sel.view) s.sel.view = 'board';
+      s.groups = s.groups || [];
       return s;
     }
   } catch (e) { /* corrupt storage -> reseed */ }
@@ -150,6 +152,7 @@ function subscribeBoard(uid) {
       applyingRemote = true;
       state = data.state;
       state.sel = state.sel || { view: 'board' };
+      state.groups = state.groups || [];
       localStorage.setItem(LS_KEY, JSON.stringify(state));
       render();
       applyingRemote = false;
@@ -283,11 +286,39 @@ function legendHtml() {
   return `<div class="legend">중요도 <span class="lg"><i class="plain"></i>없음</span>${sw}</div>`;
 }
 
+function groupById(id) { return (state.groups || []).find(g => g.id === id); }
+function orderedBoardsIn(gid) {
+  const members = state.projects.filter(b => (b.group || null) === gid);
+  const ids = new Set(members.map(b => b.id));
+  const byParent = {};
+  members.forEach(b => { const p = (b.parent && ids.has(b.parent)) ? b.parent : 'root'; (byParent[p] = byParent[p] || []).push(b); });
+  const out = [], seen = new Set();
+  (function walk(pid, depth) {
+    (byParent[pid] || []).forEach(b => { if (seen.has(b.id)) return; seen.add(b.id); out.push({ board: b, depth }); walk(b.id, depth + 1); });
+  })('root', 0);
+  members.forEach(b => { if (!seen.has(b.id)) { seen.add(b.id); out.push({ board: b, depth: 0 }); } });
+  return out;
+}
 function renderBoardView() {
-  const items = orderedBoards();
+  const groups = state.groups || [];
+  const sections = [];
+  groups.forEach(g => {
+    const items = orderedBoardsIn(g.id);
+    sections.push(`<div class="group-sec">
+      <div class="group-head"><span class="gname c-${g.color}" data-action="group-edit" data-id="${g.id}" title="클릭=프로젝트 이름·삭제">📁 ${esc(g.name)}</span><span class="gcnt">보드 ${items.length}</span><button class="mini-btn" data-action="proj-add" data-group="${g.id}">+ 보드</button></div>
+      ${items.length ? `<div class="boards">${items.map(({ board, depth }) => panelHtml(board, depth)).join('')}</div>` : '<div class="empty">이 프로젝트에 보드가 없어요 — [+ 보드]로 추가</div>'}
+    </div>`);
+  });
+  const un = orderedBoardsIn(null);
+  if (un.length || !groups.length) {
+    sections.push(`<div class="group-sec">
+      ${groups.length ? '<div class="group-head"><span class="gname plain">미분류</span></div>' : ''}
+      <div class="boards">${un.map(({ board, depth }) => panelHtml(board, depth)).join('')}</div>
+    </div>`);
+  }
   return legendHtml()
-    + `<div class="addbar"><button class="pill" data-action="proj-add">+ 보드 추가</button><span class="board-hint">보드 이름을 끌어 → 다른 보드 위 절반=상위, 아래 절반=하위 · 왼쪽 영역=분리(독립)</span></div>`
-    + `<div class="boards">${items.map(({ board, depth }) => panelHtml(board, depth)).join('')}</div>`
+    + `<div class="addbar"><button class="pill" data-action="group-add">📁 + 프로젝트 추가</button><button class="pill" data-action="proj-add">+ 보드 추가</button><span class="board-hint">프로젝트=분류 폴더(To-do 없음) · 보드 드래그: 위=상위/아래=하위/왼쪽 영역=분리</span></div>`
+    + sections.join('')
     + `<div class="detach-lane"><span>◀<br>여기에 놓으면<br>보드 분리<br>(독립)</span></div>`;
 }
 
@@ -302,47 +333,68 @@ function ensurePositions() {
   });
 }
 function autoLayout() {
-  const COLW = 175, ROWH = 110, PADX = 30, PADY = 30;
-  const ids = new Set(state.projects.map(b => b.id));
-  const byParent = {};
-  state.projects.forEach(b => { const p = (b.parent && ids.has(b.parent)) ? b.parent : 'root'; (byParent[p] = byParent[p] || []).push(b); });
-  const xOf = {}, depthOf = {}, visited = new Set();
-  let leaf = 0;
-  const assign = (id, depth) => {
-    if (visited.has(id)) return; visited.add(id);
-    depthOf[id] = depth;
-    const kids = byParent[id] || [];
-    if (!kids.length) { xOf[id] = leaf++; }
-    else {
-      kids.forEach(k => assign(k.id, depth + 1));
-      const xs = kids.map(k => xOf[k.id]).filter(v => typeof v === 'number');
-      xOf[id] = xs.length ? (xs[0] + xs[xs.length - 1]) / 2 : leaf++;
-    }
+  const COLW = 175, ROWH = 110, PADY = 60;
+  let offX = 40;
+  const layout = (members) => {
+    const ids = new Set(members.map(b => b.id));
+    const byParent = {};
+    members.forEach(b => { const p = (b.parent && ids.has(b.parent)) ? b.parent : 'root'; (byParent[p] = byParent[p] || []).push(b); });
+    const xOf = {}, depthOf = {}, visited = new Set();
+    let leaf = 0;
+    const assign = (id, depth) => {
+      if (visited.has(id)) return; visited.add(id);
+      depthOf[id] = depth;
+      const kids = byParent[id] || [];
+      if (!kids.length) { xOf[id] = leaf++; }
+      else {
+        kids.forEach(k => assign(k.id, depth + 1));
+        const xs = kids.map(k => xOf[k.id]).filter(v => typeof v === 'number');
+        xOf[id] = xs.length ? (xs[0] + xs[xs.length - 1]) / 2 : leaf++;
+      }
+    };
+    (byParent.root || []).forEach(r => assign(r.id, 0));
+    members.forEach(b => { if (!visited.has(b.id)) assign(b.id, 0); });
+    members.forEach(b => {
+      b.x = offX + (xOf[b.id] || 0) * COLW;
+      b.y = PADY + (depthOf[b.id] || 0) * ROWH;
+    });
+    offX += Math.max(1, leaf) * COLW + 70;   // 다음 프로젝트 구역은 오른쪽에
   };
-  (byParent.root || []).forEach(r => assign(r.id, 0));
-  state.projects.forEach(b => { if (!visited.has(b.id)) assign(b.id, 0); });
-  state.projects.forEach(b => {
-    b.x = PADX + (xOf[b.id] || 0) * COLW;
-    b.y = PADY + (depthOf[b.id] || 0) * ROWH;
+  (state.groups || []).forEach(g => {
+    const ms = state.projects.filter(b => (b.group || null) === g.id);
+    if (ms.length) layout(ms);
   });
+  const un = state.projects.filter(b => !b.group);
+  if (un.length) layout(un);
   save();
 }
 let focusBoard = null;   // board to scroll to in board view after nav
-let pendingMapPos = null; // {x,y} for add-board-at-click
+let pendingMapPos = null; // {x,y,group} for add-board-at-click
+function regionRects() {
+  return (state.groups || []).map(g => {
+    const ms = state.projects.filter(b => (b.group || null) === g.id);
+    if (!ms.length) return null;
+    const xs = ms.map(b => b.x), ys = ms.map(b => b.y);
+    const x = Math.min(...xs) - 18, y = Math.min(...ys) - 36;
+    return { gid: g.id, name: g.name, color: g.color, x, y, w: Math.max(...xs) + 150 - x + 18, h: Math.max(...ys) + 44 - y + 18 };
+  }).filter(Boolean);
+}
 function renderMap() {
   ensurePositions();
+  const regions = regionRects().map(r =>
+    `<div class="map-region c-${r.color}" style="left:${r.x}px;top:${r.y}px;width:${r.w}px;height:${r.h}px"><span class="map-region-label">📁 ${esc(r.name)}</span></div>`).join('');
   const nodes = state.projects.map(b => `
     <div class="mapnode c-${b.color}" data-id="${b.id}" style="left:${b.x}px;top:${b.y}px">
       <div class="mp mp-top" data-id="${b.id}" data-role="top" title="상위 연결점 — 여기서 부모 보드로 끌기"></div>
       <div class="mapnode-name">${esc(b.name)}</div>
       <div class="mp mp-bot" data-id="${b.id}" data-role="bot" title="하위 연결점 — 여기서 자식 보드로 끌기"></div>
     </div>`).join('');
-  const h = Math.max(520, state.projects.reduce((m, b) => Math.max(m, b.y || 0), 0) + 100);
+  const h = Math.max(520, state.projects.reduce((m, b) => Math.max(m, b.y || 0), 0) + 120);
   return `<div class="map-toolbar">
-      <button class="pill" data-action="map-arrange" title="상위→하위 순으로 위아래 자동 배치">⟲ 자동정렬</button>
-      <span class="maphint">빈 곳 클릭 = 보드 추가 · 노드 끌어 이동 · 클릭 = 설정, 더블클릭 = 보드로 이동 · 위/아래 점을 끌어 상하 연결</span>
+      <button class="pill" data-action="map-arrange" title="프로젝트별 구역으로 나눠 상위→하위 자동 배치">⟲ 자동정렬</button>
+      <span class="maphint">색 구역 = 프로젝트 · 노드를 구역 안으로 끌면 그 프로젝트 소속 · 빈 곳 클릭 = 보드 추가 · 더블클릭 = 보드로 이동</span>
     </div>
-    <div class="map" id="map" style="height:${h}px"><svg class="maplines" id="maplines"></svg>${nodes}</div>`;
+    <div class="map" id="map" style="height:${h}px">${regions}<svg class="maplines" id="maplines"></svg>${nodes}</div>`;
 }
 function drawLines(temp) {
   const map = document.getElementById('map');
@@ -422,7 +474,11 @@ function initMap() {
       render();
     } else if (mode === 'move') {
       map.querySelector(`.mapnode[data-id="${id}"]`)?.classList.remove('dragging');
-      save(); drawLines();
+      const b = boardById(id), cur = b.group || null;
+      const cx = b.x + 75, cy = b.y + 22;
+      const hit = regionRects().filter(r => r.gid !== cur).find(r => cx >= r.x && cx <= r.x + r.w && cy >= r.y && cy <= r.y + r.h);
+      if (hit) { b.group = hit.gid; render(); }   // 다른 프로젝트 구역 안에 놓으면 소속 변경
+      else { save(); drawLines(); }
     } else if (mode === 'pending') {
       const nid = id, now = Date.now();
       if (lastId === nid && now - lastTime < CLICK_MS) {   // double click → go to board
@@ -439,10 +495,12 @@ function initMap() {
   });
 }
 function openAddBoardAt(x, y) {
-  pendingMapPos = { x: Math.max(0, x - 75), y: Math.max(0, y - 22) };
+  const hit = regionRects().find(r => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h);
+  pendingMapPos = { x: Math.max(0, x - 75), y: Math.max(0, y - 22), group: hit ? hit.gid : null };
   showModal(`
-    <h3>여기에 보드 추가</h3>
-    <label>이름<input type="text" id="m-title" placeholder="예: A프로젝트 / a 업무"></label>
+    <h3>여기에 보드 추가${hit ? ` — 📁 ${esc(hit.name)}` : ''}</h3>
+    <label>이름<input type="text" id="m-title" placeholder="예: Issue log"></label>
+    ${hit ? `<p class="restore-note">'${esc(hit.name)}' 프로젝트 구역이라 자동으로 그 소속이 됩니다.</p>` : ''}
     <div class="m-actions">
       <button class="ghost" data-action="modal-close">취소</button>
       <button class="primary" data-action="mapadd-save">추가</button>
@@ -634,6 +692,7 @@ function openBoardModal(id) {
   showModal(`
     <h3>보드 설정</h3>
     <label>이름<input type="text" id="m-title" value="${esc(b.name)}"></label>
+    <label>프로젝트 (분류)${groupOptions('m-bgroup', b.group || null)}</label>
     <label>상위 보드<select id="m-parent">${opts.join('')}</select></label>
     <div class="two">
       <label>수행 시작일<input type="date" id="m-start" value="${b.start || ''}"></label>
@@ -676,13 +735,31 @@ function openRestoreModal() {
       <button class="primary" data-action="modal-close">닫기</button>
     </div>`);
 }
-function openProjModal() {
+function groupOptions(selId, cur) {
+  const opts = ['<option value="">— 미분류 —</option>']
+    .concat((state.groups || []).map(g => `<option value="${g.id}" ${cur === g.id ? 'selected' : ''}>${esc(g.name)}</option>`));
+  return `<select id="${selId}">${opts.join('')}</select>`;
+}
+function openProjModal(preGroup) {
   showModal(`
     <h3>보드 추가</h3>
-    <label>이름<input type="text" id="m-title" placeholder="예: A프로젝트 / a 업무"></label>
+    <label>이름<input type="text" id="m-title" placeholder="예: Issue log / 결산 지원"></label>
+    <label>프로젝트 (분류)${groupOptions('m-group', preGroup || null)}</label>
     <div class="m-actions">
       <button class="ghost" data-action="modal-close">취소</button>
       <button class="primary" data-action="proj-save">추가</button>
+    </div>`);
+}
+function openGroupModal(id) {
+  const g = id ? groupById(id) : null;
+  showModal(`
+    <h3>${g ? '프로젝트 설정' : '프로젝트 추가'}</h3>
+    <p class="restore-note">프로젝트는 보드를 묶는 분류 폴더예요 (To-do 없음). 보드 설정에서 소속 프로젝트를 고를 수 있어요.</p>
+    <label>이름<input type="text" id="m-title" value="${g ? esc(g.name) : ''}" placeholder="예: AK18호 / 하림지주"></label>
+    <div class="m-actions">
+      ${g ? `<button class="danger" data-action="group-del" data-id="${g.id}">삭제</button>` : ''}
+      <button class="ghost" data-action="modal-close">취소</button>
+      <button class="primary" data-action="group-save" data-id="${g ? g.id : ''}">저장</button>
     </div>`);
 }
 
@@ -784,7 +861,24 @@ document.addEventListener('click', e => {
   }
   else if (act === 'ics') icsExport();
   else if (act === 'samples') { if (confirm('회계 업무 샘플 보드 3개와 카드들을 추가할까요? (기존 데이터는 유지)')) loadSamples(); }
-  else if (act === 'proj-add') openProjModal();
+  else if (act === 'proj-add') openProjModal(el.dataset.group || null);
+  else if (act === 'group-add') openGroupModal();
+  else if (act === 'group-edit') openGroupModal(el.dataset.id);
+  else if (act === 'group-save') {
+    const t = document.getElementById('m-title').value.trim();
+    if (t) {
+      const g = el.dataset.id ? groupById(el.dataset.id) : null;
+      if (g) g.name = t;
+      else state.groups.push({ id: 'g-' + uid(), name: t, color: RAMP[state.groups.length % RAMP.length] });
+    }
+    closeModal(); render();
+  }
+  else if (act === 'group-del') {
+    const id = el.dataset.id;
+    state.projects.forEach(b => { if (b.group === id) b.group = null; });
+    state.groups = state.groups.filter(g => g.id !== id);
+    closeModal(); render();
+  }
   else if (act === 'board-edit') openBoardModal(el.dataset.id);
   else if (act === 'card') openCardModal(el.dataset.id);
   else if (act === 'modal-close') closeModal();
@@ -808,6 +902,7 @@ document.addEventListener('click', e => {
     if (b) {
       const t = document.getElementById('m-title').value.trim();
       if (t) b.name = t;
+      b.group = document.getElementById('m-bgroup').value || null;
       const par = document.getElementById('m-parent').value || null;
       if (par !== b.id && !isAncestor(b.id, par)) b.parent = par;
       b.start = document.getElementById('m-start').value || null;
@@ -826,7 +921,8 @@ document.addEventListener('click', e => {
     const t = document.getElementById('m-title').value.trim();
     if (t) {
       const i = state.projects.length;
-      state.projects.push({ id: 'p-' + uid(), name: t, color: RAMP[i % RAMP.length], parent: null, x: 30 + (i % 4) * 180, y: 30 + Math.floor(i / 4) * 120 });
+      const grp = document.getElementById('m-group') ? (document.getElementById('m-group').value || null) : null;
+      state.projects.push({ id: 'p-' + uid(), name: t, color: RAMP[i % RAMP.length], parent: null, group: grp, x: 30 + (i % 4) * 180, y: 30 + Math.floor(i / 4) * 120 });
     }
     closeModal(); render();
   }
@@ -834,7 +930,7 @@ document.addEventListener('click', e => {
     const t = document.getElementById('m-title').value.trim();
     if (t && pendingMapPos) {
       const i = state.projects.length;
-      state.projects.push({ id: 'p-' + uid(), name: t, color: RAMP[i % RAMP.length], parent: null, x: pendingMapPos.x, y: pendingMapPos.y });
+      state.projects.push({ id: 'p-' + uid(), name: t, color: RAMP[i % RAMP.length], parent: null, group: pendingMapPos.group || null, x: pendingMapPos.x, y: pendingMapPos.y });
     }
     pendingMapPos = null;
     closeModal(); render();

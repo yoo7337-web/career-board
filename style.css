@@ -58,6 +58,11 @@ header h1{font-size:20px;margin:0;font-weight:600}
 }
 
 /* board view */
+.group-sec{margin-bottom:28px}
+.group-head{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.gname{font-weight:700;font-size:14.5px;padding:5px 14px;border-radius:10px;cursor:pointer}
+.gname.plain{background:transparent;color:var(--faint);cursor:default;padding-left:2px;font-weight:600}
+.gcnt{font-size:12px;color:var(--faint)}
 .boards{display:flex;flex-direction:column;gap:14px}
 .board-panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px}
 .panel-head{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
@@ -110,6 +115,9 @@ body.dragging-board .detach-lane{display:flex}
 .mapline{fill:none;stroke:var(--accent);stroke-width:2}
 .mapline.temp{stroke-dasharray:5 4;opacity:.7}
 .map{cursor:copy}
+.map-region{position:absolute;border-radius:16px;border:2px dashed rgba(0,0,0,.15);opacity:.55;pointer-events:none}
+.map-region-label{position:absolute;top:8px;left:14px;font-size:12.5px;font-weight:700;opacity:1}
+@media (prefers-color-scheme:dark){.map-region{border-color:rgba(255,255,255,.18)}}
 .mapnode{position:absolute;width:150px;min-height:44px;border-radius:10px;padding:10px 12px;cursor:grab;
   box-shadow:0 1px 3px rgba(0,0,0,.15);border:1px solid rgba(0,0,0,.06);touch-action:none;user-select:none}
 .mapnode.dragging{opacity:.85;cursor:grabbing}
