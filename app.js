@@ -56,6 +56,27 @@ let state = load();
 const CLOUD = !!(window.firebaseConfig && window.firebaseConfig.apiKey && !/PASTE|YOUR_/.test(window.firebaseConfig.apiKey));
 let db = null, authUser = null, applyingRemote = false, writeTimer = null, unsubDoc = null;
 
+/* ---------- admin-only dev log ---------- */
+const ADMIN_EMAIL = 'yoo7337@gmail.com';
+function isAdmin() { return !!(authUser && authUser.email && authUser.email.toLowerCase() === ADMIN_EMAIL); }
+const DEVLOG_SEED = [
+  ['2026-07-06', '프로젝트 시작 · 칸반 보드 MVP', 'To-do/Done 드래그 보드, localStorage 저장'],
+  ['2026-07-06', '회사 업무 전용으로 단순화', '초기 프로젝트 연동·오늘 뷰 제거'],
+  ['2026-07-06', '보드 이름 변경·삭제', 'pill 더블클릭으로 편집'],
+  ['2026-07-06', '여러 보드 한 화면 + 구조도 탭', '보드 상하관계를 드래그로 연결, 중요도 색상 포스트잇'],
+  ['2026-07-06', '3단 레인 전환', '마일스톤 제거 → To-do / 진행 중 / 완수'],
+  ['2026-07-06', '달력 탭 + Google Calendar 연동', '월 그리드, 보드 수행기간 막대, 원클릭 등록 링크·.ics 내보내기'],
+  ['2026-07-06', 'UX 개선', '탭 순서 조정, 달력 날짜 클릭으로 추가, 진행 중/완수 시각 표시'],
+  ['2026-07-07', '클라우드 동기화 + 로그인', 'Firebase Firestore+Auth, 전 기기 실시간 동기화'],
+  ['2026-07-07', '외부 배포', 'GitHub Pages 배포 + git 자동 배포 설정'],
+  ['2026-07-07', '개발일지 탭', '관리자 전용 개발 이력·향후 계획 관리'],
+];
+function seedDevlogDone() { return DEVLOG_SEED.map(([date, title, desc]) => ({ id: uid(), date, title, desc })); }
+function ensureDevlog() {
+  if (isAdmin() && !state.devlog) { state.devlog = { done: seedDevlogDone(), future: [] }; return true; }
+  return false;
+}
+
 function save() {
   localStorage.setItem(LS_KEY, JSON.stringify(state));
   if (CLOUD && db && authUser && !applyingRemote) {
@@ -101,7 +122,9 @@ function subscribeBoard(uid) {
       localStorage.setItem(LS_KEY, JSON.stringify(state));
       render();
       applyingRemote = false;
+      if (ensureDevlog()) { save(); render(); }
     } else {
+      ensureDevlog();
       db.collection('boards').doc(uid).set({ state, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
     }
   }, err => console.warn('snapshot error', err));
@@ -400,17 +423,59 @@ function calShift(n) {
   render();
 }
 
+/* ---------- dev log (admin only) ---------- */
+function renderDevlog() {
+  const dl = state.devlog || { done: [], future: [] };
+  const done = (dl.done || []).slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const future = dl.future || [];
+  const doneItem = e => `<li class="dl-item" data-action="dl-edit-done" data-id="${e.id}">
+      <span class="dl-date">${e.date || ''}</span>
+      <div class="dl-body"><div class="dl-title">${esc(e.title)}</div>${e.desc ? `<div class="dl-desc">${esc(e.desc)}</div>` : ''}</div>
+    </li>`;
+  const futureItem = e => `<li class="dl-item" data-action="dl-edit-future" data-id="${e.id}">
+      <div class="dl-body"><div class="dl-title">${esc(e.title)}</div>${e.desc ? `<div class="dl-desc">${esc(e.desc)}</div>` : ''}</div>
+    </li>`;
+  return `<div class="devlog">
+    <p class="dl-note"><i class="lock">🔒</i> 관리자(${ADMIN_EMAIL}) 전용 — 다른 사용자에게는 이 탭이 보이지 않습니다.</p>
+    <section>
+      <div class="dl-head"><h2>완료된 개발 <span class="cnt">${done.length}</span></h2><button class="pill" data-action="dl-add-done">+ 이력 추가</button></div>
+      <ol class="dl-list">${done.map(doneItem).join('') || '<li class="empty">아직 없음</li>'}</ol>
+    </section>
+    <section>
+      <div class="dl-head"><h2>향후 개발 계획 <span class="cnt">${future.length}</span></h2><button class="pill" data-action="dl-add-future">+ 계획 추가</button></div>
+      <ol class="dl-list">${future.map(futureItem).join('') || '<li class="empty">여기에 앞으로 개발할 내용을 추가하세요</li>'}</ol>
+    </section>
+  </div>`;
+}
+function openDevlogModal(kind, id) {
+  const dl = state.devlog || { done: [], future: [] };
+  const e = id ? (dl[kind] || []).find(x => x.id === id) : null;
+  const isDone = kind === 'done';
+  showModal(`
+    <h3>${e ? '수정' : '추가'} — ${isDone ? '개발 이력' : '향후 계획'}</h3>
+    ${isDone ? `<label>날짜<input type="date" id="dl-date" value="${e ? (e.date || '') : todayStr()}"></label>` : ''}
+    <label>제목<input type="text" id="dl-title" value="${e ? esc(e.title) : ''}" placeholder="${isDone ? '예: 달력 탭 추가' : '예: 알림 기능 추가'}"></label>
+    <label>설명 (선택)<input type="text" id="dl-desc" value="${e ? esc(e.desc || '') : ''}"></label>
+    <div class="m-actions">
+      ${e ? `<button class="danger" data-action="dl-del" data-kind="${kind}" data-id="${e.id}">삭제</button>` : ''}
+      <button class="ghost" data-action="modal-close">취소</button>
+      <button class="primary" data-action="dl-save" data-kind="${kind}" data-id="${e ? e.id : ''}">저장</button>
+    </div>`);
+}
+
 /* ---------- render ---------- */
 function render() {
-  const view = state.sel.view || 'board';
+  let view = state.sel.view || 'board';
+  if (view === 'devlog' && !isAdmin()) view = 'board';
   const vbtn = (k, label) => `<button class="${view === k ? 'on' : ''}" data-action="view" data-view="${k}">${label}</button>`;
+  const nav = vbtn('map', '구조도') + vbtn('board', '보드') + vbtn('cal', '달력') + (isAdmin() ? vbtn('devlog', '개발일지') : '');
   document.getElementById('app').innerHTML = `
     <header>
       <h1>업무 보드</h1>
-      <nav class="views">${vbtn('map', '구조도')}${vbtn('board', '보드')}${vbtn('cal', '달력')}</nav>
+      <nav class="views">${nav}</nav>
       <span class="week-count">이번 주 ${weekDone()}개 완료</span>
     </header>
-    ${view === 'map' ? renderMap() : view === 'cal' ? renderCal() : renderBoardView()}
+    ${view === 'map' ? renderMap() : view === 'cal' ? renderCal() : view === 'devlog' ? renderDevlog() : renderBoardView()}
     <footer>
       <button data-action="export">JSON 내보내기</button>
       <button data-action="import">가져오기</button>
@@ -640,6 +705,36 @@ document.addEventListener('click', e => {
       const i = state.projects.length;
       state.projects.push({ id: 'p-' + uid(), name: t, color: RAMP[i % RAMP.length], parent: null, x: 30 + (i % 4) * 180, y: 30 + Math.floor(i / 4) * 120 });
     }
+    closeModal(); render();
+  }
+  else if (act === 'dl-add-done') openDevlogModal('done');
+  else if (act === 'dl-add-future') openDevlogModal('future');
+  else if (act === 'dl-edit-done') openDevlogModal('done', el.dataset.id);
+  else if (act === 'dl-edit-future') openDevlogModal('future', el.dataset.id);
+  else if (act === 'dl-save') {
+    const kind = el.dataset.kind;
+    state.devlog = state.devlog || { done: [], future: [] };
+    const list = state.devlog[kind];
+    const title = document.getElementById('dl-title').value.trim();
+    if (title) {
+      const desc = document.getElementById('dl-desc').value.trim();
+      const dateEl = document.getElementById('dl-date');
+      const date = kind === 'done' ? (dateEl && dateEl.value || todayStr()) : undefined;
+      const id = el.dataset.id;
+      if (id) {
+        const e = list.find(x => x.id === id);
+        if (e) { e.title = title; e.desc = desc; if (kind === 'done') e.date = date; }
+      } else {
+        const e = { id: uid(), title, desc };
+        if (kind === 'done') e.date = date;
+        list.push(e);
+      }
+    }
+    closeModal(); render();
+  }
+  else if (act === 'dl-del') {
+    const kind = el.dataset.kind;
+    if (state.devlog && state.devlog[kind]) state.devlog[kind] = state.devlog[kind].filter(x => x.id !== el.dataset.id);
     closeModal(); render();
   }
   else if (act === 'export') {

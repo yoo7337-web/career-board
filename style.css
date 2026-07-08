@@ -143,6 +143,22 @@ footer button{border:1px solid var(--border);background:var(--surface);color:var
 footer button:hover{border-color:var(--accent);color:var(--text)}
 .sync-badge{color:var(--ok);font-weight:600;margin-left:auto}
 
+/* dev log (admin) */
+.devlog{display:flex;flex-direction:column;gap:22px}
+.dl-note{font-size:12.5px;color:var(--muted);background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 12px;margin:0}
+.dl-note .lock{font-style:normal;margin-right:4px}
+.dl-head{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.dl-head h2{font-size:16px;margin:0;font-weight:600}
+.dl-head .cnt{background:var(--bg);border:1px solid var(--border);border-radius:999px;padding:0 8px;font-size:12px;color:var(--muted);font-weight:400}
+.dl-head .pill{margin-left:auto}
+.dl-list{list-style:none;margin:0;padding:0}
+.dl-item{display:flex;gap:12px;align-items:flex-start;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;margin-bottom:8px;cursor:pointer}
+.dl-item:hover{border-color:var(--accent)}
+.dl-date{font-size:12px;color:var(--accent);font-weight:600;white-space:nowrap;padding-top:2px;min-width:76px}
+.dl-title{font-size:14px}
+.dl-desc{font-size:12.5px;color:var(--muted);margin-top:2px}
+.dl-list .empty{color:var(--faint);font-size:13px;padding:10px 2px;list-style:none}
+
 /* login gate */
 .gate{max-width:340px;margin:12vh auto 0;text-align:center}
 .gate h1{font-size:22px;margin:0 0 6px}
