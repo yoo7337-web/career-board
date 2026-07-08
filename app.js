@@ -254,8 +254,9 @@ function legendHtml() {
 function renderBoardView() {
   const items = orderedBoards();
   return legendHtml()
-    + `<div class="addbar"><button class="pill" data-action="proj-add">+ 보드 추가</button><span class="board-hint">보드 이름을 끌어 → 다른 보드 아래쪽=하위, 위쪽=상위, 왼쪽/빈 곳=분리</span></div>`
-    + `<div class="boards">${items.map(({ board, depth }) => panelHtml(board, depth)).join('')}</div>`;
+    + `<div class="addbar"><button class="pill" data-action="proj-add">+ 보드 추가</button><span class="board-hint">보드 이름을 끌어 → 다른 보드 위 절반=상위, 아래 절반=하위 · 왼쪽 영역=분리(독립)</span></div>`
+    + `<div class="boards">${items.map(({ board, depth }) => panelHtml(board, depth)).join('')}</div>`
+    + `<div class="detach-lane"><span>◀<br>여기에 놓으면<br>보드 분리<br>(독립)</span></div>`;
 }
 
 /* ---------- structure map ---------- */
@@ -856,28 +857,27 @@ document.addEventListener('submit', e => {
 /* ---------- drag & drop: cards (columns) + boards (hierarchy) ---------- */
 let dragItem = null; // { kind:'card'|'board', id }
 function clearDropHints() {
-  document.querySelectorAll('.dragover').forEach(el => el.classList.remove('dragover'));
-  document.querySelectorAll('.drop-child,.drop-parent,.drop-detach').forEach(el => el.classList.remove('drop-child', 'drop-parent', 'drop-detach'));
+  document.querySelectorAll('.dragover,.over').forEach(el => el.classList.remove('dragover', 'over'));
+  document.querySelectorAll('.drop-child,.drop-parent').forEach(el => el.classList.remove('drop-child', 'drop-parent'));
 }
 document.addEventListener('dragstart', e => {
   const c = e.target.closest('.card');
   if (c) { dragItem = { kind: 'card', id: c.dataset.id }; e.dataTransfer.setData('text/plain', c.dataset.id); return; }
   const bd = e.target.closest('.board-drag');
-  if (bd) { dragItem = { kind: 'board', id: bd.dataset.id }; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', 'board'); }
+  if (bd) { dragItem = { kind: 'board', id: bd.dataset.id }; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', 'board'); document.body.classList.add('dragging-board'); }
 });
-document.addEventListener('dragend', () => { dragItem = null; clearDropHints(); });
+document.addEventListener('dragend', () => { dragItem = null; document.body.classList.remove('dragging-board'); clearDropHints(); });
 document.addEventListener('dragover', e => {
   if (dragItem && dragItem.kind === 'board') {
+    const lane = e.target.closest('.detach-lane');
+    if (lane) { e.preventDefault(); lane.classList.add('over'); return; }
     const panel = e.target.closest('.board-panel');
     if (panel && panel.dataset.board !== dragItem.id) {
       e.preventDefault();
       const r = panel.getBoundingClientRect();
-      const relX = (e.clientX - r.left) / (r.width || 1);
-      const lower = (e.clientY - r.top) > r.height / 2;
-      panel.classList.remove('drop-child', 'drop-parent', 'drop-detach');
-      panel.classList.add(relX < 0.22 ? 'drop-detach' : lower ? 'drop-child' : 'drop-parent');
-    } else if (!panel && e.target.closest('.boards')) {
-      e.preventDefault();  // 빈 곳에 놓으면 분리
+      const lower = (e.clientY - r.top) > r.height / 2;    // 보드 전체: 위 절반=상위, 아래 절반=하위
+      panel.classList.remove('drop-child', 'drop-parent');
+      panel.classList.add(lower ? 'drop-child' : 'drop-parent');
     }
     return;
   }
@@ -887,32 +887,33 @@ document.addEventListener('dragover', e => {
 document.addEventListener('dragleave', e => {
   const col = e.target.closest('.col');
   if (col) col.classList.remove('dragover');
+  const lane = e.target.closest('.detach-lane');
+  if (lane && !lane.contains(e.relatedTarget)) lane.classList.remove('over');
   const panel = e.target.closest('.board-panel');
-  if (panel && !panel.contains(e.relatedTarget)) panel.classList.remove('drop-child', 'drop-parent', 'drop-detach');
+  if (panel && !panel.contains(e.relatedTarget)) panel.classList.remove('drop-child', 'drop-parent');
 });
 document.addEventListener('drop', e => {
   if (dragItem && dragItem.kind === 'board') {
     e.preventDefault();
     const draggedId = dragItem.id, dragged = boardById(draggedId);
-    const panel = e.target.closest('.board-panel');
-    if (!panel) {
-      if (e.target.closest('.boards')) dragged.parent = null;   // 빈 곳 → 분리
-    } else if (panel.dataset.board !== draggedId) {
-      const target = boardById(panel.dataset.board);
-      const r = panel.getBoundingClientRect();
-      const relX = (e.clientX - r.left) / (r.width || 1);
-      const lower = (e.clientY - r.top) > r.height / 2;
-      if (relX < 0.22) {                     // 왼쪽 → 분리(최상위)
-        dragged.parent = null;
-      } else if (lower) {                    // 아래쪽 → dragged를 target의 하위로
-        if (isAncestor(draggedId, target.id)) { target.parent = dragged.parent; dragged.parent = target.id; }
-        else dragged.parent = target.id;
-      } else {                               // 위쪽 → dragged를 target의 상위로
-        if (isAncestor(target.id, draggedId)) { dragged.parent = target.parent; target.parent = draggedId; }
-        else target.parent = draggedId;
+    if (e.target.closest('.detach-lane')) {
+      dragged.parent = null;                               // 왼쪽 분리 영역 → 독립
+    } else {
+      const panel = e.target.closest('.board-panel');
+      if (panel && panel.dataset.board !== draggedId) {
+        const target = boardById(panel.dataset.board);
+        const r = panel.getBoundingClientRect();
+        const lower = (e.clientY - r.top) > r.height / 2;
+        if (lower) {                                       // 아래 절반 → dragged를 target의 하위로
+          if (isAncestor(draggedId, target.id)) { target.parent = dragged.parent; dragged.parent = target.id; }
+          else dragged.parent = target.id;
+        } else {                                           // 위 절반 → dragged를 target의 상위로
+          if (isAncestor(target.id, draggedId)) { dragged.parent = target.parent; target.parent = draggedId; }
+          else target.parent = draggedId;
+        }
       }
     }
-    dragItem = null; clearDropHints(); render();
+    dragItem = null; document.body.classList.remove('dragging-board'); clearDropHints(); render();
     return;
   }
   const col = e.target.closest('.col');

@@ -65,7 +65,10 @@ header h1{font-size:20px;margin:0;font-weight:600}
 .bname:active{cursor:grabbing}
 .board-panel.drop-child{box-shadow:inset 0 -5px 0 -1px var(--accent)}
 .board-panel.drop-parent{box-shadow:inset 0 5px 0 -1px var(--accent)}
-.board-panel.drop-detach{box-shadow:inset 5px 0 0 -1px var(--muted)}
+.detach-lane{position:fixed;left:0;top:0;bottom:0;width:200px;display:none;align-items:center;justify-content:center;
+  background:var(--accent-soft);border-right:2px dashed var(--accent);color:var(--accent);font-size:13px;line-height:1.6;text-align:center;z-index:20}
+body.dragging-board .detach-lane{display:flex}
+.detach-lane.over{background:var(--accent);color:#fff}
 .bcrumb{font-size:12px;color:var(--faint)}
 .head-sp{flex:1}
 .mini-btn{border:1px solid var(--border);background:transparent;color:var(--muted);font:inherit;font-size:12px;padding:4px 10px;border-radius:999px;cursor:pointer}
