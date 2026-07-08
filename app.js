@@ -268,15 +268,17 @@ function ensurePositions() {
     i++;
   });
 }
+let focusBoard = null;   // board to scroll to in board view after nav
+let pendingMapPos = null; // {x,y} for add-board-at-click
 function renderMap() {
   ensurePositions();
   const nodes = state.projects.map(b => `
     <div class="mapnode c-${b.color}" data-id="${b.id}" style="left:${b.x}px;top:${b.y}px">
-      <div class="mapnode-name" data-action="board-edit" data-id="${b.id}">${esc(b.name)}</div>
-      ${b.parent ? `<button class="mapnode-unlink" data-action="unlink" data-id="${b.id}" title="상위 연결 해제">×</button>` : ''}
-      <div class="maphandle" data-id="${b.id}" title="여기서 다른 보드로 끌어 하위로 연결"></div>
+      <div class="mp mp-top" data-id="${b.id}" data-role="top" title="상위 연결점 — 여기서 부모 보드로 끌기"></div>
+      <div class="mapnode-name">${esc(b.name)}</div>
+      <div class="mp mp-bot" data-id="${b.id}" data-role="bot" title="하위 연결점 — 여기서 자식 보드로 끌기"></div>
     </div>`).join('');
-  return `<div class="maphint">노드를 끌어 배치하고, 노드 아래쪽 파란 점을 다른 보드로 끌어놓으면 그 보드가 하위로 연결됩니다. 연결은 보드 뷰의 들여쓰기에 반영돼요.</div>
+  return `<div class="maphint">빈 곳 클릭 = 보드 추가 · 노드 아무 데나 끌어 이동 · 클릭 = 설정, 더블클릭 = 보드 탭으로 이동 · 위/아래 점을 다른 보드로 끌어 상하 연결</div>
     <div class="map" id="map"><svg class="maplines" id="maplines"></svg>${nodes}</div>`;
 }
 function drawLines(temp) {
@@ -303,24 +305,32 @@ function initMap() {
   const map = document.getElementById('map');
   if (!map) return;
   drawLines();
-  let mode = null, id = null, offx = 0, offy = 0;
+  const CLICK_MS = 300, THRESH = 4;
+  let mode = null, id = null, role = null, offx = 0, offy = 0, sx = 0, sy = 0;
+  let clickTimer = null, lastId = null, lastTime = 0;
+
   map.addEventListener('pointerdown', e => {
-    const handle = e.target.closest('.maphandle');
-    if (handle) { mode = 'link'; id = handle.dataset.id; map.setPointerCapture(e.pointerId); e.preventDefault(); return; }
-    if (e.target.closest('[data-action]')) return;
+    const cp = e.target.closest('.mp');
+    if (cp) { mode = 'link'; id = cp.dataset.id; role = cp.dataset.role; map.setPointerCapture(e.pointerId); e.preventDefault(); return; }
     const node = e.target.closest('.mapnode');
     if (node) {
-      mode = 'move'; id = node.dataset.id;
+      mode = 'pending'; id = node.dataset.id; sx = e.clientX; sy = e.clientY;
       const b = boardById(id), mr = map.getBoundingClientRect();
       offx = (e.clientX - mr.left) - b.x; offy = (e.clientY - mr.top) - b.y;
-      node.classList.add('dragging');
       map.setPointerCapture(e.pointerId);
+      return;
     }
+    mode = 'empty'; sx = e.clientX; sy = e.clientY;
   });
+
   map.addEventListener('pointermove', e => {
     if (!mode) return;
     const mr = map.getBoundingClientRect();
     const px = e.clientX - mr.left, py = e.clientY - mr.top;
+    if (mode === 'pending' && Math.abs(e.clientX - sx) + Math.abs(e.clientY - sy) > THRESH) {
+      mode = 'move';
+      map.querySelector(`.mapnode[data-id="${id}"]`).classList.add('dragging');
+    }
     if (mode === 'move') {
       const b = boardById(id);
       b.x = Math.max(0, Math.min(px - offx, map.clientWidth - 60));
@@ -328,27 +338,52 @@ function initMap() {
       const el = map.querySelector(`.mapnode[data-id="${id}"]`);
       el.style.left = b.x + 'px'; el.style.top = b.y + 'px';
       drawLines();
-    } else {
-      const el = map.querySelector(`.mapnode[data-id="${id}"]`).getBoundingClientRect();
-      drawLines({ x1: el.left - mr.left + el.width / 2, y1: el.top - mr.top + el.height, x2: px, y2: py });
+    } else if (mode === 'link') {
+      const r = map.querySelector(`.mapnode[data-id="${id}"]`).getBoundingClientRect();
+      const y1 = role === 'top' ? r.top - mr.top : r.top - mr.top + r.height;
+      drawLines({ x1: r.left - mr.left + r.width / 2, y1, x2: px, y2: py });
     }
   });
+
   map.addEventListener('pointerup', e => {
+    const mr = map.getBoundingClientRect();
     if (mode === 'link') {
       const t = document.elementFromPoint(e.clientX, e.clientY);
       const tnode = t && t.closest ? t.closest('.mapnode') : null;
       if (tnode && tnode.dataset.id !== id) {
-        const childId = tnode.dataset.id, parentId = id;
-        if (!isAncestor(childId, parentId)) { boardById(childId).parent = parentId; }
+        const other = tnode.dataset.id;
+        const parentId = role === 'bot' ? id : other;
+        const childId = role === 'bot' ? other : id;
+        if (!isAncestor(childId, parentId)) { boardById(childId).parent = parentId; save(); }
       }
       render();
     } else if (mode === 'move') {
-      const el = map.querySelector(`.mapnode[data-id="${id}"]`);
-      if (el) el.classList.remove('dragging');
+      map.querySelector(`.mapnode[data-id="${id}"]`)?.classList.remove('dragging');
       save(); drawLines();
+    } else if (mode === 'pending') {
+      const nid = id, now = Date.now();
+      if (lastId === nid && now - lastTime < CLICK_MS) {   // double click → go to board
+        clearTimeout(clickTimer); clickTimer = null; lastId = null;
+        focusBoard = nid; state.sel.view = 'board'; render();
+      } else {                                              // single click → settings (delayed to allow dblclick)
+        lastId = nid; lastTime = now;
+        clickTimer = setTimeout(() => { clickTimer = null; openBoardModal(nid); }, CLICK_MS);
+      }
+    } else if (mode === 'empty' && Math.abs(e.clientX - sx) + Math.abs(e.clientY - sy) <= THRESH) {
+      openAddBoardAt(e.clientX - mr.left, e.clientY - mr.top);
     }
-    mode = null; id = null;
+    mode = null; id = null; role = null;
   });
+}
+function openAddBoardAt(x, y) {
+  pendingMapPos = { x: Math.max(0, x - 75), y: Math.max(0, y - 22) };
+  showModal(`
+    <h3>여기에 보드 추가</h3>
+    <label>이름<input type="text" id="m-title" placeholder="예: A프로젝트 / a 업무"></label>
+    <div class="m-actions">
+      <button class="ghost" data-action="modal-close">취소</button>
+      <button class="primary" data-action="mapadd-save">추가</button>
+    </div>`);
 }
 
 /* ---------- calendar ---------- */
@@ -485,6 +520,11 @@ function render() {
     </footer>`;
   save();
   if (view === 'map') initMap();
+  if (view === 'board' && focusBoard) {
+    const el = document.querySelector(`.board-panel[data-board="${focusBoard}"]`);
+    focusBoard = null;
+    if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1500); }
+  }
 }
 
 /* ---------- modal ---------- */
@@ -705,6 +745,15 @@ document.addEventListener('click', e => {
       const i = state.projects.length;
       state.projects.push({ id: 'p-' + uid(), name: t, color: RAMP[i % RAMP.length], parent: null, x: 30 + (i % 4) * 180, y: 30 + Math.floor(i / 4) * 120 });
     }
+    closeModal(); render();
+  }
+  else if (act === 'mapadd-save') {
+    const t = document.getElementById('m-title').value.trim();
+    if (t && pendingMapPos) {
+      const i = state.projects.length;
+      state.projects.push({ id: 'p-' + uid(), name: t, color: RAMP[i % RAMP.length], parent: null, x: pendingMapPos.x, y: pendingMapPos.y });
+    }
+    pendingMapPos = null;
     closeModal(); render();
   }
   else if (act === 'dl-add-done') openDevlogModal('done');
