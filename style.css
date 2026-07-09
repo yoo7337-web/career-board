@@ -247,6 +247,32 @@ footer button:hover{border-color:var(--accent);color:var(--text)}
 .drow-board{font-size:11px;color:var(--muted)}
 .dash-more{font-size:12px;color:var(--faint);padding:4px 8px}
 .reg-date{font-size:12px;color:var(--muted);margin-bottom:10px}
+.kpi{cursor:pointer}
+.kpi:hover{border-color:var(--accent)}
+.dash-sec.full{margin-bottom:14px}
+.dash-sec.flash{outline:2px solid var(--accent);outline-offset:2px}
+.drow.overdue{box-shadow:inset 3px 0 0 var(--danger-fg);background:var(--danger-bg)}
+.drow.overdue:hover{background:var(--danger-bg);filter:brightness(1.05)}
+.dash-day-div{font-size:11px;font-weight:700;color:var(--muted);padding:5px 2px 1px;border-bottom:1px dashed var(--border);margin-bottom:2px}
+.trend{margin-bottom:14px}
+.trend-legend{display:inline-flex;gap:12px;font-size:12px;color:var(--muted);margin-left:auto}
+.trend-legend .tl{display:inline-flex;align-items:center;gap:5px}
+.trend-legend i{width:10px;height:10px;border-radius:3px;display:inline-block}
+.trend-legend i.tb-reg{background:var(--accent)}
+.trend-legend i.tb-done{background:var(--ok)}
+.trend-chart{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;padding-top:16px}
+.trend-day{text-align:center}
+.trend-day .tb-area{display:flex;align-items:flex-end;justify-content:center;gap:3px;height:90px}
+.tb{width:16px;min-height:2px;border-radius:3px 3px 0 0;position:relative}
+.tb.tb-reg{background:var(--accent)}
+.tb.tb-done{background:var(--ok)}
+.tb i{position:absolute;top:-15px;left:50%;transform:translateX(-50%);font-style:normal;font-size:10px;color:var(--muted);font-weight:700}
+.tb-lbl{font-size:10.5px;color:var(--faint);margin-top:5px;line-height:1.3}
+.trend-day.today .tb-lbl{color:var(--accent);font-weight:700}
+.gp-row{display:flex;align-items:center;gap:8px;padding:5px 4px}
+.gp-track{flex:1;height:10px;background:var(--bg);border-radius:5px;overflow:hidden;border:1px solid var(--border)}
+.gp-fill{height:100%;border-radius:5px}
+.gp-num{font-size:11.5px;color:var(--muted);white-space:nowrap;min-width:74px;text-align:right}
 
 /* dev log (admin) */
 .devlog{display:flex;flex-direction:column;gap:22px}

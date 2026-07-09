@@ -664,19 +664,60 @@ function dashRow(c) {
     ? (c.doneAt ? `<span class="tag">${fmtDate(c.doneAt)} 완수</span>` : '')
     : (c.due ? dueBadge(c.due) : '');
   const stMk = c.status === 'doing' ? '<span class="drow-st doing">▶</span>' : c.status === 'done' ? '<span class="drow-st done">✓</span>' : '';
-  return `<div class="drow" data-action="card" data-id="${c.id}">
+  const overdue = c.status !== 'done' && c.due && dday(c.due) < 0 ? ' overdue' : '';
+  return `<div class="drow${overdue}" data-action="card" data-id="${c.id}">
     <span class="drow-prio" style="${pr.bg ? `background:${pr.bg}` : ''}"></span>
     ${stMk}<span class="drow-title">${esc(c.title)}</span>${note}
     <span class="drow-meta">${proj}${board}${tag}</span>
   </div>`;
 }
-function dashSection(title, sub, cards, emptyMsg, limit) {
+function dashSection(title, sub, cards, emptyMsg, limit, opts) {
+  const o = opts || {};
   const shown = limit ? cards.slice(0, limit) : cards;
   const more = limit && cards.length > limit ? `<div class="dash-more">+${cards.length - limit}건 더</div>` : '';
-  return `<section class="dash-sec">
+  const body = o.rowsHtml !== undefined ? o.rowsHtml : (shown.length ? shown.map(dashRow).join('') + more : `<div class="empty">${emptyMsg}</div>`);
+  return `<section class="dash-sec ${o.full ? 'full' : ''}" ${o.id ? `id="${o.id}"` : ''}>
     <div class="dash-sec-head"><h2>${title} <span class="cnt">${cards.length}</span></h2><span class="dash-sub">${sub}</span></div>
-    <div class="dash-list">${shown.length ? shown.map(dashRow).join('') + more : `<div class="empty">${emptyMsg}</div>`}</div>
+    <div class="dash-list">${body}</div>
   </section>`;
+}
+function dashOffDay(off) { const [y, m, d] = todayStr().split('-').map(Number); return dstr(new Date(y, m - 1, d + off)); }
+function trendHtml() {
+  const days = [];
+  let max = 1;
+  for (let i = 6; i >= 0; i--) {
+    const ds = dashOffDay(-i);
+    const reg = state.cards.filter(c => c.createdAt === ds).length;
+    const done = state.cards.filter(c => c.doneAt === ds).length;
+    max = Math.max(max, reg, done);
+    days.push({ ds, reg, done, isToday: i === 0 });
+  }
+  const dows = ['일', '월', '화', '수', '목', '금', '토'];
+  const bar = (n, cls) => `<div class="tb ${cls}" style="height:${Math.round(n / max * 100)}%">${n ? `<i>${n}</i>` : ''}</div>`;
+  const cols = days.map(d => {
+    const [y, m, dd] = d.ds.split('-').map(Number);
+    const dow = dows[new Date(y, m - 1, dd).getDay()];
+    return `<div class="trend-day ${d.isToday ? 'today' : ''}">
+      <div class="tb-area">${bar(d.reg, 'tb-reg')}${bar(d.done, 'tb-done')}</div>
+      <div class="tb-lbl">${dow}<br>${m}/${dd}</div>
+    </div>`;
+  }).join('');
+  return `<section class="dash-sec trend">
+    <div class="dash-sec-head"><h2>📈 주간 등록·완수 추이</h2>
+      <span class="trend-legend"><span class="tl"><i class="tb-reg"></i>등록</span><span class="tl"><i class="tb-done"></i>완수</span></span></div>
+    <div class="trend-chart">${cols}</div>
+  </section>`;
+}
+function recentRegHtml(cards) {
+  if (!cards.length) return '<div class="empty">최근 3일간 등록된 업무가 없어요</div>';
+  const today = todayStr();
+  const label = ds => ds === today ? '오늘' : ds === dashOffDay(-1) ? '어제' : '그제';
+  let html = '', last = null;
+  cards.forEach(c => {
+    if (c.createdAt !== last) { last = c.createdAt; html += `<div class="dash-day-div">${label(c.createdAt)} · ${fmtDate(c.createdAt)}</div>`; }
+    html += dashRow(c);
+  });
+  return html;
 }
 function renderDash() {
   const today = todayStr();
@@ -685,23 +726,46 @@ function renderDash() {
   const doing = cards.filter(c => c.status === 'doing');
   const urgent = incomplete.filter(isUrgent).sort(dueSort);
   const registeredToday = cards.filter(c => c.createdAt === today);
+  const d2 = dashOffDay(-2);
+  const registeredRecent = cards.filter(c => c.createdAt && c.createdAt >= d2)
+    .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
   const recentDone = cards.filter(c => c.status === 'done' && c.doneAt).sort((a, b) => (b.doneAt || '').localeCompare(a.doneAt || ''));
   const upcoming = incomplete.filter(c => c.due && dday(c.due) > 3).sort((a, b) => a.due.localeCompare(b.due));
-  const kpi = (label, val, cls) => `<div class="kpi ${cls || ''}"><div class="kpi-val">${val}</div><div class="kpi-lbl">${label}</div></div>`;
+  const kpi = (label, val, cls, target) => `<div class="kpi ${cls || ''}" data-action="kpi-go" data-target="${target}"><div class="kpi-val">${val}</div><div class="kpi-lbl">${label}</div></div>`;
+  // 프로젝트별 진행률
+  const gpRows = [];
+  const gpRow = (name, color, done, total) => {
+    const pct = total ? Math.round(done / total * 100) : 0;
+    return `<div class="gp-row"><span class="drow-proj c-${color}">${esc(name)}</span>
+      <div class="gp-track"><div class="gp-fill c-${color}" style="width:${pct}%"></div></div>
+      <span class="gp-num">${done}/${total} · ${pct}%</span></div>`;
+  };
+  (state.groups || []).forEach(g => {
+    const bids = new Set(state.projects.filter(b => (b.group || null) === g.id).map(b => b.id));
+    const cs = cards.filter(c => bids.has(c.project));
+    if (cs.length) gpRows.push(gpRow(g.name, g.color, cs.filter(c => c.status === 'done').length, cs.length));
+  });
+  {
+    const bids = new Set(state.projects.filter(b => !b.group).map(b => b.id));
+    const cs = cards.filter(c => bids.has(c.project));
+    if ((state.groups || []).length && cs.length) gpRows.push(gpRow('미분류', 'gray', cs.filter(c => c.status === 'done').length, cs.length));
+  }
   return `<div class="dash">
     <div class="dash-kpis">
-      ${kpi('오늘 등록', registeredToday.length, 'k-new')}
-      ${kpi('진행 중', doing.length, 'k-doing')}
-      ${kpi('급한 일', urgent.length, 'k-urgent')}
-      ${kpi('이번 주 완수', weekDone(), 'k-done')}
-      ${kpi('전체 미완료', incomplete.length, '')}
+      ${kpi('오늘 등록', registeredToday.length, 'k-new', 'sec-new')}
+      ${kpi('진행 중', doing.length, 'k-doing', 'sec-doing')}
+      ${kpi('급한 일', urgent.length, 'k-urgent', 'sec-urgent')}
+      ${kpi('이번 주 완수', weekDone(), 'k-done', 'sec-done')}
+      ${kpi('전체 미완료', incomplete.length, '', 'sec-urgent')}
     </div>
+    ${trendHtml()}
+    ${dashSection('🔥 급한 업무', '마감 임박·지남 또는 중요도 높음', urgent, '급한 업무가 없어요 👍', 12, { full: true, id: 'sec-urgent' })}
     <div class="dash-grid">
-      ${dashSection('🔥 급한 업무', '마감 임박·지남 또는 중요도 높음', urgent, '급한 업무가 없어요 👍', 12)}
-      ${dashSection('▶ 진행 중', '지금 하고 있는 일', doing, '진행 중인 업무가 없어요', 12)}
-      ${dashSection('🆕 오늘 등록', today + ' 등록 (등록일 기준)', registeredToday, '오늘 등록된 업무가 없어요', 12)}
-      ${dashSection('✓ 최근 완수', '최근 완료한 업무', recentDone, '완료 내역이 없어요', 10)}
+      ${dashSection('▶ 진행 중', '지금 하고 있는 일', doing, '진행 중인 업무가 없어요', 12, { id: 'sec-doing' })}
+      ${dashSection('🆕 최근 3일 등록', '등록일 기준', registeredRecent, '', 0, { id: 'sec-new', rowsHtml: recentRegHtml(registeredRecent) })}
+      ${dashSection('✓ 최근 완수', '최근 완료한 업무', recentDone, '완료 내역이 없어요', 10, { id: 'sec-done' })}
       ${dashSection('📅 예정', '마감일이 남은 업무', upcoming, '예정된 업무가 없어요', 10)}
+      ${gpRows.length ? `<section class="dash-sec"><div class="dash-sec-head"><h2>📊 프로젝트 진행률 <span class="cnt">${gpRows.length}</span></h2><span class="dash-sub">완수/전체</span></div><div class="dash-list">${gpRows.join('')}</div></section>` : ''}
     </div>
   </div>`;
 }
@@ -982,6 +1046,10 @@ document.addEventListener('click', e => {
   else if (act === 'logout') { if (window.firebase) firebase.auth().signOut(); }
   else if (act === 'view') { state.sel.view = el.dataset.view; render(); }
   else if (act === 'map-arrange') { autoLayout(); render(); }
+  else if (act === 'kpi-go') {
+    const sec = document.getElementById(el.dataset.target);
+    if (sec) { sec.scrollIntoView({ behavior: 'smooth', block: 'start' }); sec.classList.add('flash'); setTimeout(() => sec.classList.remove('flash'), 1500); }
+  }
   else if (act === 'cal-prev') calShift(-1);
   else if (act === 'cal-next') calShift(1);
   else if (act === 'cal-today') { state.sel.calYm = todayStr().slice(0, 7); render(); }
