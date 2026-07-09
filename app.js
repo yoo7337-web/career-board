@@ -10,6 +10,7 @@ const PRIORITIES = {
   none: { label: '없음', bg: '', fg: '' },
 };
 const PRIO_ORDER = ['high', 'med', 'low', 'none'];
+const PRIO_RANK = { high: 3, med: 2, low: 1, none: 0 };
 
 const SEED = {
   projects: [
@@ -641,6 +642,70 @@ function calShift(n) {
   render();
 }
 
+/* ---------- dashboard (현황) ---------- */
+function isUrgent(c) {
+  if (c.status === 'done') return false;
+  if (c.priority === 'high') return true;
+  return !!(c.due && dday(c.due) <= 3);
+}
+function dueSort(a, b) {
+  const da = a.due ? dday(a.due) : 99999, db = b.due ? dday(b.due) : 99999;
+  if (da !== db) return da - db;
+  return (PRIO_RANK[b.priority] || 0) - (PRIO_RANK[a.priority] || 0);
+}
+function dashRow(c) {
+  const b = boardById(c.project);
+  const g = b && b.group ? groupById(b.group) : null;
+  const pr = PRIORITIES[c.priority] || PRIORITIES.none;
+  const proj = g ? `<span class="drow-proj c-${g.color}">${esc(g.name)}</span>` : '';
+  const board = b ? `<span class="drow-board">${esc(b.name)}</span>` : '';
+  const note = c.note ? `<span class="card-note" data-note="${esc(c.note)}">💬</span>` : '';
+  const tag = c.status === 'done'
+    ? (c.doneAt ? `<span class="tag">${fmtDate(c.doneAt)} 완수</span>` : '')
+    : (c.due ? dueBadge(c.due) : '');
+  const stMk = c.status === 'doing' ? '<span class="drow-st doing">▶</span>' : c.status === 'done' ? '<span class="drow-st done">✓</span>' : '';
+  return `<div class="drow" data-action="card" data-id="${c.id}">
+    <span class="drow-prio" style="${pr.bg ? `background:${pr.bg}` : ''}"></span>
+    ${stMk}<span class="drow-title">${esc(c.title)}</span>${note}
+    <span class="drow-meta">${proj}${board}${tag}</span>
+  </div>`;
+}
+function dashSection(title, sub, cards, emptyMsg, limit) {
+  const shown = limit ? cards.slice(0, limit) : cards;
+  const more = limit && cards.length > limit ? `<div class="dash-more">+${cards.length - limit}건 더</div>` : '';
+  return `<section class="dash-sec">
+    <div class="dash-sec-head"><h2>${title} <span class="cnt">${cards.length}</span></h2><span class="dash-sub">${sub}</span></div>
+    <div class="dash-list">${shown.length ? shown.map(dashRow).join('') + more : `<div class="empty">${emptyMsg}</div>`}</div>
+  </section>`;
+}
+function renderDash() {
+  const today = todayStr();
+  const cards = state.cards;
+  const incomplete = cards.filter(c => c.status !== 'done');
+  const doing = cards.filter(c => c.status === 'doing');
+  const urgent = incomplete.filter(isUrgent).sort(dueSort);
+  const registeredToday = cards.filter(c => c.createdAt === today);
+  const recentDone = cards.filter(c => c.status === 'done' && c.doneAt).sort((a, b) => (b.doneAt || '').localeCompare(a.doneAt || ''));
+  const upcoming = incomplete.filter(c => c.due && dday(c.due) > 3).sort((a, b) => a.due.localeCompare(b.due));
+  const kpi = (label, val, cls) => `<div class="kpi ${cls || ''}"><div class="kpi-val">${val}</div><div class="kpi-lbl">${label}</div></div>`;
+  return `<div class="dash">
+    <div class="dash-kpis">
+      ${kpi('오늘 등록', registeredToday.length, 'k-new')}
+      ${kpi('진행 중', doing.length, 'k-doing')}
+      ${kpi('급한 일', urgent.length, 'k-urgent')}
+      ${kpi('이번 주 완수', weekDone(), 'k-done')}
+      ${kpi('전체 미완료', incomplete.length, '')}
+    </div>
+    <div class="dash-grid">
+      ${dashSection('🔥 급한 업무', '마감 임박·지남 또는 중요도 높음', urgent, '급한 업무가 없어요 👍', 12)}
+      ${dashSection('▶ 진행 중', '지금 하고 있는 일', doing, '진행 중인 업무가 없어요', 12)}
+      ${dashSection('🆕 오늘 등록', today + ' 등록 (등록일 기준)', registeredToday, '오늘 등록된 업무가 없어요', 12)}
+      ${dashSection('✓ 최근 완수', '최근 완료한 업무', recentDone, '완료 내역이 없어요', 10)}
+      ${dashSection('📅 예정', '마감일이 남은 업무', upcoming, '예정된 업무가 없어요', 10)}
+    </div>
+  </div>`;
+}
+
 /* ---------- dev log (admin only) ---------- */
 function renderDevlog() {
   const dl = state.devlog || { done: [], future: [] };
@@ -686,14 +751,14 @@ function render() {
   let view = state.sel.view || 'board';
   if (view === 'devlog' && !isAdmin()) view = 'board';
   const vbtn = (k, label) => `<button class="${view === k ? 'on' : ''}" data-action="view" data-view="${k}">${label}</button>`;
-  const nav = vbtn('map', '구조도') + vbtn('board', '보드') + vbtn('cal', '달력') + (isAdmin() ? vbtn('devlog', '개발일지') : '');
+  const nav = vbtn('dash', '현황') + vbtn('map', '구조도') + vbtn('board', '보드') + vbtn('cal', '달력') + (isAdmin() ? vbtn('devlog', '개발일지') : '');
   document.getElementById('app').innerHTML = `
     <header>
       <h1>업무 보드</h1>
       <nav class="views">${nav}</nav>
       <span class="week-count">이번 주 ${weekDone()}개 완료</span>
     </header>
-    ${view === 'map' ? renderMap() : view === 'cal' ? renderCal() : view === 'devlog' ? renderDevlog() : renderBoardView()}
+    ${view === 'map' ? renderMap() : view === 'cal' ? renderCal() : view === 'devlog' ? renderDevlog() : view === 'dash' ? renderDash() : renderBoardView()}
     <footer>
       <button data-action="restore-open">🛟 백업·복원</button>
       <button data-action="export">JSON 내보내기</button>
@@ -734,6 +799,7 @@ function openCardModal(id) {
   if (!c) return;
   showModal(`
     <h3>포스트잇 수정</h3>
+    ${c.createdAt ? `<div class="reg-date">🗓 등록일 ${fmtDate(c.createdAt)}</div>` : ''}
     <label>내용<input type="text" id="m-title" value="${esc(c.title)}"></label>
     <label>중요도${prioPicker(c.priority || 'med')}</label>
     <label>💬 메모 · FU (별도로 확인·기억할 것)<textarea id="m-note" rows="3" placeholder="예: 팀장 리뷰 후 재확인 / 자료 요청 대기중">${esc(c.note || '')}</textarea></label>
@@ -863,7 +929,7 @@ function loadSamples() {
     state.projects.push(b); return b.id;
   };
   const mkCard = (project, title, priority, due, status, doneOff) => {
-    state.cards.push({ id: uid(), project, title, status: status || 'todo', priority, due: due || null, doneAt: status === 'done' ? d(doneOff ?? -1) : null });
+    state.cards.push({ id: uid(), project, title, status: status || 'todo', priority, due: due || null, doneAt: status === 'done' ? d(doneOff ?? -1) : null, note: null, createdAt: todayStr() });
   };
   const audit = mkBoard('외부감사 (A사)', 'coral', d(-10), d(50), 0);
   mkCard(audit, '사전 위험평가·감사계획 수립', 'high', d(-3), 'done', -4);
@@ -925,7 +991,7 @@ document.addEventListener('click', e => {
     if (t) {
       const board = document.getElementById('m-board').value;
       state.sel.lastBoard = board;
-      state.cards.push({ id: uid(), project: board, title: t, status: 'todo', priority: document.getElementById('m-prio').dataset.val || 'med', due: el.dataset.date, doneAt: null, note: null });
+      state.cards.push({ id: uid(), project: board, title: t, status: 'todo', priority: document.getElementById('m-prio').dataset.val || 'med', due: el.dataset.date, doneAt: null, note: null, createdAt: todayStr() });
     }
     closeModal(); render();
   }
@@ -1098,7 +1164,7 @@ document.addEventListener('submit', e => {
   const input = form.querySelector('input');
   const t = input.value.trim();
   if (!t) return;
-  state.cards.push({ id: uid(), project: form.dataset.project, title: t, status: 'todo', priority: 'med', due: todayStr(), doneAt: null, note: null });
+  state.cards.push({ id: uid(), project: form.dataset.project, title: t, status: 'todo', priority: 'med', due: todayStr(), doneAt: null, note: null, createdAt: todayStr() });
   render();
   const again = document.querySelector(`.board-panel[data-board="${form.dataset.project}"] .quick input`);
   if (again) again.focus();
