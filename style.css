@@ -70,8 +70,9 @@ header h1{font-size:20px;margin:0;font-weight:600}
 .panel-head{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
 .bname{font-weight:600;font-size:14px;padding:4px 12px;border-radius:999px;cursor:grab}
 .bname:active{cursor:grabbing}
-.board-panel.drop-child{box-shadow:inset 0 -5px 0 -1px var(--accent)}
-.board-panel.drop-parent{box-shadow:inset 0 5px 0 -1px var(--accent)}
+.board-panel.drop-before{box-shadow:inset 0 5px 0 -1px var(--accent)}
+.board-panel.drop-after{box-shadow:inset 0 -5px 0 -1px var(--accent)}
+.board-panel.drop-nest{outline:2px dashed var(--accent);outline-offset:-2px}
 .detach-lane{position:fixed;left:0;top:0;bottom:0;width:200px;display:none;align-items:center;justify-content:center;
   background:var(--accent-soft);border-right:2px dashed var(--accent);color:var(--accent);font-size:13px;line-height:1.6;text-align:center;z-index:20}
 body.dragging-board .detach-lane{display:flex}
@@ -175,10 +176,12 @@ body.dragging-board .delete-lane{display:flex}
 .cal-bars{position:relative;margin:2px 2px 0}
 .cal-bar{position:absolute;height:16px;border-radius:8px;font-size:10.5px;line-height:16px;padding:0 8px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;cursor:pointer;box-sizing:border-box}
 .cal-days{display:grid;grid-template-columns:repeat(7,1fr)}
-.cal-day{min-height:84px;padding:3px 4px;border-left:1px solid var(--border);overflow:hidden;cursor:pointer}
+.cal-day{min-height:84px;padding:3px 4px;border-left:1px solid var(--border);cursor:pointer}
 .cal-day:first-child{border-left:0}
 .cal-day:hover{background:var(--accent-soft)}
 .cal-day.out{opacity:.38}
+.cal-day.cal-drop{outline:2px dashed var(--accent);outline-offset:-2px;background:var(--accent-soft)}
+.chip{cursor:grab}
 .dnum{display:inline-block;font-size:11px;color:var(--muted);min-width:18px;height:18px;line-height:18px;text-align:center;border-radius:50%}
 .cal-day.today .dnum{background:var(--accent);color:#fff}
 .chip{display:block;font-size:11px;border-radius:5px;padding:2px 5px;margin-top:2px;cursor:pointer;overflow:hidden}

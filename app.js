@@ -333,7 +333,7 @@ function renderBoardView() {
       : `<div class="empty droptip">${groups.length ? '여기로 끌어오면 미분류(프로젝트 없음)로 이동' : '보드가 없어요 — [+ 보드 추가]'}</div>`}
   </div>`);
   return legendHtml()
-    + `<div class="addbar"><button class="pill" data-action="group-add">📁 + 프로젝트 추가</button><button class="pill" data-action="proj-add">+ 보드 추가</button><span class="board-hint">보드 드래그: 다른 보드 위=상위 / 아래=하위 · 프로젝트 영역=그 프로젝트로 · 왼쪽=분리 · 오른쪽=삭제</span></div>`
+    + `<div class="addbar"><button class="pill" data-action="group-add">📁 + 프로젝트 추가</button><button class="pill" data-action="proj-add">+ 보드 추가</button><span class="board-hint">보드 드래그: 다른 보드 위=앞 순서 / 가운데=하위로 / 아래=뒤 순서 · 프로젝트 영역=편입 · 왼쪽=분리 · 오른쪽=삭제</span></div>`
     + sections.join('')
     + `<div class="detach-lane"><span>◀<br>여기에 놓으면<br>보드 분리<br>(독립)</span></div>`
     + `<div class="delete-lane"><span>🗑<br>여기에 놓으면<br>보드 삭제</span></div>`;
@@ -545,7 +545,7 @@ function chipHtml(c) {
   const stName = c.status === 'done' ? '완수' : c.status === 'doing' ? '진행 중' : '계획';
   const projTop = g ? `<span class="chip-proj-top c-${g.color}">${esc(g.name)}</span>` : '';
   const title = (g ? '📁' + g.name + ' · ' : '') + (b ? b.name + ' · ' : '') + `[${stName}] ` + c.title + (c.note ? '\n💬 ' + c.note : '');
-  return `<span class="chip ${c.status}" style="${style}" data-action="card" data-id="${c.id}" title="${esc(title)}">${projTop}<span class="chip-task">${mark}${esc(c.title)}</span></span>`;
+  return `<span class="chip ${c.status}" style="${style}" draggable="true" data-action="card" data-id="${c.id}" title="${esc(title)}">${projTop}<span class="chip-task">${mark}${esc(c.title)}</span></span>`;
 }
 function calFilterActive() { return Array.isArray(state.sel.calFilter) && state.sel.calFilter.length > 0; }
 function calCardVisible(c) {
@@ -611,10 +611,9 @@ function renderCal() {
       const ds = dstr(dt);
       const inMonth = dt.getMonth() === m - 1;
       const dayCards = cardsByDate[ds] || [];
-      const chips = dayCards.slice(0, 3).map(chipHtml).join('');
-      const more = dayCards.length > 3 ? `<span class="more">+${dayCards.length - 3}</span>` : '';
+      const chips = dayCards.map(chipHtml).join('');
       cells += `<div class="cal-day ${inMonth ? '' : 'out'} ${ds === today ? 'today' : ''}" data-action="cal-add" data-date="${ds}" title="클릭하면 이 날짜로 할 일 추가">
-        <span class="dnum ${d === 0 ? 'sun' : ''}">${dt.getDate()}</span>${chips}${more}</div>`;
+        <span class="dnum ${d === 0 ? 'sun' : ''}">${dt.getDate()}</span>${chips}</div>`;
     }
     weeksHtml += `<div class="cal-week">
       ${laneCnt ? `<div class="cal-bars" style="height:${laneCnt * 19 + 2}px">${bars.join('')}</div>` : ''}
@@ -626,7 +625,7 @@ function renderCal() {
       <button class="pill" data-action="cal-prev">◀</button>
       <button class="pill" data-action="cal-today">오늘</button>
       <button class="pill" data-action="cal-next">▶</button>
-      <span class="cal-hint">날짜 클릭 = 할 일 추가 · 막대 = 프로젝트/보드 수행기간</span>
+      <span class="cal-hint">날짜 클릭 = 할 일 추가 · 칩을 다른 날로 드래그 = 날짜 변경 · 막대 = 수행기간</span>
       <span class="cal-status-legend"><span class="sl"><i class="bdot"></i>계획</span><span class="sl"><i class="chip-mk doing">▶</i>진행 중</span><span class="sl done"><i class="chip-mk done">✓</i>완수</span></span>
     </div>
     ${calFilterBar()}
@@ -1238,13 +1237,25 @@ document.addEventListener('submit', e => {
   if (again) again.focus();
 });
 
-/* ---------- drag & drop: cards (columns) + boards (hierarchy) ---------- */
-let dragItem = null; // { kind:'card'|'board', id }
+/* ---------- drag & drop: cards(columns) + boards(순서/계층) + 달력 칩(날짜) ---------- */
+let dragItem = null; // { kind:'card'|'board'|'cal', id }
 function clearDropHints() {
-  document.querySelectorAll('.dragover,.over').forEach(el => el.classList.remove('dragover', 'over'));
-  document.querySelectorAll('.drop-child,.drop-parent,.drop-into').forEach(el => el.classList.remove('drop-child', 'drop-parent', 'drop-into'));
+  document.querySelectorAll('.dragover,.over,.cal-drop').forEach(el => el.classList.remove('dragover', 'over', 'cal-drop'));
+  document.querySelectorAll('.drop-before,.drop-after,.drop-nest,.drop-into').forEach(el => el.classList.remove('drop-before', 'drop-after', 'drop-nest', 'drop-into'));
+}
+function reorderBoard(draggedId, targetId, after) {
+  const dragged = boardById(draggedId), target = boardById(targetId);
+  if (!dragged || !target || draggedId === targetId || isAncestor(draggedId, targetId)) return;
+  dragged.parent = target.parent || null;          // target과 같은 레벨(형제)
+  setGroupDeep(draggedId, target.group || null);   // target과 같은 프로젝트(하위 포함)
+  const arr = state.projects;
+  arr.splice(arr.findIndex(b => b.id === draggedId), 1);
+  const ti = arr.findIndex(b => b.id === targetId);
+  arr.splice(after ? ti + 1 : ti, 0, dragged);
 }
 document.addEventListener('dragstart', e => {
+  const chip = e.target.closest('.chip');
+  if (chip && chip.dataset.id) { dragItem = { kind: 'cal', id: chip.dataset.id }; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', 'cal'); return; }
   const c = e.target.closest('.card');
   if (c) { dragItem = { kind: 'card', id: c.dataset.id }; e.dataTransfer.setData('text/plain', c.dataset.id); return; }
   const bd = e.target.closest('.board-drag');
@@ -1252,6 +1263,11 @@ document.addEventListener('dragstart', e => {
 });
 document.addEventListener('dragend', () => { dragItem = null; document.body.classList.remove('dragging-board'); clearDropHints(); });
 document.addEventListener('dragover', e => {
+  if (dragItem && dragItem.kind === 'cal') {
+    const day = e.target.closest('.cal-day');
+    if (day) { e.preventDefault(); day.classList.add('cal-drop'); }
+    return;
+  }
   if (dragItem && dragItem.kind === 'board') {
     const lane = e.target.closest('.detach-lane,.delete-lane');
     if (lane) { e.preventDefault(); lane.classList.add('over'); return; }
@@ -1260,13 +1276,13 @@ document.addEventListener('dragover', e => {
       if (panel.dataset.board !== dragItem.id) {
         e.preventDefault();
         const r = panel.getBoundingClientRect();
-        const lower = (e.clientY - r.top) > r.height / 2;    // 보드 전체: 위 절반=상위, 아래 절반=하위
-        panel.classList.remove('drop-child', 'drop-parent');
-        panel.classList.add(lower ? 'drop-child' : 'drop-parent');
+        const rel = (e.clientY - r.top) / r.height;   // 위=앞순서 / 가운데=하위 / 아래=뒤순서
+        panel.classList.remove('drop-before', 'drop-after', 'drop-nest');
+        panel.classList.add(rel < 0.28 ? 'drop-before' : rel > 0.72 ? 'drop-after' : 'drop-nest');
       }
       return;
     }
-    const sec = e.target.closest('.group-sec');   // 보드가 아닌 프로젝트 섹션 영역 = 그 프로젝트로 편입
+    const sec = e.target.closest('.group-sec');
     if (sec) { e.preventDefault(); sec.classList.add('drop-into'); }
     return;
   }
@@ -1276,20 +1292,32 @@ document.addEventListener('dragover', e => {
 document.addEventListener('dragleave', e => {
   const col = e.target.closest('.col');
   if (col) col.classList.remove('dragover');
+  const day = e.target.closest('.cal-day');
+  if (day && !day.contains(e.relatedTarget)) day.classList.remove('cal-drop');
   const lane = e.target.closest('.detach-lane,.delete-lane');
   if (lane && !lane.contains(e.relatedTarget)) lane.classList.remove('over');
   const sec = e.target.closest('.group-sec');
   if (sec && !sec.contains(e.relatedTarget)) sec.classList.remove('drop-into');
   const panel = e.target.closest('.board-panel');
-  if (panel && !panel.contains(e.relatedTarget)) panel.classList.remove('drop-child', 'drop-parent');
+  if (panel && !panel.contains(e.relatedTarget)) panel.classList.remove('drop-before', 'drop-after', 'drop-nest');
 });
 document.addEventListener('drop', e => {
+  if (dragItem && dragItem.kind === 'cal') {         // 달력 칩 → 다른 날짜로
+    e.preventDefault();
+    const day = e.target.closest('.cal-day');
+    if (day && day.dataset.date) {
+      const c = state.cards.find(x => x.id === dragItem.id);
+      if (c) { if (c.status === 'done') c.doneAt = day.dataset.date; else c.due = day.dataset.date; }
+    }
+    dragItem = null; clearDropHints(); render();
+    return;
+  }
   if (dragItem && dragItem.kind === 'board') {
     e.preventDefault();
     const draggedId = dragItem.id, dragged = boardById(draggedId);
     if (e.target.closest('.detach-lane')) {
-      dragged.parent = null;                               // 왼쪽 분리 영역 → 독립
-    } else if (e.target.closest('.delete-lane')) {         // 오른쪽 삭제 영역
+      dragged.parent = null;
+    } else if (e.target.closest('.delete-lane')) {
       const cardCnt = state.cards.filter(c => c.project === draggedId).length;
       if (confirm(`'${dragged.name}' 보드를 삭제할까요?${cardCnt ? `\n(포스트잇 ${cardCnt}개도 함께 삭제)` : ''}`)) {
         state.projects.forEach(x => { if (x.parent === draggedId) x.parent = dragged.parent || null; });
@@ -1301,16 +1329,12 @@ document.addEventListener('drop', e => {
       if (panel && panel.dataset.board !== draggedId) {
         const target = boardById(panel.dataset.board);
         const r = panel.getBoundingClientRect();
-        const lower = (e.clientY - r.top) > r.height / 2;
-        if (lower) {                                       // 아래 절반 → dragged를 target의 하위로
-          if (isAncestor(draggedId, target.id)) { target.parent = dragged.parent; }
-          setParent(draggedId, target.id);
-        } else {                                           // 위 절반 → dragged를 target의 상위로
-          if (isAncestor(target.id, draggedId)) { dragged.parent = target.parent; }
-          setParent(target.id, draggedId);
-        }
+        const rel = (e.clientY - r.top) / r.height;
+        if (rel < 0.28) reorderBoard(draggedId, target.id, false);        // 위 → 앞으로(순서)
+        else if (rel > 0.72) reorderBoard(draggedId, target.id, true);    // 아래 → 뒤로(순서)
+        else if (!isAncestor(draggedId, target.id)) setParent(draggedId, target.id);  // 가운데 → 하위로
       } else if (!panel) {
-        const sec = e.target.closest('.group-sec');        // 섹션 빈 영역 → 그 프로젝트(또는 미분류)로 편입
+        const sec = e.target.closest('.group-sec');
         if (sec) { dragged.parent = null; setGroupDeep(draggedId, sec.dataset.group || null); }
       }
     }
