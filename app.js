@@ -262,8 +262,9 @@ function cardHtml(c) {
   if (c.status !== 'done' && c.due) tags.push(dueBadge(c.due));
   if (c.status === 'done' && c.doneAt) tags.push(`<span class="tag">${fmtDate(c.doneAt)} 완료</span>`);
   const check = c.status === 'done' ? '<span class="done-check">✓</span>' : '';
+  const note = c.note ? `<span class="card-note" title="${esc(c.note)}">💬</span>` : '';
   return `<div class="card ${c.status}" ${style} draggable="true" data-id="${c.id}" data-action="card">
-    <div class="t">${check}${esc(c.title)}</div>
+    <div class="t">${check}${esc(c.title)}${note}</div>
     ${tags.length ? `<div class="meta">${tags.join('')}</div>` : ''}
   </div>`;
 }
@@ -319,20 +320,19 @@ function renderBoardView() {
   const sections = [];
   groups.forEach(g => {
     const items = orderedBoardsIn(g.id);
-    sections.push(`<div class="group-sec">
+    sections.push(`<div class="group-sec" data-group="${g.id}">
       <div class="group-head"><span class="gname c-${g.color}" data-action="group-edit" data-id="${g.id}" title="클릭=프로젝트 이름·삭제">📁 ${esc(g.name)}</span><span class="gcnt">보드 ${items.length}</span><button class="mini-btn" data-action="proj-add" data-group="${g.id}">+ 보드</button></div>
-      ${items.length ? `<div class="boards">${items.map(({ board, depth }) => panelHtml(board, depth)).join('')}</div>` : '<div class="empty">이 프로젝트에 보드가 없어요 — [+ 보드]로 추가</div>'}
+      ${items.length ? `<div class="boards">${items.map(({ board, depth }) => panelHtml(board, depth)).join('')}</div>` : '<div class="empty droptip">여기로 보드를 끌어오면 이 프로젝트 소속 · 또는 [+ 보드]</div>'}
     </div>`);
   });
   const un = orderedBoardsIn(null);
-  if (un.length || !groups.length) {
-    sections.push(`<div class="group-sec">
-      ${groups.length ? '<div class="group-head"><span class="gname plain">미분류</span></div>' : ''}
-      <div class="boards">${un.map(({ board, depth }) => panelHtml(board, depth)).join('')}</div>
-    </div>`);
-  }
+  sections.push(`<div class="group-sec" data-group="">
+    ${groups.length ? `<div class="group-head"><span class="gname plain">📄 미분류</span><span class="gcnt">보드 ${un.length}</span></div>` : ''}
+    ${un.length ? `<div class="boards">${un.map(({ board, depth }) => panelHtml(board, depth)).join('')}</div>`
+      : `<div class="empty droptip">${groups.length ? '여기로 끌어오면 미분류(프로젝트 없음)로 이동' : '보드가 없어요 — [+ 보드 추가]'}</div>`}
+  </div>`);
   return legendHtml()
-    + `<div class="addbar"><button class="pill" data-action="group-add">📁 + 프로젝트 추가</button><button class="pill" data-action="proj-add">+ 보드 추가</button><span class="board-hint">보드 드래그: 위=상위 / 아래=하위 / 📁헤더=그 프로젝트로 / 왼쪽=분리 / 오른쪽=삭제</span></div>`
+    + `<div class="addbar"><button class="pill" data-action="group-add">📁 + 프로젝트 추가</button><button class="pill" data-action="proj-add">+ 보드 추가</button><span class="board-hint">보드 드래그: 다른 보드 위=상위 / 아래=하위 · 프로젝트 영역=그 프로젝트로 · 왼쪽=분리 · 오른쪽=삭제</span></div>`
     + sections.join('')
     + `<div class="detach-lane"><span>◀<br>여기에 놓으면<br>보드 분리<br>(독립)</span></div>`
     + `<div class="delete-lane"><span>🗑<br>여기에 놓으면<br>보드 삭제</span></div>`;
@@ -423,14 +423,18 @@ function drawLines(temp) {
     const r = el.getBoundingClientRect();
     return { cx: r.left - mr.left + r.width / 2, top: r.top - mr.top, bottom: r.top - mr.top + r.height };
   };
-  let paths = '';
+  let paths = '', cuts = '';
   state.projects.forEach(b => {
     if (!b.parent) return;
     const p = anchor(b.parent), c = anchor(b.id);
-    if (p && c) paths += `<path class="mapline" d="M ${p.cx} ${p.bottom} C ${p.cx} ${p.bottom + 36}, ${c.cx} ${c.top - 36}, ${c.cx} ${c.top}"/>`;
+    if (p && c) {
+      paths += `<path class="mapline" d="M ${p.cx} ${p.bottom} C ${p.cx} ${p.bottom + 36}, ${c.cx} ${c.top - 36}, ${c.cx} ${c.top}"/>`;
+      const mx = (p.cx + c.cx) / 2, my = (p.bottom + c.top) / 2;
+      cuts += `<g class="mapcut" data-child="${b.id}" transform="translate(${mx},${my})"><title>연결 끊기</title><circle r="9"></circle><text>✕</text></g>`;
+    }
   });
   if (temp) paths += `<path class="mapline temp" d="M ${temp.x1} ${temp.y1} L ${temp.x2} ${temp.y2}"/>`;
-  svg.innerHTML = paths;
+  svg.innerHTML = paths + cuts;
 }
 function initMap() {
   const map = document.getElementById('map');
@@ -438,9 +442,11 @@ function initMap() {
   drawLines();
   const CLICK_MS = 300, THRESH = 4;
   let mode = null, id = null, role = null, offx = 0, offy = 0, sx = 0, sy = 0;
-  let clickTimer = null, lastId = null, lastTime = 0;
+  let clickTimer = null, lastId = null, lastTime = 0, cutId = null;
 
   map.addEventListener('pointerdown', e => {
+    const cut = e.target.closest('.mapcut');
+    if (cut) { mode = 'cut'; cutId = cut.dataset.child; e.preventDefault(); return; }
     const cp = e.target.closest('.mp');
     if (cp) { mode = 'link'; id = cp.dataset.id; role = cp.dataset.role; map.setPointerCapture(e.pointerId); e.preventDefault(); return; }
     const node = e.target.closest('.mapnode');
@@ -478,7 +484,10 @@ function initMap() {
 
   map.addEventListener('pointerup', e => {
     const mr = map.getBoundingClientRect();
-    if (mode === 'link') {
+    if (mode === 'cut') {
+      const b = boardById(cutId);
+      if (b) { b.parent = null; save(); render(); }   // 연결선 끊기 → 상위 해제
+    } else if (mode === 'link') {
       const t = document.elementFromPoint(e.clientX, e.clientY);
       const tnode = t && t.closest ? t.closest('.mapnode') : null;
       if (tnode && tnode.dataset.id !== id) {
@@ -527,9 +536,33 @@ function openAddBoardAt(x, y) {
 function chipHtml(c) {
   const pr = PRIORITIES[c.priority] || PRIORITIES.none;
   const b = boardById(c.project);
+  const g = b && b.group ? groupById(b.group) : null;
   const style = pr.bg ? `background:${pr.bg};color:${pr.fg}` : 'background:var(--bg);color:var(--muted)';
   const mark = c.status === 'done' ? '<i class="chk">✓</i>' : '<i class="bdot" style="background:currentColor;opacity:.55"></i>';
-  return `<span class="chip ${c.status}" style="${style}" data-action="card" data-id="${c.id}" title="${esc((b ? b.name + ' · ' : '') + c.title)}">${mark}${esc(c.title)}</span>`;
+  const proj = g ? `<b class="chip-proj">${esc(g.name)}</b> ` : '';
+  const title = (g ? '📁' + g.name + ' · ' : '') + (b ? b.name + ' · ' : '') + c.title + (c.note ? '\n💬 ' + c.note : '');
+  return `<span class="chip ${c.status}" style="${style}" data-action="card" data-id="${c.id}" title="${esc(title)}">${mark}${proj}${esc(c.title)}</span>`;
+}
+function calFilterActive() { return Array.isArray(state.sel.calFilter) && state.sel.calFilter.length > 0; }
+function calCardVisible(c) {
+  if (!calFilterActive()) return true;
+  const b = boardById(c.project);
+  return state.sel.calFilter.includes(b ? (b.group || '') : '');
+}
+function calPeriodVisible(gid) {
+  if (!calFilterActive()) return true;
+  return state.sel.calFilter.includes(gid || '');
+}
+function calFilterBar() {
+  const groups = state.groups || [];
+  if (!groups.length) return '';
+  const sel = state.sel.calFilter, active = calFilterActive();
+  const pill = (gid, name, color) => `<button class="fpill ${active && sel.includes(gid) ? 'on c-' + color : ''}" data-action="cal-filter" data-gid="${gid}">${esc(name)}</button>`;
+  return `<div class="cal-filter"><span class="fl-label">프로젝트</span>
+    <button class="fpill ${!active ? 'on' : ''}" data-action="cal-filter" data-gid="__all">전체</button>
+    ${groups.map(g => pill(g.id, '📁 ' + g.name, g.color)).join('')}
+    ${pill('', '미분류', 'gray')}
+  </div>`;
 }
 function renderCal() {
   const ym = state.sel.calYm || todayStr().slice(0, 7);
@@ -539,10 +572,17 @@ function renderCal() {
   const today = todayStr();
   const cardsByDate = {};
   state.cards.forEach(c => {
+    if (!calCardVisible(c)) return;
     const d = c.due || (c.status === 'done' ? c.doneAt : null);
     if (d) (cardsByDate[d] = cardsByDate[d] || []).push(c);
   });
-  const periodBoards = state.projects.filter(b => b.start && b.end && b.start <= b.end);
+  const periodItems = [];
+  state.projects.filter(b => b.start && b.end && b.start <= b.end).forEach(b => {
+    if (calPeriodVisible(b.group || '')) periodItems.push({ name: b.name, color: b.color, start: b.start, end: b.end, kind: 'board', id: b.id });
+  });
+  (state.groups || []).forEach(g => (g.periods || []).forEach(p => {
+    if (p.start && p.end && p.start <= p.end && calPeriodVisible(g.id)) periodItems.push({ name: '📁 ' + g.name, color: g.color, start: p.start, end: p.end, kind: 'group', id: g.id });
+  }));
   let weeksHtml = '';
   for (let w = 0; w < 6; w++) {
     const wStart = new Date(y, m - 1, 1 - startDow + w * 7);
@@ -551,13 +591,13 @@ function renderCal() {
     // period bars with greedy lane stacking
     const lanes = [];
     const bars = [];
-    periodBoards.filter(b => b.start <= we && b.end >= ws).forEach(b => {
-      const sIdx = b.start <= ws ? 0 : (new Date(b.start + 'T00:00:00') - wStart) / 864e5;
-      const eIdx = b.end >= we ? 6 : (new Date(b.end + 'T00:00:00') - wStart) / 864e5;
+    periodItems.filter(it => it.start <= we && it.end >= ws).forEach(it => {
+      const sIdx = it.start <= ws ? 0 : (new Date(it.start + 'T00:00:00') - wStart) / 864e5;
+      const eIdx = it.end >= we ? 6 : (new Date(it.end + 'T00:00:00') - wStart) / 864e5;
       let lane = lanes.findIndex(endIdx => endIdx < sIdx);
       if (lane === -1) { lanes.push(eIdx); lane = lanes.length - 1; } else lanes[lane] = eIdx;
       if (lane > 2) return;
-      bars.push(`<span class="cal-bar c-${b.color}" style="left:${sIdx / 7 * 100}%;width:${(eIdx - sIdx + 1) / 7 * 100}%;top:${lane * 19}px" data-action="board-edit" data-id="${b.id}" title="${esc(b.name)} ${fmtDate(b.start)}~${fmtDate(b.end)}">${esc(b.name)}</span>`);
+      bars.push(`<span class="cal-bar c-${it.color}" style="left:${sIdx / 7 * 100}%;width:${(eIdx - sIdx + 1) / 7 * 100}%;top:${lane * 19}px" data-action="${it.kind === 'group' ? 'group-edit' : 'board-edit'}" data-id="${it.id}" title="${esc(it.name)} ${fmtDate(it.start)}~${fmtDate(it.end)}">${esc(it.name)}</span>`);
     });
     const laneCnt = Math.min(lanes.length, 3);
     let cells = '';
@@ -581,8 +621,9 @@ function renderCal() {
       <button class="pill" data-action="cal-prev">◀</button>
       <button class="pill" data-action="cal-today">오늘</button>
       <button class="pill" data-action="cal-next">▶</button>
-      <span class="cal-hint">날짜 클릭 = 할 일 추가 · 막대 = 보드 수행기간(보드 설정) · 칩 = 마감일 포스트잇</span>
+      <span class="cal-hint">날짜 클릭 = 할 일 추가 · 막대 = 프로젝트/보드 수행기간 · 칩 = 마감일 포스트잇</span>
     </div>
+    ${calFilterBar()}
     <div class="cal">
       <div class="cal-dow">${['일', '월', '화', '수', '목', '금', '토'].map((n, i) => `<span class="${i === 0 ? 'sun' : ''}">${n}</span>`).join('')}</div>
       ${weeksHtml}
@@ -689,7 +730,8 @@ function openCardModal(id) {
   showModal(`
     <h3>포스트잇 수정</h3>
     <label>내용<input type="text" id="m-title" value="${esc(c.title)}"></label>
-    <label>중요도${prioPicker(c.priority || 'none')}</label>
+    <label>중요도${prioPicker(c.priority || 'med')}</label>
+    <label>💬 메모 · FU (별도로 확인·기억할 것)<textarea id="m-note" rows="3" placeholder="예: 팀장 리뷰 후 재확인 / 자료 요청 대기중">${esc(c.note || '')}</textarea></label>
     <label>마감일 (선택)<input type="date" id="m-due" value="${c.due || ''}"></label>
     ${c.due ? `<a class="gcal-link" href="${gcalUrl((boardById(c.project) ? boardById(c.project).name + ' - ' : '') + c.title, c.due, nextDay(c.due))}" target="_blank" rel="noopener">＋ Google Calendar에 등록 (${fmtDate(c.due)} 종일)</a>` : ''}
     <div class="m-actions">
@@ -727,7 +769,7 @@ function openCalAddModal(date) {
     <h3>${fmtDate(date)} 할 일 추가</h3>
     <label>내용<input type="text" id="m-title" placeholder="예: 감사조서 리뷰"></label>
     <label>보드<select id="m-board">${opts}</select></label>
-    <label>중요도${prioPicker('none')}</label>
+    <label>중요도${prioPicker('med')}</label>
     <div class="m-actions">
       <button class="ghost" data-action="modal-close">취소</button>
       <button class="primary" data-action="caladd-save" data-date="${date}">추가</button>
@@ -766,12 +808,19 @@ function openProjModal(preGroup) {
       <button class="primary" data-action="proj-save">추가</button>
     </div>`);
 }
+function periodRowHtml(s, e) {
+  return `<div class="period-row"><input type="date" class="p-start" value="${s || ''}"><span class="p-tilde">~</span><input type="date" class="p-end" value="${e || ''}"><button type="button" class="period-del" data-action="period-del" title="이 기간 삭제">✕</button></div>`;
+}
 function openGroupModal(id) {
   const g = id ? groupById(id) : null;
+  const periods = (g && g.periods) ? g.periods : [];
   showModal(`
     <h3>${g ? '프로젝트 설정' : '프로젝트 추가'}</h3>
-    <p class="restore-note">프로젝트는 보드를 묶는 분류 폴더예요 (To-do 없음). 보드 설정에서 소속 프로젝트를 고를 수 있어요.</p>
+    <p class="restore-note">프로젝트는 보드를 묶는 분류 폴더예요 (To-do 없음). 여러 수행기간을 넣으면 달력에 표시됩니다.</p>
     <label>이름<input type="text" id="m-title" value="${g ? esc(g.name) : ''}" placeholder="예: AK18호 / 하림지주"></label>
+    <div class="periods-lbl">수행기간 (여러 개 가능 — 예: 이번 주 5일 + 다다음 주 5일)</div>
+    <div id="m-periods">${periods.map(p => periodRowHtml(p.start, p.end)).join('')}</div>
+    <button type="button" class="ghost addperiod" data-action="period-add">+ 기간 추가</button>
     <div class="m-actions">
       ${g ? `<button class="danger" data-action="group-del" data-id="${g.id}">삭제</button>` : ''}
       <button class="ghost" data-action="modal-close">취소</button>
@@ -871,7 +920,7 @@ document.addEventListener('click', e => {
     if (t) {
       const board = document.getElementById('m-board').value;
       state.sel.lastBoard = board;
-      state.cards.push({ id: uid(), project: board, title: t, status: 'todo', priority: document.getElementById('m-prio').dataset.val || 'none', due: el.dataset.date, doneAt: null });
+      state.cards.push({ id: uid(), project: board, title: t, status: 'todo', priority: document.getElementById('m-prio').dataset.val || 'med', due: el.dataset.date, doneAt: null, note: null });
     }
     closeModal(); render();
   }
@@ -880,14 +929,29 @@ document.addEventListener('click', e => {
   else if (act === 'proj-add') openProjModal(el.dataset.group || null);
   else if (act === 'group-add') openGroupModal();
   else if (act === 'group-edit') openGroupModal(el.dataset.id);
+  else if (act === 'period-add') { const box = document.getElementById('m-periods'); box.insertAdjacentHTML('beforeend', periodRowHtml('', '')); }
+  else if (act === 'period-del') { el.closest('.period-row').remove(); }
   else if (act === 'group-save') {
     const t = document.getElementById('m-title').value.trim();
     if (t) {
+      const periods = [...document.querySelectorAll('#m-periods .period-row')]
+        .map(r => ({ start: r.querySelector('.p-start').value || null, end: r.querySelector('.p-end').value || null }))
+        .filter(p => p.start && p.end && p.start <= p.end);
       const g = el.dataset.id ? groupById(el.dataset.id) : null;
-      if (g) g.name = t;
-      else state.groups.push({ id: 'g-' + uid(), name: t, color: RAMP[state.groups.length % RAMP.length] });
+      if (g) { g.name = t; g.periods = periods; }
+      else state.groups.push({ id: 'g-' + uid(), name: t, color: RAMP[state.groups.length % RAMP.length], periods });
     }
     closeModal(); render();
+  }
+  else if (act === 'cal-filter') {
+    const gid = el.dataset.gid;
+    if (gid === '__all') state.sel.calFilter = [];
+    else {
+      let f = Array.isArray(state.sel.calFilter) ? state.sel.calFilter.slice() : [];
+      f.includes(gid) ? (f = f.filter(x => x !== gid)) : f.push(gid);
+      state.sel.calFilter = f;
+    }
+    render();
   }
   else if (act === 'group-del') {
     const id = el.dataset.id;
@@ -904,7 +968,8 @@ document.addEventListener('click', e => {
     if (c) {
       const t = document.getElementById('m-title').value.trim();
       if (t) c.title = t;
-      c.priority = document.getElementById('m-prio').dataset.val || 'none';
+      c.priority = document.getElementById('m-prio').dataset.val || 'med';
+      c.note = document.getElementById('m-note').value.trim() || null;
       c.due = document.getElementById('m-due').value || null;
     }
     closeModal(); render();
@@ -1027,7 +1092,7 @@ document.addEventListener('submit', e => {
   const input = form.querySelector('input');
   const t = input.value.trim();
   if (!t) return;
-  state.cards.push({ id: uid(), project: form.dataset.project, title: t, status: 'todo', priority: 'none', due: todayStr(), doneAt: null });
+  state.cards.push({ id: uid(), project: form.dataset.project, title: t, status: 'todo', priority: 'med', due: todayStr(), doneAt: null, note: null });
   render();
   const again = document.querySelector(`.board-panel[data-board="${form.dataset.project}"] .quick input`);
   if (again) again.focus();
@@ -1050,16 +1115,19 @@ document.addEventListener('dragover', e => {
   if (dragItem && dragItem.kind === 'board') {
     const lane = e.target.closest('.detach-lane,.delete-lane');
     if (lane) { e.preventDefault(); lane.classList.add('over'); return; }
-    const ghead = e.target.closest('.group-head');
-    if (ghead && ghead.querySelector('[data-action="group-edit"]')) { e.preventDefault(); ghead.classList.add('drop-into'); return; }
     const panel = e.target.closest('.board-panel');
-    if (panel && panel.dataset.board !== dragItem.id) {
-      e.preventDefault();
-      const r = panel.getBoundingClientRect();
-      const lower = (e.clientY - r.top) > r.height / 2;    // 보드 전체: 위 절반=상위, 아래 절반=하위
-      panel.classList.remove('drop-child', 'drop-parent');
-      panel.classList.add(lower ? 'drop-child' : 'drop-parent');
+    if (panel) {
+      if (panel.dataset.board !== dragItem.id) {
+        e.preventDefault();
+        const r = panel.getBoundingClientRect();
+        const lower = (e.clientY - r.top) > r.height / 2;    // 보드 전체: 위 절반=상위, 아래 절반=하위
+        panel.classList.remove('drop-child', 'drop-parent');
+        panel.classList.add(lower ? 'drop-child' : 'drop-parent');
+      }
+      return;
     }
+    const sec = e.target.closest('.group-sec');   // 보드가 아닌 프로젝트 섹션 영역 = 그 프로젝트로 편입
+    if (sec) { e.preventDefault(); sec.classList.add('drop-into'); }
     return;
   }
   const col = e.target.closest('.col');
@@ -1070,8 +1138,8 @@ document.addEventListener('dragleave', e => {
   if (col) col.classList.remove('dragover');
   const lane = e.target.closest('.detach-lane,.delete-lane');
   if (lane && !lane.contains(e.relatedTarget)) lane.classList.remove('over');
-  const ghead = e.target.closest('.group-head');
-  if (ghead && !ghead.contains(e.relatedTarget)) ghead.classList.remove('drop-into');
+  const sec = e.target.closest('.group-sec');
+  if (sec && !sec.contains(e.relatedTarget)) sec.classList.remove('drop-into');
   const panel = e.target.closest('.board-panel');
   if (panel && !panel.contains(e.relatedTarget)) panel.classList.remove('drop-child', 'drop-parent');
 });
@@ -1079,7 +1147,6 @@ document.addEventListener('drop', e => {
   if (dragItem && dragItem.kind === 'board') {
     e.preventDefault();
     const draggedId = dragItem.id, dragged = boardById(draggedId);
-    const ghead = e.target.closest('.group-head');
     if (e.target.closest('.detach-lane')) {
       dragged.parent = null;                               // 왼쪽 분리 영역 → 독립
     } else if (e.target.closest('.delete-lane')) {         // 오른쪽 삭제 영역
@@ -1089,10 +1156,6 @@ document.addEventListener('drop', e => {
         state.projects = state.projects.filter(x => x.id !== draggedId);
         state.cards = state.cards.filter(c => c.project !== draggedId);
       }
-    } else if (ghead && ghead.querySelector('[data-action="group-edit"]')) {
-      const gid = ghead.querySelector('[data-action="group-edit"]').dataset.id;  // 프로젝트 헤더에 드롭 → 소속
-      dragged.parent = null;
-      setGroupDeep(draggedId, gid);
     } else {
       const panel = e.target.closest('.board-panel');
       if (panel && panel.dataset.board !== draggedId) {
@@ -1106,6 +1169,9 @@ document.addEventListener('drop', e => {
           if (isAncestor(target.id, draggedId)) { dragged.parent = target.parent; }
           setParent(target.id, draggedId);
         }
+      } else if (!panel) {
+        const sec = e.target.closest('.group-sec');        // 섹션 빈 영역 → 그 프로젝트(또는 미분류)로 편입
+        if (sec) { dragged.parent = null; setGroupDeep(draggedId, sec.dataset.group || null); }
       }
     }
     dragItem = null; document.body.classList.remove('dragging-board'); clearDropHints(); render();
