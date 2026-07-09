@@ -102,6 +102,16 @@ body.dragging-board .delete-lane{display:flex}
 .card.done{padding-left:15px;box-shadow:inset 7px 0 0 var(--ok),0 1px 3px rgba(0,0,0,.12)}
 .done-check{display:inline-block;color:var(--ok);font-weight:700;margin-right:5px}
 .card-note{margin-left:6px;font-size:12px;cursor:help;vertical-align:1px}
+.note-bubble{position:fixed;z-index:50;max-width:260px;background:var(--surface);border:1px solid var(--border);border-radius:12px;
+  box-shadow:0 8px 26px rgba(0,0,0,.20);padding:9px 12px;font-size:12.5px;line-height:1.5;pointer-events:none;display:none}
+.note-bubble .nb-head{font-size:10.5px;font-weight:700;color:var(--accent);margin-bottom:4px;letter-spacing:.02em}
+.note-bubble .nb-body{white-space:pre-wrap;word-break:break-word;color:var(--text)}
+.note-bubble::after{content:'';position:absolute;left:var(--tail-x,50%);bottom:-8px;transform:translateX(-50%);
+  border:8px solid transparent;border-top-color:var(--surface)}
+.note-bubble::before{content:'';position:absolute;left:var(--tail-x,50%);bottom:-9px;transform:translateX(-50%);
+  border:8px solid transparent;border-top-color:var(--border)}
+.note-bubble.below::after{bottom:auto;top:-8px;border-top-color:transparent;border-bottom-color:var(--surface)}
+.note-bubble.below::before{bottom:auto;top:-9px;border-top-color:transparent;border-bottom-color:var(--border)}
 .chip-proj{font-weight:700;opacity:.85}
 .cal-filter{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:0 0 10px}
 .cal-filter .fl-label{font-size:12px;color:var(--muted);margin-right:2px}
@@ -171,7 +181,9 @@ body.dragging-board .delete-lane{display:flex}
 .cal-day.out{opacity:.38}
 .dnum{display:inline-block;font-size:11px;color:var(--muted);min-width:18px;height:18px;line-height:18px;text-align:center;border-radius:50%}
 .cal-day.today .dnum{background:var(--accent);color:#fff}
-.chip{display:block;font-size:11px;border-radius:5px;padding:1px 6px;margin-top:2px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chip{display:block;font-size:11px;border-radius:5px;padding:2px 6px;margin-top:2px;cursor:pointer;overflow:hidden}
+.chip-proj-top{display:block;font-size:9px;line-height:1.1;font-weight:700;opacity:.65;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chip-task{display:block;font-size:11px;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .chip.doing{outline:1.5px solid var(--accent);outline-offset:-1px}
 .chip .bdot{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:4px;vertical-align:1px}
 .chip .chk{font-style:normal;font-weight:700;color:var(--ok);margin-right:3px}

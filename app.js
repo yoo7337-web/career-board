@@ -262,7 +262,7 @@ function cardHtml(c) {
   if (c.status !== 'done' && c.due) tags.push(dueBadge(c.due));
   if (c.status === 'done' && c.doneAt) tags.push(`<span class="tag">${fmtDate(c.doneAt)} 완료</span>`);
   const check = c.status === 'done' ? '<span class="done-check">✓</span>' : '';
-  const note = c.note ? `<span class="card-note" title="${esc(c.note)}">💬</span>` : '';
+  const note = c.note ? `<span class="card-note" data-note="${esc(c.note)}">💬</span>` : '';
   return `<div class="card ${c.status}" ${style} draggable="true" data-id="${c.id}" data-action="card">
     <div class="t">${check}${esc(c.title)}${note}</div>
     ${tags.length ? `<div class="meta">${tags.join('')}</div>` : ''}
@@ -539,9 +539,9 @@ function chipHtml(c) {
   const g = b && b.group ? groupById(b.group) : null;
   const style = pr.bg ? `background:${pr.bg};color:${pr.fg}` : 'background:var(--bg);color:var(--muted)';
   const mark = c.status === 'done' ? '<i class="chk">✓</i>' : '<i class="bdot" style="background:currentColor;opacity:.55"></i>';
-  const proj = g ? `<b class="chip-proj">${esc(g.name)}</b> ` : '';
+  const projTop = g ? `<span class="chip-proj-top">📁 ${esc(g.name)}</span>` : '';
   const title = (g ? '📁' + g.name + ' · ' : '') + (b ? b.name + ' · ' : '') + c.title + (c.note ? '\n💬 ' + c.note : '');
-  return `<span class="chip ${c.status}" style="${style}" data-action="card" data-id="${c.id}" title="${esc(title)}">${mark}${proj}${esc(c.title)}</span>`;
+  return `<span class="chip ${c.status}" style="${style}" data-action="card" data-id="${c.id}" title="${esc(title)}">${projTop}<span class="chip-task">${mark}${esc(c.title)}</span></span>`;
 }
 function calFilterActive() { return Array.isArray(state.sel.calFilter) && state.sel.calFilter.length > 0; }
 function calCardVisible(c) {
@@ -562,6 +562,7 @@ function calFilterBar() {
     <button class="fpill ${!active ? 'on' : ''}" data-action="cal-filter" data-gid="__all">전체</button>
     ${groups.map(g => pill(g.id, '📁 ' + g.name, g.color)).join('')}
     ${pill('', '미분류', 'gray')}
+    <button class="fpill fclear ${active && sel.includes('__none__') ? 'on' : ''}" data-action="cal-filter" data-gid="__none" title="아무 프로젝트도 표시 안 함">전체 해제</button>
   </div>`;
 }
 function renderCal() {
@@ -946,8 +947,9 @@ document.addEventListener('click', e => {
   else if (act === 'cal-filter') {
     const gid = el.dataset.gid;
     if (gid === '__all') state.sel.calFilter = [];
+    else if (gid === '__none') state.sel.calFilter = ['__none__'];
     else {
-      let f = Array.isArray(state.sel.calFilter) ? state.sel.calFilter.slice() : [];
+      let f = (Array.isArray(state.sel.calFilter) ? state.sel.calFilter : []).filter(x => x !== '__none__');
       f.includes(gid) ? (f = f.filter(x => x !== gid)) : f.push(gid);
       state.sel.calFilter = f;
     }
@@ -1182,6 +1184,31 @@ document.addEventListener('drop', e => {
   e.preventDefault();
   const panel = col.closest('.board-panel');
   moveCard(e.dataTransfer.getData('text/plain'), col.dataset.status, panel ? panel.dataset.board : null);
+});
+
+/* ---------- fancy note bubble (hover) ---------- */
+let noteBubbleEl = null;
+function showNoteBubble(target, text) {
+  if (!noteBubbleEl) { noteBubbleEl = document.createElement('div'); noteBubbleEl.className = 'note-bubble'; document.body.appendChild(noteBubbleEl); }
+  noteBubbleEl.innerHTML = `<div class="nb-head">💬 메모 · FU</div><div class="nb-body">${esc(text)}</div>`;
+  noteBubbleEl.style.display = 'block';
+  const r = target.getBoundingClientRect();
+  const bw = noteBubbleEl.offsetWidth, bh = noteBubbleEl.offsetHeight;
+  let left = Math.max(8, Math.min(r.left + r.width / 2 - bw / 2, window.innerWidth - bw - 8));
+  let top = r.top - bh - 10, below = false;
+  if (top < 8) { top = r.bottom + 10; below = true; }
+  noteBubbleEl.style.left = left + 'px';
+  noteBubbleEl.style.top = top + 'px';
+  noteBubbleEl.classList.toggle('below', below);
+  noteBubbleEl.style.setProperty('--tail-x', (r.left + r.width / 2 - left) + 'px');
+}
+function hideNoteBubble() { if (noteBubbleEl) noteBubbleEl.style.display = 'none'; }
+document.addEventListener('mouseover', e => {
+  const n = e.target.closest && e.target.closest('.card-note');
+  if (n && n.dataset.note) showNoteBubble(n, n.dataset.note);
+});
+document.addEventListener('mouseout', e => {
+  if (e.target.closest && e.target.closest('.card-note')) hideNoteBubble();
 });
 
 /* ---------- bootstrap ---------- */
