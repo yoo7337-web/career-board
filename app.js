@@ -538,9 +538,12 @@ function chipHtml(c) {
   const b = boardById(c.project);
   const g = b && b.group ? groupById(b.group) : null;
   const style = pr.bg ? `background:${pr.bg};color:${pr.fg}` : 'background:var(--bg);color:var(--muted)';
-  const mark = c.status === 'done' ? '<i class="chk">✓</i>' : '<i class="bdot" style="background:currentColor;opacity:.55"></i>';
-  const projTop = g ? `<span class="chip-proj-top">📁 ${esc(g.name)}</span>` : '';
-  const title = (g ? '📁' + g.name + ' · ' : '') + (b ? b.name + ' · ' : '') + c.title + (c.note ? '\n💬 ' + c.note : '');
+  const mark = c.status === 'done' ? '<i class="chip-mk done">✓</i>'
+    : c.status === 'doing' ? '<i class="chip-mk doing">▶</i>'
+      : '<i class="bdot" style="background:currentColor;opacity:.55"></i>';
+  const stName = c.status === 'done' ? '완수' : c.status === 'doing' ? '진행 중' : '계획';
+  const projTop = g ? `<span class="chip-proj-top c-${g.color}">${esc(g.name)}</span>` : '';
+  const title = (g ? '📁' + g.name + ' · ' : '') + (b ? b.name + ' · ' : '') + `[${stName}] ` + c.title + (c.note ? '\n💬 ' + c.note : '');
   return `<span class="chip ${c.status}" style="${style}" data-action="card" data-id="${c.id}" title="${esc(title)}">${projTop}<span class="chip-task">${mark}${esc(c.title)}</span></span>`;
 }
 function calFilterActive() { return Array.isArray(state.sel.calFilter) && state.sel.calFilter.length > 0; }
@@ -622,7 +625,8 @@ function renderCal() {
       <button class="pill" data-action="cal-prev">◀</button>
       <button class="pill" data-action="cal-today">오늘</button>
       <button class="pill" data-action="cal-next">▶</button>
-      <span class="cal-hint">날짜 클릭 = 할 일 추가 · 막대 = 프로젝트/보드 수행기간 · 칩 = 마감일 포스트잇</span>
+      <span class="cal-hint">날짜 클릭 = 할 일 추가 · 막대 = 프로젝트/보드 수행기간</span>
+      <span class="cal-status-legend"><span class="sl"><i class="bdot"></i>계획</span><span class="sl"><i class="chip-mk doing">▶</i>진행 중</span><span class="sl done"><i class="chip-mk done">✓</i>완수</span></span>
     </div>
     ${calFilterBar()}
     <div class="cal">
@@ -810,7 +814,7 @@ function openProjModal(preGroup) {
     </div>`);
 }
 function periodRowHtml(s, e) {
-  return `<div class="period-row"><input type="date" class="p-start" value="${s || ''}"><span class="p-tilde">~</span><input type="date" class="p-end" value="${e || ''}"><button type="button" class="period-del" data-action="period-del" title="이 기간 삭제">✕</button></div>`;
+  return `<div class="period-row"><input type="date" class="p-start" value="${s || ''}"><span class="p-tilde">~</span><input type="date" class="p-end" value="${e || ''}" ${s ? `min="${nextDay(s)}"` : ''}><button type="button" class="period-del" data-action="period-del" title="이 기간 삭제">✕</button></div>`;
 }
 function openGroupModal(id) {
   const g = id ? groupById(id) : null;
@@ -1209,6 +1213,20 @@ document.addEventListener('mouseover', e => {
 });
 document.addEventListener('mouseout', e => {
   if (e.target.closest && e.target.closest('.card-note')) hideNoteBubble();
+});
+
+/* 프로젝트 기간: 시작일 입력 시 종료일은 시작일 다음날부터만 */
+document.addEventListener('input', e => {
+  const s = e.target.closest && e.target.closest('.p-start');
+  if (!s) return;
+  const end = s.closest('.period-row').querySelector('.p-end');
+  if (s.value) {
+    const nd = nextDay(s.value);
+    end.min = nd;
+    if (!end.value || end.value < nd) end.value = nd;
+  } else {
+    end.removeAttribute('min');
+  }
 });
 
 /* ---------- bootstrap ---------- */
