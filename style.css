@@ -348,6 +348,11 @@ footer button:hover{border-color:var(--accent);color:var(--text)}
 .gate{max-width:340px;margin:12vh auto 0;text-align:center}
 .gate h1{font-size:22px;margin:0 0 6px}
 .gate-sub{color:var(--muted);font-size:14px;margin:0 0 20px}
+.gbtn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:10px 0;font:inherit;font-size:14px;font-weight:600;
+  background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:8px;cursor:pointer}
+.gbtn:hover{border-color:var(--accent)}
+.gate-or{display:flex;align-items:center;gap:10px;margin:16px 0 12px;color:var(--faint);font-size:12px}
+.gate-or::before,.gate-or::after{content:'';flex:1;height:1px;background:var(--border)}
 .gateform{display:flex;flex-direction:column;gap:10px;text-align:left}
 .gateform input{border:1px solid var(--border);border-radius:8px;padding:10px 12px;font:inherit;background:var(--surface);color:var(--text)}
 .gateform input:focus{outline:none;border-color:var(--accent)}

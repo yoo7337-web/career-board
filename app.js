@@ -177,6 +177,8 @@ function subscribeBoard(uid) {
 }
 function authErr(e) {
   const c = e.code || '';
+  if (c.includes('popup-closed-by-user') || c.includes('cancelled-popup-request')) return '로그인 창이 닫혔어요. 다시 시도해 주세요.';
+  if (c.includes('popup-blocked')) return '팝업이 차단됐어요. 브라우저에서 팝업을 허용해 주세요.';
   if (c.includes('invalid-credential') || c.includes('wrong-password') || c.includes('user-not-found')) return '이메일 또는 비밀번호가 맞지 않아요.';
   if (c.includes('email-already-in-use')) return '이미 가입된 이메일이에요. 로그인하세요.';
   if (c.includes('weak-password')) return '비밀번호는 6자 이상이어야 해요.';
@@ -194,6 +196,11 @@ function showAuthGate(msg) {
     <div class="gate">
       <h1>업무 보드</h1>
       <p class="gate-sub">로그인하면 폰·PC 어디서든 같은 데이터를 씁니다.</p>
+      <button type="button" class="gbtn" data-action="google-login">
+        <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3l5.7-5.7C34.3 6.1 29.4 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.6-.4-3.9z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.9 1.2 8 3l5.7-5.7C34.3 6.1 29.4 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C36.9 39.2 44 34 44 24c0-1.3-.1-2.6-.4-3.9z"/></svg>
+        Google로 로그인
+      </button>
+      <div class="gate-or"><span>또는 이메일로</span></div>
       <form class="gateform">
         <input type="email" id="g-email" placeholder="이메일" autocomplete="username">
         <input type="password" id="g-pass" placeholder="비밀번호 (6자 이상)" autocomplete="current-password">
@@ -1002,6 +1009,7 @@ function render() {
       <button data-action="import">가져오기</button>
       <button data-action="ics" title="Google Calendar에서 '설정 > 가져오기'로 등록">.ics 내보내기</button>
       <button data-action="samples">샘플 불러오기</button>
+      ${CLOUD && authUser && GCAL_OK ? `<button data-action="gcal-sync" title="마감일 카드·프로젝트 기간을 구글 '업무 보드' 캘린더로 push">📅 구글 캘린더 동기화</button>` : ''}
       ${CLOUD && authUser ? `<span class="sync-badge" title="${esc(authUser.email || '')}">☁ 동기화 중</span><button data-action="logout">로그아웃</button>` : ''}
     </footer>`;
   save();
@@ -1216,6 +1224,10 @@ document.addEventListener('click', e => {
   if (!el) return;
   const act = el.dataset.action;
   if (act === 'login') { doAuth('login'); }
+  else if (act === 'google-login') {
+    firebase.auth().signInWithPopup(new firebase.auth.GoogleAuthProvider())
+      .catch(err => { const m = document.getElementById('g-msg'); if (m) m.textContent = authErr(err); });
+  }
   else if (act === 'signup') { doAuth('signup'); }
   else if (act === 'logout') { if (window.firebase) firebase.auth().signOut(); }
   else if (act === 'view') { state.sel.view = el.dataset.view; render(); }
@@ -1237,6 +1249,7 @@ document.addEventListener('click', e => {
     }
     closeModal(); render();
   }
+  else if (act === 'gcal-sync') syncGCal();
   else if (act === 'ics') icsExport();
   else if (act === 'samples') { if (confirm('회계 업무 샘플 보드 3개와 카드들을 추가할까요? (기존 데이터는 유지)')) loadSamples(); }
   else if (act === 'proj-add') openProjModal(el.dataset.group || null);
@@ -1591,6 +1604,107 @@ document.addEventListener('drop', e => {
     moveCard(cid, col.dataset.status, panel ? panel.dataset.board : null);
   }
 });
+
+/* ---------- Google Calendar 단방향 동기화 (앱 → 구글) ---------- */
+const GCAL_OK = !!(window.gcalClientId && !/PASTE|YOUR_/.test(window.gcalClientId));
+let gcalToken = null, gcalTokenExp = 0;
+function gcalHash(s) { let h = 0; for (let i = 0; i < s.length; i++) { h = (h * 31 + s.charCodeAt(i)) | 0; } return String(h); }
+function getGcalToken() {
+  return new Promise((resolve, reject) => {
+    if (gcalToken && Date.now() < gcalTokenExp - 60000) return resolve(gcalToken);
+    const start = () => {
+      const tc = google.accounts.oauth2.initTokenClient({
+        client_id: window.gcalClientId,
+        scope: 'https://www.googleapis.com/auth/calendar',
+        hint: (authUser && authUser.email) || undefined,
+        callback: r => {
+          if (r && r.access_token) { gcalToken = r.access_token; gcalTokenExp = Date.now() + (r.expires_in || 3600) * 1000; resolve(gcalToken); }
+          else reject(new Error('토큰을 받지 못했어요'));
+        },
+        error_callback: e => reject(new Error(e && e.type === 'popup_closed' ? '동의 창이 닫혔어요' : '구글 인증 실패')),
+      });
+      tc.requestAccessToken();
+    };
+    if (window.google && google.accounts) start();
+    else loadScript('https://accounts.google.com/gsi/client').then(start).catch(() => reject(new Error('구글 스크립트 로드 실패')));
+  });
+}
+async function gapi(path, method, body, token) {
+  const res = await fetch('https://www.googleapis.com/calendar/v3' + path, {
+    method: method || 'GET',
+    headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (res.status === 404) return { __404: true };
+  if (!res.ok) throw new Error('구글 API 오류 ' + res.status);
+  return res.status === 204 ? {} : res.json();
+}
+function gcalDesiredItems() {
+  const items = {};   // key -> {title, start, end(exclusive)}
+  state.cards.filter(c => c.status !== 'done' && c.due && c.project).forEach(c => {
+    const b = boardById(c.project);
+    items['c:' + c.id] = { title: `[${b ? b.name : ''}] ${c.title}`, start: c.due, end: nextDay(c.due) };
+  });
+  state.cards.filter(c => c.status !== 'done' && c.due && !c.project).forEach(c => {
+    items['c:' + c.id] = { title: `[미배정] ${c.title}`, start: c.due, end: nextDay(c.due) };
+  });
+  (state.groups || []).forEach(g => (g.periods || []).forEach((p, i) => {
+    if (p.start && p.end && p.start <= p.end) items[`g:${g.id}:${i}`] = { title: `📁 ${g.name}`, start: p.start, end: nextDay(p.end) };
+  }));
+  state.projects.filter(b => b.start && b.end && b.start <= b.end).forEach(b => {
+    items['b:' + b.id] = { title: `[기간] ${b.name}`, start: b.start, end: nextDay(b.end) };
+  });
+  return items;
+}
+async function syncGCal() {
+  const btn = document.querySelector('[data-action="gcal-sync"]');
+  const setBtn = t => { if (btn) btn.textContent = t; };
+  try {
+    setBtn('⏳ 인증 중…');
+    const token = await getGcalToken();
+    setBtn('⏳ 캘린더 확인…');
+    state.gcal = state.gcal || {};
+    if (state.gcal.calId) {
+      const chk = await gapi('/calendars/' + encodeURIComponent(state.gcal.calId), 'GET', null, token);
+      if (chk.__404) state.gcal.calId = null;
+    }
+    if (!state.gcal.calId) {
+      const cal = await gapi('/calendars', 'POST', { summary: '업무 보드' }, token);
+      state.gcal.calId = cal.id;
+    }
+    const calPath = '/calendars/' + encodeURIComponent(state.gcal.calId) + '/events';
+    const desired = gcalDesiredItems();
+    const map = state.gcal.map = state.gcal.map || {};
+    let ins = 0, upd = 0, del = 0, fail = 0, skip = 0;
+    for (const [key, it] of Object.entries(desired)) {
+      const h = gcalHash(it.title + '|' + it.start + '|' + it.end);
+      const cur = map[key];
+      const payload = { summary: it.title, start: { date: it.start }, end: { date: it.end } };
+      try {
+        if (!cur) {
+          const ev = await gapi(calPath, 'POST', payload, token);
+          map[key] = { id: ev.id, h }; ins++;
+        } else if (cur.h !== h) {
+          const r = await gapi(calPath + '/' + encodeURIComponent(cur.id), 'PUT', payload, token);
+          if (r.__404) { const ev = await gapi(calPath, 'POST', payload, token); map[key] = { id: ev.id, h }; ins++; }
+          else { cur.h = h; upd++; }
+        } else skip++;
+      } catch (e) { fail++; }
+    }
+    for (const key of Object.keys(map)) {
+      if (!desired[key]) {
+        try { await gapi(calPath + '/' + encodeURIComponent(map[key].id), 'DELETE', null, token); } catch (e) { fail++; }
+        delete map[key]; del++;
+      }
+    }
+    save();
+    setBtn('📅 구글 캘린더 동기화');
+    alert(`구글 캘린더 동기화 완료\n생성 ${ins} · 갱신 ${upd} · 삭제 ${del} · 변화없음 ${skip}${fail ? ` · 실패 ${fail}` : ''}\n\n('업무 보드' 캘린더에서 확인하세요)`);
+  } catch (e) {
+    setBtn('📅 구글 캘린더 동기화');
+    alert('동기화 실패: ' + (e.message || e));
+  }
+}
 
 /* ---------- fancy note bubble (hover) ---------- */
 let noteBubbleEl = null;
