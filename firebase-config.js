@@ -7,7 +7,7 @@
 // ── 구글 캘린더 동기화용 OAuth 클라이언트 ID (선택) ──
 // Google Cloud 콘솔 > API 및 서비스 > 사용자 인증 정보 > OAuth 웹 클라이언트 ID.
 // PASTE 상태면 동기화 버튼이 숨겨집니다.
-window.gcalClientId = "PASTE_GCAL_CLIENT_ID";
+window.gcalClientId = "699122227963-o53796j8lctd8fvjcmdae22uvclpv4a1.apps.googleusercontent.com";
 
 window.firebaseConfig = {
   apiKey: "AIzaSyDqanuN7rQmx6R1peTzn3SJf_3TkBZpyyw",
