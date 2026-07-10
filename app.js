@@ -649,7 +649,7 @@ function renderCal() {
       const dayCards = cardsByDate[ds] || [];
       const chips = dayCards.map(chipHtml).join('');
       cells += `<div class="cal-day ${inMonth ? '' : 'out'} ${ds === today ? 'today' : ''}" data-action="cal-add" data-date="${ds}" title="클릭하면 이 날짜로 할 일 추가">
-        <span class="dnum ${d === 0 ? 'sun' : ''}">${dt.getDate()}</span>${chips}</div>`;
+        <div class="cal-scroll"><span class="dnum ${d === 0 ? 'sun' : ''}">${dt.getDate()}</span>${chips}</div></div>`;
     }
     weeksHtml += `<div class="cal-week">
       ${laneCnt ? `<div class="cal-bars" style="height:${laneCnt * 19 + 2}px">${bars.join('')}</div>` : ''}
@@ -669,6 +669,11 @@ function renderCal() {
       <div class="cal-dow">${['일', '월', '화', '수', '목', '금', '토'].map((n, i) => `<span class="${i === 0 ? 'sun' : ''}">${n}</span>`).join('')}</div>
       ${weeksHtml}
     </div>`;
+}
+function markCalOverflow() {
+  document.querySelectorAll('.cal-scroll').forEach(sc => {
+    sc.parentElement.classList.toggle('has-more', sc.scrollHeight > sc.clientHeight + 2);
+  });
 }
 function calShift(n) {
   const [y, m] = (state.sel.calYm || todayStr().slice(0, 7)).split('-').map(Number);
@@ -871,6 +876,7 @@ function render() {
     </footer>`;
   save();
   if (view === 'map') initMap();
+  if (view === 'cal') markCalOverflow();
   if (view === 'board' && focusBoard) {
     const el = document.querySelector(`.board-panel[data-board="${focusBoard}"]`);
     focusBoard = null;

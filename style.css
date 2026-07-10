@@ -194,11 +194,16 @@ body.dragging-board .delete-lane{display:flex}
 .cal-bars{position:relative;margin:2px 2px 0}
 .cal-bar{position:absolute;height:16px;border-radius:8px;font-size:10.5px;line-height:16px;padding:0 8px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;cursor:pointer;box-sizing:border-box}
 .cal-days{display:grid;grid-template-columns:repeat(7,1fr)}
-.cal-day{min-height:84px;padding:3px 4px;border-left:1px solid var(--border);cursor:pointer}
+.cal-day{height:132px;border-left:1px solid var(--border);cursor:pointer;position:relative;overflow:hidden}
 .cal-day:first-child{border-left:0}
 .cal-day:hover{background:var(--accent-soft)}
 .cal-day.out{opacity:.38}
 .cal-day.cal-drop{outline:2px dashed var(--accent);outline-offset:-2px;background:var(--accent-soft)}
+.cal-scroll{height:100%;overflow-y:auto;padding:3px 4px 14px;scrollbar-width:thin}
+.cal-scroll::-webkit-scrollbar{width:4px}
+.cal-scroll::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+.cal-day.has-more::after{content:'▾';position:absolute;left:0;right:0;bottom:0;height:16px;pointer-events:none;
+  background:linear-gradient(transparent,var(--surface) 70%);color:var(--faint);font-size:9px;text-align:center;line-height:20px}
 .chip{cursor:grab}
 .dnum{display:inline-block;font-size:11px;color:var(--muted);min-width:18px;height:18px;line-height:18px;text-align:center;border-radius:50%}
 .cal-day.today .dnum{background:var(--accent);color:#fff}
