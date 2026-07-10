@@ -317,24 +317,50 @@ function orderedBoardsIn(gid) {
   members.forEach(b => { if (!seen.has(b.id)) { seen.add(b.id); out.push({ board: b, depth: 0 }); } });
   return out;
 }
+function boardFilterActive() { return Array.isArray(state.sel.boardFilter) && state.sel.boardFilter.length > 0; }
+function boardGroupVisible(gid) { return !boardFilterActive() || state.sel.boardFilter.includes(gid || ''); }
+function boardFilterBar() {
+  const groups = state.groups || [];
+  if (!groups.length) return '';
+  const sel = state.sel.boardFilter, active = boardFilterActive();
+  const pill = (gid, name, color) => `<button class="fpill ${active && sel.includes(gid) ? 'on c-' + color : ''}" data-action="board-filter" data-gid="${gid}">${esc(name)}</button>`;
+  return `<div class="cal-filter"><span class="fl-label">프로젝트별 보기</span>
+    <button class="fpill ${!active ? 'on' : ''}" data-action="board-filter" data-gid="__all">전체</button>
+    ${groups.map(g => pill(g.id, '📁 ' + g.name, g.color)).join('')}
+    ${pill('', '미분류', 'gray')}
+  </div>`;
+}
 function renderBoardView() {
   const groups = state.groups || [];
   const sections = [];
   groups.forEach(g => {
+    if (!boardGroupVisible(g.id)) return;
     const items = orderedBoardsIn(g.id);
     sections.push(`<div class="group-sec" data-group="${g.id}">
       <div class="group-head"><span class="gname c-${g.color}" data-action="group-edit" data-id="${g.id}" title="클릭=프로젝트 이름·삭제">📁 ${esc(g.name)}</span><span class="gcnt">보드 ${items.length}</span><button class="mini-btn" data-action="proj-add" data-group="${g.id}">+ 보드</button></div>
       ${items.length ? `<div class="boards">${items.map(({ board, depth }) => panelHtml(board, depth)).join('')}</div>` : '<div class="empty droptip">여기로 보드를 끌어오면 이 프로젝트 소속 · 또는 [+ 보드]</div>'}
     </div>`);
   });
-  const un = orderedBoardsIn(null);
-  sections.push(`<div class="group-sec" data-group="">
-    ${groups.length ? `<div class="group-head"><span class="gname plain">📄 미분류</span><span class="gcnt">보드 ${un.length}</span></div>` : ''}
-    ${un.length ? `<div class="boards">${un.map(({ board, depth }) => panelHtml(board, depth)).join('')}</div>`
-      : `<div class="empty droptip">${groups.length ? '여기로 끌어오면 미분류(프로젝트 없음)로 이동' : '보드가 없어요 — [+ 보드 추가]'}</div>`}
-  </div>`);
+  if (boardGroupVisible('')) {
+    const un = orderedBoardsIn(null);
+    sections.push(`<div class="group-sec" data-group="">
+      ${groups.length ? `<div class="group-head"><span class="gname plain">📄 미분류</span><span class="gcnt">보드 ${un.length}</span></div>` : ''}
+      ${un.length ? `<div class="boards">${un.map(({ board, depth }) => panelHtml(board, depth)).join('')}</div>`
+        : `<div class="empty droptip">${groups.length ? '여기로 끌어오면 미분류(프로젝트 없음)로 이동' : '보드가 없어요 — [+ 보드 추가]'}</div>`}
+    </div>`);
+  }
+  const inbox = state.cards.filter(c => !c.project && c.status !== 'done');
+  const inboxHtml = `<section class="inbox">
+    <div class="group-head"><span class="gname c-amber">📥 미배정 · 예정</span><span class="gcnt">${inbox.length}</span><span class="dash-sub">보드에 넣기 전 임시 보관 — 카드를 보드로 드래그</span></div>
+    <div class="col inbox-col" data-status="todo" data-inbox="1">
+      ${inbox.map(cardHtml).join('')}
+      <form class="quick" data-project="__inbox"><input name="t" placeholder="+ 예정 할 일 추가하고 Enter" autocomplete="off"></form>
+    </div>
+  </section>`;
   return legendHtml()
+    + boardFilterBar()
     + `<div class="addbar"><button class="pill" data-action="group-add">📁 + 프로젝트 추가</button><button class="pill" data-action="proj-add">+ 보드 추가</button><span class="board-hint">보드 드래그: 다른 보드 위=앞 순서 / 가운데=하위로 / 아래=뒤 순서 · 프로젝트 영역=편입 · 왼쪽=분리 · 오른쪽=삭제</span></div>`
+    + inboxHtml
     + sections.join('')
     + `<div class="detach-lane"><span>◀<br>여기에 놓으면<br>보드 분리<br>(독립)</span></div>`
     + `<div class="delete-lane"><span>🗑<br>여기에 놓으면<br>보드 삭제</span></div>`;
@@ -416,7 +442,7 @@ function renderMap() {
       <div class="mp mp-bot" data-id="${b.id}" data-role="bot" title="하위 연결점 — 여기서 자식 보드로 끌기"></div>
     </div>`;
   }).join('');
-  const h = Math.max(520, state.projects.reduce((m, b) => Math.max(m, b.y || 0), 0) + 120);
+  const h = Math.max(640, state.projects.reduce((m, b) => Math.max(m, b.y || 0), 0) + 140);
   return `<div class="map-toolbar">
       <button class="pill" data-action="map-arrange" title="프로젝트별 구역으로 나눠 상위→하위 자동 배치">⟲ 자동정렬</button>
       <span class="maphint">색 구역 = 프로젝트 · 노드를 구역 안으로 끌면 그 프로젝트 소속 · 빈 곳 클릭 = 보드 추가 · 더블클릭 = 보드로 이동</span>
@@ -827,6 +853,7 @@ function render() {
   if (view === 'devlog' && !isAdmin()) view = 'board';
   const vbtn = (k, label) => `<button class="${view === k ? 'on' : ''}" data-action="view" data-view="${k}">${label}</button>`;
   const nav = vbtn('dash', '현황') + vbtn('map', '구조도') + vbtn('board', '보드') + vbtn('cal', '달력') + (isAdmin() ? vbtn('devlog', '개발일지') : '');
+  document.getElementById('app').classList.toggle('wide', view === 'map');
   document.getElementById('app').innerHTML = `
     <header>
       <h1>업무 보드</h1>
@@ -1093,6 +1120,16 @@ document.addEventListener('click', e => {
     }
     closeModal(); render();
   }
+  else if (act === 'board-filter') {
+    const gid = el.dataset.gid;
+    if (gid === '__all') state.sel.boardFilter = [];
+    else {
+      let f = Array.isArray(state.sel.boardFilter) ? state.sel.boardFilter.slice() : [];
+      f.includes(gid) ? (f = f.filter(x => x !== gid)) : f.push(gid);
+      state.sel.boardFilter = f;
+    }
+    render();
+  }
   else if (act === 'cal-filter') {
     const gid = el.dataset.gid;
     if (gid === '__all') state.sel.calFilter = [];
@@ -1243,9 +1280,10 @@ document.addEventListener('submit', e => {
   const input = form.querySelector('input');
   const t = input.value.trim();
   if (!t) return;
-  state.cards.push({ id: uid(), project: form.dataset.project, title: t, status: 'todo', priority: 'med', due: todayStr(), doneAt: null, note: null, createdAt: todayStr() });
+  const inbox = form.dataset.project === '__inbox';
+  state.cards.push({ id: uid(), project: inbox ? null : form.dataset.project, title: t, status: 'todo', priority: 'med', due: inbox ? null : todayStr(), doneAt: null, note: null, createdAt: todayStr() });
   render();
-  const again = document.querySelector(`.board-panel[data-board="${form.dataset.project}"] .quick input`);
+  const again = inbox ? document.querySelector('.inbox-col .quick input') : document.querySelector(`.board-panel[data-board="${form.dataset.project}"] .quick input`);
   if (again) again.focus();
 });
 
@@ -1356,8 +1394,15 @@ document.addEventListener('drop', e => {
   const col = e.target.closest('.col');
   if (!col) return;
   e.preventDefault();
-  const panel = col.closest('.board-panel');
-  moveCard(e.dataTransfer.getData('text/plain'), col.dataset.status, panel ? panel.dataset.board : null);
+  const cid = e.dataTransfer.getData('text/plain');
+  if (col.dataset.inbox) {                                  // 보드 카드 → 미배정으로 되돌리기
+    const c = state.cards.find(x => x.id === cid);
+    if (c) { c.project = null; if (c.status === 'done') { c.status = 'todo'; c.doneAt = null; } }
+    render();
+  } else {
+    const panel = col.closest('.board-panel');
+    moveCard(cid, col.dataset.status, panel ? panel.dataset.board : null);
+  }
 });
 
 /* ---------- fancy note bubble (hover) ---------- */
