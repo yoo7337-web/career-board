@@ -11,6 +11,11 @@ const PRIORITIES = {
 };
 const PRIO_ORDER = ['high', 'med', 'low', 'none'];
 const PRIO_RANK = { high: 3, med: 2, low: 1, none: 0 };
+const TBOX_COLORS = [
+  { bg: '#F5A88A', fg: '#5A1F0C' },   // Big 1 — coral
+  { bg: '#F7CE6B', fg: '#5A3406' },   // Big 2 — amber
+  { bg: '#9FD0F0', fg: '#0C3A66' },   // Big 3 — blue
+];
 const NOTE_TYPES = {
   interview: { label: '인터뷰', icon: '🎤', color: 'purple' },
   meeting: { label: '회의', icon: '📋', color: 'blue' },
@@ -26,6 +31,7 @@ const SEED = {
   groups: [],
   cards: [],
   notes: [],
+  timebox: {},
   sel: { view: 'board' },
 };
 
@@ -57,6 +63,7 @@ function load() {
       if (!s.sel.view) s.sel.view = 'board';
       s.groups = s.groups || [];
       s.notes = s.notes || [];
+      s.timebox = s.timebox || {};
       return s;
     }
   } catch (e) { /* corrupt storage -> reseed */ }
@@ -164,6 +171,7 @@ function subscribeBoard(uid) {
       state.sel = state.sel || { view: 'board' };
       state.groups = state.groups || [];
       state.notes = state.notes || [];
+      state.timebox = state.timebox || {};
       localStorage.setItem(LS_KEY, JSON.stringify(state));
       render();
       applyingRemote = false;
@@ -825,7 +833,18 @@ function renderDash() {
     const cs = cards.filter(c => bids.has(c.project));
     if ((state.groups || []).length && cs.length) gpRows.push(gpRow('미분류', 'gray', cs.filter(c => c.status === 'done').length, cs.length));
   }
+  const td = (state.timebox || {})[today];
+  const hasBig3 = td && td.big3 && td.big3.some(Boolean);
+  const big3Strip = `<div class="dash-big3" data-action="dash-big3-go" title="타임박스로 이동">
+    <span class="db3-label">🎯 오늘의 Big 3</span>
+    ${hasBig3
+      ? [0, 1, 2].map(i => { const b = td.big3[i], c = TBOX_COLORS[i];
+          return b ? `<span class="db3 ${b.done ? 'done' : ''}" style="background:${c.bg};color:${c.fg}">${b.done ? '✓ ' : ''}${esc(b.title)}</span>`
+                   : `<span class="db3 empty">Big ${i + 1}</span>`; }).join('')
+      : '<span class="db3 empty">타임박스에서 오늘의 Big 3를 정해보세요 →</span>'}
+  </div>`;
   return `<div class="dash">
+    ${big3Strip}
     <div class="dash-kpis">
       ${kpi('오늘 등록', registeredToday.length, 'k-new', 'sec-new')}
       ${kpi('진행 중', doing.length, 'k-doing', 'sec-doing')}
@@ -949,6 +968,120 @@ function openOverviewModal() {
     </div>`);
 }
 
+/* ---------- 타임박스 (일론 머스크식 Time Box) ---------- */
+let tbSel = null;    // 선택된 Big3 인덱스 (칠하기 대상)
+let tbPaint = null;  // { erase } — 드래그 칠하기 진행 중
+function tbData(date) {
+  state.timebox = state.timebox || {};
+  if (!state.timebox[date]) state.timebox[date] = { big3: [null, null, null], slots: {} };
+  const d = state.timebox[date];
+  d.big3 = d.big3 || [null, null, null];
+  d.slots = d.slots || {};
+  return d;
+}
+function tbSum(d, idx) { return Object.values(d.slots).filter(v => v === idx).length * 0.5; }
+function tbShift(n) {
+  const [y, m, dd] = (state.sel.tboxDate || todayStr()).split('-').map(Number);
+  state.sel.tboxDate = dstr(new Date(y, m - 1, dd + n));
+  tbSel = null; render();
+}
+function renderTbox() {
+  const date = state.sel.tboxDate || todayStr();
+  state.sel.tboxDate = date;
+  const d = tbData(date);
+  const isToday = date === todayStr();
+  const dow = ['일', '월', '화', '수', '목', '금', '토'][new Date(date + 'T00:00:00').getDay()];
+  const rows = [0, 1, 2].map(i => {
+    const b = d.big3[i], c = TBOX_COLORS[i];
+    if (!b) return `<div class="tb-big3-row empty" data-idx="${i}"><span class="tb-chip" style="background:${c.bg}"></span><span class="tb-empty-txt">Brain Dump에서 여기로 드래그</span></div>`;
+    const sum = tbSum(d, i);
+    return `<div class="tb-big3-row ${tbSel === i ? 'sel' : ''} ${b.done ? 'done' : ''}" data-idx="${i}" data-action="tb-select" title="클릭=선택 후 시간 칸 드래그로 배정">
+      <span class="tb-chip" style="background:${c.bg}"></span>
+      <input type="checkbox" data-action="tb-check" data-idx="${i}" ${b.done ? 'checked' : ''} title="완수 처리 (보드에도 반영)">
+      <span class="tb-title">${esc(b.title)}</span>
+      <span class="tb-sum">${sum ? 'Σ ' + sum + 'h' : ''}</span>
+      <button class="tb-x" data-action="tb-remove" data-idx="${i}" title="Big3에서 빼기 (배정 시간도 삭제)">✕</button>
+    </div>`;
+  }).join('');
+  let dumpHtml;
+  if (isToday) {
+    const dump = state.cards.filter(c => c.status !== 'done');
+    dumpHtml = `<div class="tb-sec-h" style="margin-top:16px">Brain Dump <span class="cnt">${dump.length}</span><span class="dash-sub">미완료 To-do 전체 — Big3로 드래그</span></div>
+      <div class="tb-dump">${dump.map(c => {
+        const b = c.project ? boardById(c.project) : null;
+        const g = b && b.group ? groupById(b.group) : null;
+        const pr = PRIORITIES[c.priority] || PRIORITIES.none;
+        const inBig = d.big3.some(x => x && x.cardId === c.id);
+        return `<div class="tb-dump-item ${inBig ? 'in-big' : ''}" draggable="true" data-id="${c.id}" title="${esc((g ? g.name + ' · ' : '') + (b ? b.name : '미배정'))}">
+          <span class="drow-prio" style="${pr.bg ? 'background:' + pr.bg : ''}"></span>
+          ${g ? `<span class="drow-proj c-${g.color}">${esc(g.name)}</span>` : ''}
+          <span class="tb-dump-t">${esc(c.title)}</span>${inBig ? '<span class="tb-star">★</span>' : ''}
+        </div>`;
+      }).join('') || '<div class="empty">미완료 할 일이 없어요 👍</div>'}
+      </div>
+      <form class="quick" data-project="__inbox"><input name="t" placeholder="+ 쏟아내기 — 미배정 할 일로 추가" autocomplete="off"></form>`;
+  } else {
+    dumpHtml = `<div class="tb-note-past">📖 ${isTodayFuture(date) ? '미래' : '지난'} 날짜의 타임박스입니다 · <button class="mini-btn" data-action="tbox-today">오늘로 이동</button></div>`;
+  }
+  let grid = '<div class="tb-grid" id="tb-grid"><div class="tb-grid-h"><span></span><span>:00</span><span>:30</span></div>';
+  for (let h = 6; h < 24; h++) {
+    const cell = half => {
+      const k = h + '.' + half;
+      const v = d.slots[k];
+      return `<div class="tb-cell" data-slot="${k}" ${v !== undefined ? `style="background:${TBOX_COLORS[v].bg};color:${TBOX_COLORS[v].fg}"` : ''}>${v !== undefined ? v + 1 : ''}</div>`;
+    };
+    grid += `<div class="tb-row"><span class="tb-hour">${h}</span>${cell(0)}${cell(5)}</div>`;
+  }
+  grid += '</div>';
+  const selB = tbSel !== null ? d.big3[tbSel] : null;
+  const hint = selB ? `<b>${esc(selB.title)}</b> 배정 중 — 시간 칸을 드래그하세요 (칠한 칸 다시 드래그=지우기)` : 'Big 3 행을 클릭해 선택 → 오른쪽 시간 칸을 드래그해 배정';
+  return `<div class="cal-head">
+      <span class="cal-title">⏱ ${date} (${dow})${isToday ? ' · 오늘' : ''}</span>
+      <button class="pill" data-action="tbox-prev">◀</button>
+      <button class="pill" data-action="tbox-today">오늘</button>
+      <button class="pill" data-action="tbox-next">▶</button>
+      <span class="cal-hint">${hint}</span>
+    </div>
+    <div class="tbox-wrap">
+      <div class="tb-left">
+        <div class="tb-sec-h">Top Priorities — Big 3</div>
+        ${rows}
+        ${dumpHtml}
+      </div>
+      <div class="tb-right">${grid}</div>
+    </div>`;
+}
+function isTodayFuture(date) { return date > todayStr(); }
+function tbApplyCell(cell) {
+  const d = tbData(state.sel.tboxDate || todayStr());
+  const k = cell.dataset.slot;
+  if (tbPaint.erase) {
+    if (d.slots[k] === tbSel) { delete d.slots[k]; cell.style.background = ''; cell.style.color = ''; cell.textContent = ''; }
+  } else {
+    d.slots[k] = tbSel;
+    cell.style.background = TBOX_COLORS[tbSel].bg;
+    cell.style.color = TBOX_COLORS[tbSel].fg;
+    cell.textContent = tbSel + 1;
+  }
+}
+document.addEventListener('pointerdown', e => {
+  const cell = e.target.closest && e.target.closest('.tb-cell');
+  if (!cell || tbSel === null) return;
+  const d = tbData(state.sel.tboxDate || todayStr());
+  tbPaint = { erase: d.slots[cell.dataset.slot] === tbSel };
+  tbApplyCell(cell);
+  e.preventDefault();
+});
+document.addEventListener('pointermove', e => {
+  if (!tbPaint) return;
+  const el = document.elementFromPoint(e.clientX, e.clientY);
+  const cell = el && el.closest ? el.closest('.tb-cell') : null;
+  if (cell) tbApplyCell(cell);
+});
+document.addEventListener('pointerup', () => {
+  if (tbPaint) { tbPaint = null; save(); render(); }
+});
+
 /* ---------- dev log (admin only) ---------- */
 function renderDevlog() {
   const dl = state.devlog || { done: [], future: [] };
@@ -994,7 +1127,7 @@ function render() {
   let view = state.sel.view || 'board';
   if (view === 'devlog' && !isAdmin()) view = 'board';
   const vbtn = (k, label) => `<button class="${view === k ? 'on' : ''}" data-action="view" data-view="${k}">${label}</button>`;
-  const nav = vbtn('dash', '현황') + vbtn('map', '구조도') + vbtn('board', '보드') + vbtn('notes', '기록') + vbtn('cal', '달력') + (isAdmin() ? vbtn('devlog', '개발일지') : '');
+  const nav = vbtn('dash', '현황') + vbtn('tbox', '타임박스') + vbtn('map', '구조도') + vbtn('board', '보드') + vbtn('notes', '기록') + vbtn('cal', '달력') + (isAdmin() ? vbtn('devlog', '개발일지') : '');
   document.getElementById('app').classList.toggle('wide', view === 'map');
   document.getElementById('app').innerHTML = `
     <header>
@@ -1002,7 +1135,7 @@ function render() {
       <nav class="views">${nav}</nav>
       <span class="week-count">이번 주 ${weekDone()}개 완료</span>
     </header>
-    ${view === 'map' ? renderMap() : view === 'cal' ? renderCal() : view === 'devlog' ? renderDevlog() : view === 'dash' ? renderDash() : view === 'notes' ? renderNotes() : renderBoardView()}
+    ${view === 'map' ? renderMap() : view === 'cal' ? renderCal() : view === 'devlog' ? renderDevlog() : view === 'dash' ? renderDash() : view === 'notes' ? renderNotes() : view === 'tbox' ? renderTbox() : renderBoardView()}
     <footer>
       <button data-action="restore-open">🛟 백업·복원</button>
       <button data-action="export">JSON 내보내기</button>
@@ -1269,6 +1402,30 @@ document.addEventListener('click', e => {
     }
     closeModal(); render();
   }
+  else if (act === 'tbox-prev') tbShift(-1);
+  else if (act === 'tbox-next') tbShift(1);
+  else if (act === 'tbox-today') { state.sel.tboxDate = todayStr(); tbSel = null; render(); }
+  else if (act === 'tb-select') { const i = +el.dataset.idx; tbSel = tbSel === i ? null : i; render(); }
+  else if (act === 'tb-check') {
+    const i = +el.dataset.idx;
+    const d = tbData(state.sel.tboxDate || todayStr());
+    const b = d.big3[i];
+    if (b) {
+      b.done = el.checked;
+      const c = state.cards.find(x => x.id === b.cardId);
+      if (c) { c.status = b.done ? 'done' : 'todo'; c.doneAt = b.done ? todayStr() : null; }
+    }
+    render();
+  }
+  else if (act === 'tb-remove') {
+    const i = +el.dataset.idx;
+    const d = tbData(state.sel.tboxDate || todayStr());
+    d.big3[i] = null;
+    Object.keys(d.slots).forEach(k => { if (d.slots[k] === i) delete d.slots[k]; });
+    if (tbSel === i) tbSel = null;
+    render();
+  }
+  else if (act === 'dash-big3-go') { state.sel.view = 'tbox'; state.sel.tboxDate = todayStr(); render(); }
   else if (act === 'note-group') { state.sel.noteGroup = el.dataset.gid; render(); }
   else if (act === 'note-type') { state.sel.noteType = el.dataset.t; render(); }
   else if (act === 'note-add') openNoteModal();
@@ -1483,7 +1640,7 @@ document.addEventListener('submit', e => {
   const inbox = form.dataset.project === '__inbox';
   state.cards.push({ id: uid(), project: inbox ? null : form.dataset.project, title: t, status: 'todo', priority: 'med', due: inbox ? null : todayStr(), doneAt: null, note: null, createdAt: todayStr() });
   render();
-  const again = inbox ? document.querySelector('.inbox-col .quick input') : document.querySelector(`.board-panel[data-board="${form.dataset.project}"] .quick input`);
+  const again = inbox ? document.querySelector('.quick[data-project="__inbox"] input') : document.querySelector(`.board-panel[data-board="${form.dataset.project}"] .quick input`);
   if (again) again.focus();
 });
 
@@ -1504,6 +1661,8 @@ function reorderBoard(draggedId, targetId, after) {
   arr.splice(after ? ti + 1 : ti, 0, dragged);
 }
 document.addEventListener('dragstart', e => {
+  const td = e.target.closest('.tb-dump-item');
+  if (td) { dragItem = { kind: 'tbdump', id: td.dataset.id }; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', 'tb'); return; }
   const chip = e.target.closest('.chip');
   if (chip && chip.dataset.id) { dragItem = { kind: 'cal', id: chip.dataset.id }; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', 'cal'); return; }
   const c = e.target.closest('.card');
@@ -1513,6 +1672,11 @@ document.addEventListener('dragstart', e => {
 });
 document.addEventListener('dragend', () => { dragItem = null; document.body.classList.remove('dragging-board'); clearDropHints(); });
 document.addEventListener('dragover', e => {
+  if (dragItem && dragItem.kind === 'tbdump') {
+    const row = e.target.closest('.tb-big3-row');
+    if (row) { e.preventDefault(); row.classList.add('drop-into'); }
+    return;
+  }
   if (dragItem && dragItem.kind === 'cal') {
     const day = e.target.closest('.cal-day');
     if (day) { e.preventDefault(); day.classList.add('cal-drop'); }
@@ -1542,6 +1706,8 @@ document.addEventListener('dragover', e => {
 document.addEventListener('dragleave', e => {
   const col = e.target.closest('.col');
   if (col) col.classList.remove('dragover');
+  const row = e.target.closest('.tb-big3-row');
+  if (row && !row.contains(e.relatedTarget)) row.classList.remove('drop-into');
   const day = e.target.closest('.cal-day');
   if (day && !day.contains(e.relatedTarget)) day.classList.remove('cal-drop');
   const lane = e.target.closest('.detach-lane,.delete-lane');
@@ -1552,6 +1718,20 @@ document.addEventListener('dragleave', e => {
   if (panel && !panel.contains(e.relatedTarget)) panel.classList.remove('drop-before', 'drop-after', 'drop-nest');
 });
 document.addEventListener('drop', e => {
+  if (dragItem && dragItem.kind === 'tbdump') {      // Brain Dump → Big 3
+    e.preventDefault();
+    const row = e.target.closest('.tb-big3-row');
+    if (row) {
+      const c = state.cards.find(x => x.id === dragItem.id);
+      if (c) {
+        const d = tbData(state.sel.tboxDate || todayStr());
+        const i = +row.dataset.idx;
+        d.big3[i] = { cardId: c.id, title: c.title, done: c.status === 'done' };
+      }
+    }
+    dragItem = null; clearDropHints(); render();
+    return;
+  }
   if (dragItem && dragItem.kind === 'cal') {         // 달력 칩 → 다른 날짜로
     e.preventDefault();
     const day = e.target.closest('.cal-day');
