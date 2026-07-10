@@ -262,10 +262,11 @@ function cardHtml(c) {
   const tags = [];
   if (c.status !== 'done' && c.due) tags.push(dueBadge(c.due));
   if (c.status === 'done' && c.doneAt) tags.push(`<span class="tag">${fmtDate(c.doneAt)} 완료</span>`);
-  const check = c.status === 'done' ? '<span class="done-check">✓</span>' : '';
+  const overlay = c.status === 'done' ? '<span class="stamp">완료</span>'
+    : c.status === 'doing' ? '<span class="doing-badge">진행중</span>' : '';
   const note = c.note ? `<span class="card-note" data-note="${esc(c.note)}">💬</span>` : '';
   return `<div class="card ${c.status}" ${style} draggable="true" data-id="${c.id}" data-action="card">
-    <div class="t">${check}${esc(c.title)}${note}</div>
+    ${overlay}<div class="t">${esc(c.title)}${note}</div>
     ${tags.length ? `<div class="meta">${tags.join('')}</div>` : ''}
   </div>`;
 }
@@ -400,12 +401,21 @@ function renderMap() {
   ensurePositions();
   const regions = regionRects().map(r =>
     `<div class="map-region c-${r.color}" style="left:${r.x}px;top:${r.y}px;width:${r.w}px;height:${r.h}px"><span class="map-region-label">📁 ${esc(r.name)}</span></div>`).join('');
-  const nodes = state.projects.map(b => `
-    <div class="mapnode c-${b.color}" data-id="${b.id}" style="left:${b.x}px;top:${b.y}px">
+  const nodes = state.projects.map(b => {
+    const cs = state.cards.filter(c => c.project === b.id);
+    const done = cs.filter(c => c.status === 'done').length;
+    const doing = cs.filter(c => c.status === 'doing').length;
+    const badge = doing > 0 ? `<span class="node-badge doing">▶${doing}</span>`
+      : (cs.length && done === cs.length) ? '<span class="node-badge done">✓</span>' : '';
+    const prog = cs.length ? `<div class="node-prog"><div class="node-prog-fill" style="width:${Math.round(done / cs.length * 100)}%"></div></div>` : '';
+    const stat = cs.length ? ` — 완수 ${done}/${cs.length}${doing ? ` · 진행중 ${doing}` : ''}` : '';
+    return `
+    <div class="mapnode c-${b.color}" data-id="${b.id}" style="left:${b.x}px;top:${b.y}px" title="${esc(b.name)}${stat}">
       <div class="mp mp-top" data-id="${b.id}" data-role="top" title="상위 연결점 — 여기서 부모 보드로 끌기"></div>
-      <div class="mapnode-name">${esc(b.name)}</div>
+      ${badge}<div class="mapnode-name">${esc(b.name)}</div>${prog}
       <div class="mp mp-bot" data-id="${b.id}" data-role="bot" title="하위 연결점 — 여기서 자식 보드로 끌기"></div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
   const h = Math.max(520, state.projects.reduce((m, b) => Math.max(m, b.y || 0), 0) + 120);
   return `<div class="map-toolbar">
       <button class="pill" data-action="map-arrange" title="프로젝트별 구역으로 나눠 상위→하위 자동 배치">⟲ 자동정렬</button>
@@ -662,11 +672,13 @@ function dashRow(c) {
   const tag = c.status === 'done'
     ? (c.doneAt ? `<span class="tag">${fmtDate(c.doneAt)} 완수</span>` : '')
     : (c.due ? dueBadge(c.due) : '');
-  const stMk = c.status === 'doing' ? '<span class="drow-st doing">▶</span>' : c.status === 'done' ? '<span class="drow-st done">✓</span>' : '';
+  const stPill = c.status === 'doing' ? '<span class="st-pill doing">진행중</span>'
+    : c.status === 'done' ? '<span class="st-pill done">완수</span>'
+      : '<span class="st-pill todo">예정</span>';
   const overdue = c.status !== 'done' && c.due && dday(c.due) < 0 ? ' overdue' : '';
   return `<div class="drow${overdue}" data-action="card" data-id="${c.id}">
     <span class="drow-prio" style="${pr.bg ? `background:${pr.bg}` : ''}"></span>
-    ${stMk}<span class="drow-title">${esc(c.title)}</span>${note}
+    ${stPill}<span class="drow-title">${esc(c.title)}</span>${note}
     <span class="drow-meta">${proj}${board}${tag}</span>
   </div>`;
 }
