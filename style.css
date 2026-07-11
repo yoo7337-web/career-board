@@ -16,9 +16,10 @@
     --ok:#5dcaa5;
   }
 }
-body{margin:0;background:var(--bg);color:var(--text);font:15px/1.55 'Segoe UI','Malgun Gothic',system-ui,sans-serif}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.55 'Segoe UI','Malgun Gothic',system-ui,sans-serif;overflow-x:hidden}
 #app{max-width:1100px;margin:0 auto;padding:20px 16px 60px}
-#app.wide{max-width:none;padding-left:24px;padding-right:24px}
+/* 구조도: 헤더/푸터는 고정(1100), 지도만 뷰포트 전체폭으로 full-bleed */
+#app.wide .map{width:100vw;margin-left:calc(50% - 50vw);margin-right:calc(50% - 50vw);border-radius:0;border-left:0;border-right:0}
 
 header{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:14px}
 header h1{font-size:20px;margin:0;font-weight:600}
