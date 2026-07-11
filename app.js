@@ -11,6 +11,13 @@ const PRIORITIES = {
 };
 const PRIO_ORDER = ['high', 'med', 'low', 'none'];
 const PRIO_RANK = { high: 3, med: 2, low: 1, none: 0 };
+const NOTE_TEMPLATES = {
+  interview: '[대상]\n\n[확인사항]\n\n[답변]\n\n[후속 조치]\n',
+  meeting: '[참석]\n\n[논의]\n\n[결정]\n\n[Action Item]\n',
+  progress: '[진행 내용]\n\n[다음 단계]\n',
+  issue: '[이슈]\n\n[영향]\n\n[대응]\n',
+  memo: '',
+};
 const TBOX_COLORS = [
   { bg: '#F5A88A', fg: '#5A1F0C' },   // Big 1 — coral
   { bg: '#F7CE6B', fg: '#5A3406' },   // Big 2 — amber
@@ -879,44 +886,103 @@ function currentNoteGroup() {
 }
 function noteItemHtml(n) {
   const searchText = esc((n.title + ' ' + (n.body || '') + ' ' + (n.who || '')).toLowerCase());
+  const nt = NOTE_TYPES[n.type] || NOTE_TYPES.memo;
   return `<div class="note-item" data-action="note-edit" data-id="${n.id}" data-text="${searchText}">
+    <span class="tl-dot c-${nt.color}"></span>
     <div class="note-head">
       ${noteTypeBadge(n.type)}
       <span class="note-date">${n.date ? fmtDate(n.date) : ''}</span>
       <span class="note-title">${esc(n.title)}</span>
       ${n.who ? `<span class="note-who">🎤 ${esc(n.who)}</span>` : ''}
+      <button class="note-pin-btn ${n.pinned ? 'on' : ''}" data-action="note-pin" data-id="${n.id}" title="${n.pinned ? '고정 해제' : '상단에 고정'}">📌</button>
       <button class="mini-btn note-todo-btn" data-action="note-todo" data-id="${n.id}" title="이 기록에서 할 일 만들기">→ To-do</button>
     </div>
-    ${n.body ? `<div class="note-body">${esc(n.body)}</div>` : ''}
+    ${n.body ? `<div class="note-body clamp">${esc(n.body)}</div><button class="note-more" data-action="note-expand" style="display:none">더보기 ▾</button>` : ''}
   </div>`;
+}
+function noteDateGroup(dateStr, today) {
+  if (!dateStr) return '이전';
+  if (dateStr === today) return '오늘';
+  if (dateStr === nextDay(dateStr) && false) return '';   // noop
+  const [y, m, d] = today.split('-').map(Number);
+  const yesterday = dstr(new Date(y, m - 1, d - 1));
+  const weekAgo = dstr(new Date(y, m - 1, d - 6));
+  if (dateStr === yesterday) return '어제';
+  if (dateStr >= weekAgo && dateStr < today) return '이번 주';
+  return '이전';
 }
 function renderNotes() {
   const groups = state.groups || [];
   const gid = currentNoteGroup();
   const g = gid ? groupById(gid) : null;
   const gname = g ? g.name : '미분류';
-  const pills = groups.map(x => `<button class="fpill ${gid === x.id ? 'on c-' + x.color : ''}" data-action="note-group" data-gid="${x.id}">📁 ${esc(x.name)}</button>`).join('')
-    + `<button class="fpill ${gid === '' ? 'on c-gray' : ''}" data-action="note-group" data-gid="">미분류</button>`;
+  const notesOf = xgid => (state.notes || []).filter(n => (n.group || '') === xgid).length;
+  const sideItems = groups.map(x => `<div class="side-item ${gid === x.id ? 'on c-' + x.color : ''}" data-action="note-group" data-gid="${x.id}">
+      <span class="side-dot c-${x.color}"></span><span class="side-name">${esc(x.name)}</span><span class="side-cnt">${notesOf(x.id) || ''}</span>
+    </div>`).join('')
+    + `<div class="side-item ${gid === '' ? 'on c-gray' : ''}" data-action="note-group" data-gid="">
+      <span class="side-dot c-gray"></span><span class="side-name">미분류</span><span class="side-cnt">${notesOf('') || ''}</span></div>`;
+  // 속성 바 (B)
+  const gBoards = state.projects.filter(b => (b.group || '') === gid);
+  const bIds = new Set(gBoards.map(b => b.id));
+  const gCards = state.cards.filter(c => c.project && bIds.has(c.project));
+  const doneCnt = gCards.filter(c => c.status === 'done').length;
+  const periods = (g && g.periods && g.periods.length) ? g.periods : null;
+  const periodTxt = periods ? `${fmtDate(periods[0].start)} ~ ${fmtDate(periods[periods.length - 1].end)}${periods.length > 1 ? ` 외 ${periods.length - 1}` : ''}` : '기간 미설정';
+  const gNotes = (state.notes || []).filter(n => (n.group || '') === gid);
+  const lastNote = gNotes.slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''))[0];
+  const propBar = `<div class="prop-bar">
+    <span class="prop-chip" ${g ? `data-action="group-edit" data-id="${g.id}" title="클릭해서 기간 수정"` : ''}>📅 ${periodTxt}</span>
+    <span class="prop-chip">🗂 보드 ${gBoards.length}</span>
+    <span class="prop-chip">✅ 진행 ${doneCnt}/${gCards.length}</span>
+    <span class="prop-chip">🕐 최근 기록 ${lastNote && lastNote.date ? fmtDate(lastNote.date) : '없음'}</span>
+  </div>`;
   const overview = g ? (g.overview || '') : (state.unGroupOverview || '');
   const tsel = state.sel.noteType || '';
   const typePills = `<button class="fpill ${!tsel ? 'on' : ''}" data-action="note-type" data-t="">전체</button>`
     + Object.entries(NOTE_TYPES).map(([k, v]) => `<button class="fpill ${tsel === k ? 'on c-' + v.color : ''}" data-action="note-type" data-t="${k}">${v.icon} ${v.label}</button>`).join('');
-  const notes = (state.notes || [])
-    .filter(n => (n.group || '') === gid && (!tsel || n.type === tsel))
+  const notes = gNotes
+    .filter(n => !tsel || n.type === tsel)
     .sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt || '').localeCompare(a.createdAt || ''));
-  return `<div class="notes">
-    <div class="cal-filter"><span class="fl-label">프로젝트</span>${pills}</div>
-    <div class="note-overview" data-action="overview-edit" title="클릭해서 수정">
-      <div class="no-head">📌 ${esc(gname)} 개요</div>
-      ${overview ? `<div class="no-body">${esc(overview)}</div>` : '<div class="no-empty">프로젝트 핵심 현황·컨택포인트·주의사항을 적어두세요 (클릭)</div>'}
+  // 피드: 📌 고정 → 날짜 그룹 (D·F)
+  const today = todayStr();
+  const pinned = notes.filter(n => n.pinned);
+  const rest = notes.filter(n => !n.pinned);
+  let feed = '';
+  if (pinned.length) feed += `<div class="note-group-h">📌 고정됨</div>` + pinned.map(noteItemHtml).join('');
+  let lastGrp = null;
+  rest.forEach(n => {
+    const grp = noteDateGroup(n.date, today);
+    if (grp !== lastGrp) { lastGrp = grp; feed += `<div class="note-group-h">${grp}</div>`; }
+    feed += noteItemHtml(n);
+  });
+  if (!feed) feed = '<div class="empty">아직 기록이 없어요 — [+ 기록 추가]로 인터뷰·회의·진행상황을 남겨보세요</div>';
+  return `<div class="notes-wrap">
+    <aside class="notes-side">
+      <div class="side-h">프로젝트</div>
+      ${sideItems}
+    </aside>
+    <div class="notes-page">
+      <div class="page-head"><span class="page-icon c-${g ? g.color : 'gray'}">📁</span><h2 class="page-title">${esc(gname)}</h2></div>
+      ${propBar}
+      <div class="note-overview callout" data-action="overview-edit" title="클릭해서 수정">
+        <span class="co-icon">💡</span>
+        <div class="co-body">${overview ? `<div class="no-body">${esc(overview)}</div>` : '<div class="no-empty">프로젝트 핵심 현황·컨택포인트·주의사항을 적어두세요 (클릭)</div>'}</div>
+      </div>
+      <div class="note-toolbar">
+        ${typePills}
+        <input type="search" id="note-q" placeholder="🔍 기록 검색" autocomplete="off">
+        <button class="pill" data-action="note-add">+ 기록 추가</button>
+      </div>
+      <div class="note-list timeline">${feed}</div>
     </div>
-    <div class="note-toolbar">
-      ${typePills}
-      <input type="search" id="note-q" placeholder="🔍 기록 검색" autocomplete="off">
-      <button class="pill" data-action="note-add">+ 기록 추가</button>
-    </div>
-    <div class="note-list">${notes.length ? notes.map(noteItemHtml).join('') : '<div class="empty">아직 기록이 없어요 — [+ 기록 추가]로 인터뷰·회의·진행상황을 남겨보세요</div>'}</div>
   </div>`;
+}
+function markNoteOverflow() {
+  document.querySelectorAll('.note-item .note-body.clamp').forEach(b => {
+    const more = b.nextElementSibling;
+    if (more && more.classList.contains('note-more') && b.scrollHeight > b.clientHeight + 2) more.style.display = '';
+  });
 }
 function noteTypeOptions(cur) {
   return Object.entries(NOTE_TYPES).map(([k, v]) => `<option value="${k}" ${cur === k ? 'selected' : ''}>${v.icon} ${v.label}</option>`).join('');
@@ -932,7 +998,7 @@ function openNoteModal(id) {
     </div>
     <label>제목<input type="text" id="m-ntitle" value="${n ? esc(n.title) : ''}" placeholder="예: 경리팀장 인터뷰 / 중간감사 진행상황"></label>
     <label id="m-who-wrap" style="display:${type === 'interview' ? 'block' : 'none'}">대상자 (누구와)<input type="text" id="m-nwho" value="${n ? esc(n.who || '') : ''}" placeholder="예: 경리팀장 김OO"></label>
-    <label>내용<textarea id="m-nbody" rows="6" placeholder="들은 내용, 확인한 사항, 다음 단계 등">${n ? esc(n.body || '') : ''}</textarea></label>
+    <label>내용<textarea id="m-nbody" rows="7" ${n ? '' : 'data-new="1"'} placeholder="들은 내용, 확인한 사항, 다음 단계 등">${n ? esc(n.body || '') : esc(NOTE_TEMPLATES[type] || '')}</textarea></label>
     <div class="m-actions">
       ${n ? `<button class="danger" data-action="note-del" data-id="${n.id}">삭제</button>` : ''}
       <button class="ghost" data-action="modal-close">취소</button>
@@ -1148,6 +1214,7 @@ function render() {
   save();
   if (view === 'map') initMap();
   if (view === 'cal') markCalOverflow();
+  if (view === 'notes') markNoteOverflow();
   if (view === 'board' && focusBoard) {
     const el = document.querySelector(`.board-panel[data-board="${focusBoard}"]`);
     focusBoard = null;
@@ -1428,6 +1495,15 @@ document.addEventListener('click', e => {
   else if (act === 'dash-big3-go') { state.sel.view = 'tbox'; state.sel.tboxDate = todayStr(); render(); }
   else if (act === 'note-group') { state.sel.noteGroup = el.dataset.gid; render(); }
   else if (act === 'note-type') { state.sel.noteType = el.dataset.t; render(); }
+  else if (act === 'note-pin') {
+    const n = (state.notes || []).find(x => x.id === el.dataset.id);
+    if (n) { n.pinned = !n.pinned; render(); }
+  }
+  else if (act === 'note-expand') {
+    const body = el.previousElementSibling;
+    const open = body.classList.toggle('clamp');   // clamp 제거=펼침
+    el.textContent = open ? '더보기 ▾' : '접기 ▴';
+  }
   else if (act === 'note-add') openNoteModal();
   else if (act === 'note-edit') openNoteModal(el.dataset.id);
   else if (act === 'note-todo') openNoteTodoModal(el.dataset.id);
@@ -1937,6 +2013,13 @@ document.addEventListener('change', e => {
   if (e.target.id === 'm-ntype') {
     const wrap = document.getElementById('m-who-wrap');
     if (wrap) wrap.style.display = e.target.value === 'interview' ? 'block' : 'none';
+    // 신규 기록: 본문이 비었거나 다른 유형의 템플릿 그대로면 새 유형 템플릿으로 교체 (작성 내용은 보존)
+    const body = document.getElementById('m-nbody');
+    if (body && body.dataset.new === '1') {
+      const cur = body.value.trim();
+      const tpls = Object.values(NOTE_TEMPLATES).map(t => t.trim()).filter(Boolean);
+      if (!cur || tpls.includes(cur)) body.value = NOTE_TEMPLATES[e.target.value] || '';
+    }
   }
 });
 
