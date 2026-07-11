@@ -347,7 +347,11 @@ footer button:hover{border-color:var(--accent);color:var(--text)}
 .db3.empty{background:var(--bg);color:var(--faint);font-weight:400}
 
 /* notes — 노션 스타일 레이아웃 */
-.notes-wrap{display:grid;grid-template-columns:210px minmax(0,1fr);gap:20px;align-items:start}
+.notes-wrap,.board-wrap{display:grid;grid-template-columns:210px minmax(0,1fr);gap:20px;align-items:start}
+.board-page{min-width:0}
+.side-actions{display:flex;flex-direction:column;gap:6px;margin-top:14px;padding:0 4px}
+.side-actions .pill{width:100%;text-align:center}
+.side-item.drop-into{outline:2px dashed var(--accent);outline-offset:-2px;background:var(--accent-soft)}
 .notes-side{position:sticky;top:14px;display:flex;flex-direction:column;gap:2px}
 .side-h{font-size:11.5px;font-weight:700;color:var(--faint);letter-spacing:.04em;padding:0 10px 6px}
 .side-item{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;cursor:pointer;font-size:13.5px;color:var(--muted)}
@@ -377,10 +381,11 @@ footer button:hover{border-color:var(--accent);color:var(--text)}
 .note-body.clamp{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .note-more{border:0;background:transparent;color:var(--accent);font:inherit;font-size:12px;cursor:pointer;padding:4px 0 0;font-weight:600}
 @media (max-width:760px){
-  .notes-wrap{grid-template-columns:1fr}
-  .notes-side{position:static;flex-direction:row;overflow-x:auto;gap:6px;padding-bottom:4px}
+  .notes-wrap,.board-wrap{grid-template-columns:1fr}
+  .notes-side{position:static;flex-direction:row;overflow-x:auto;gap:6px;padding-bottom:4px;flex-wrap:wrap}
   .side-h{display:none}
   .side-item{flex:none;border:1px solid var(--border);background:var(--surface)}
+  .side-actions{flex-direction:row;margin-top:4px;width:100%}
   .note-list.timeline{padding-left:0}
   .note-list.timeline::before{display:none}
   .tl-dot{display:none}

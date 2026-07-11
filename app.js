@@ -349,38 +349,34 @@ function orderedBoardsIn(gid) {
   members.forEach(b => { if (!seen.has(b.id)) { seen.add(b.id); out.push({ board: b, depth: 0 }); } });
   return out;
 }
-function boardFilterActive() { return Array.isArray(state.sel.boardFilter) && state.sel.boardFilter.length > 0; }
-function boardGroupVisible(gid) { return !boardFilterActive() || state.sel.boardFilter.includes(gid || ''); }
-function boardFilterBar() {
-  const groups = state.groups || [];
-  if (!groups.length) return '';
-  const sel = state.sel.boardFilter, active = boardFilterActive();
-  const pill = (gid, name, color) => `<button class="fpill ${active && sel.includes(gid) ? 'on c-' + color : ''}" data-action="board-filter" data-gid="${gid}">${esc(name)}</button>`;
-  return `<div class="cal-filter"><span class="fl-label">프로젝트별 보기</span>
-    <button class="fpill ${!active ? 'on' : ''}" data-action="board-filter" data-gid="__all">전체</button>
-    ${groups.map(g => pill(g.id, '📁 ' + g.name, g.color)).join('')}
-    ${pill('', '미분류', 'gray')}
+function groupSecHtml(gid, hideHead) {
+  const g = gid ? groupById(gid) : null;
+  const items = orderedBoardsIn(gid || null);
+  const head = hideHead ? '' : (g
+    ? `<div class="group-head"><span class="gname c-${g.color}" data-action="group-edit" data-id="${g.id}" title="클릭=프로젝트 이름·삭제">📁 ${esc(g.name)}</span><span class="gcnt">보드 ${items.length}</span><button class="mini-btn" data-action="proj-add" data-group="${g.id}">+ 보드</button></div>`
+    : ((state.groups || []).length ? `<div class="group-head"><span class="gname plain">📄 미분류</span><span class="gcnt">보드 ${items.length}</span></div>` : ''));
+  const empty = g ? '여기로 보드를 끌어오면 이 프로젝트 소속 · 또는 [+ 보드]' : '여기로 끌어오면 미분류(프로젝트 없음)로 이동';
+  return `<div class="group-sec" data-group="${gid}">
+    ${head}
+    ${items.length ? `<div class="boards">${items.map(({ board, depth }) => panelHtml(board, depth)).join('')}</div>` : `<div class="empty droptip">${empty}</div>`}
   </div>`;
 }
 function renderBoardView() {
   const groups = state.groups || [];
-  const sections = [];
-  groups.forEach(g => {
-    if (!boardGroupVisible(g.id)) return;
-    const items = orderedBoardsIn(g.id);
-    sections.push(`<div class="group-sec" data-group="${g.id}">
-      <div class="group-head"><span class="gname c-${g.color}" data-action="group-edit" data-id="${g.id}" title="클릭=프로젝트 이름·삭제">📁 ${esc(g.name)}</span><span class="gcnt">보드 ${items.length}</span><button class="mini-btn" data-action="proj-add" data-group="${g.id}">+ 보드</button></div>
-      ${items.length ? `<div class="boards">${items.map(({ board, depth }) => panelHtml(board, depth)).join('')}</div>` : '<div class="empty droptip">여기로 보드를 끌어오면 이 프로젝트 소속 · 또는 [+ 보드]</div>'}
-    </div>`);
-  });
-  if (boardGroupVisible('')) {
-    const un = orderedBoardsIn(null);
-    sections.push(`<div class="group-sec" data-group="">
-      ${groups.length ? `<div class="group-head"><span class="gname plain">📄 미분류</span><span class="gcnt">보드 ${un.length}</span></div>` : ''}
-      ${un.length ? `<div class="boards">${un.map(({ board, depth }) => panelHtml(board, depth)).join('')}</div>`
-        : `<div class="empty droptip">${groups.length ? '여기로 끌어오면 미분류(프로젝트 없음)로 이동' : '보드가 없어요 — [+ 보드 추가]'}</div>`}
-    </div>`);
-  }
+  let sel = state.sel.boardGroup;
+  if (sel === undefined || (sel !== '__all' && sel !== '' && !groupById(sel))) sel = '__all';
+  state.sel.boardGroup = sel;
+  const bCount = gid => state.projects.filter(b => (b.group || '') === gid).length;
+  const side = `<aside class="notes-side">
+    <div class="side-h">프로젝트</div>
+    <div class="side-item ${sel === '__all' ? 'on c-gray' : ''}" data-action="board-group" data-gid="__all"><span class="side-dot c-gray"></span><span class="side-name">전체</span><span class="side-cnt">${state.projects.length || ''}</span></div>
+    ${groups.map(g => `<div class="side-item ${sel === g.id ? 'on c-' + g.color : ''}" data-action="board-group" data-gid="${g.id}"><span class="side-dot c-${g.color}"></span><span class="side-name">${esc(g.name)}</span><span class="side-cnt">${bCount(g.id) || ''}</span></div>`).join('')}
+    <div class="side-item ${sel === '' ? 'on c-gray' : ''}" data-action="board-group" data-gid=""><span class="side-dot c-gray"></span><span class="side-name">미분류</span><span class="side-cnt">${bCount('') || ''}</span></div>
+    <div class="side-actions">
+      <button class="pill" data-action="group-add">📁 + 프로젝트</button>
+      <button class="pill" data-action="proj-add" ${sel !== '__all' && sel !== '' ? `data-group="${sel}"` : ''}>+ 보드</button>
+    </div>
+  </aside>`;
   const inbox = state.cards.filter(c => !c.project && c.status !== 'done');
   const inboxHtml = `<section class="inbox">
     <div class="group-head"><span class="gname c-amber">📥 미배정 · 예정</span><span class="gcnt">${inbox.length}</span><span class="dash-sub">보드에 넣기 전 임시 보관 — 카드를 보드로 드래그</span></div>
@@ -389,11 +385,33 @@ function renderBoardView() {
       <form class="quick" data-project="__inbox"><input name="t" placeholder="+ 예정 할 일 추가하고 Enter" autocomplete="off"></form>
     </div>
   </section>`;
+  let page;
+  if (sel === '__all') {
+    page = groups.map(g => groupSecHtml(g.id)).join('') + groupSecHtml('');
+  } else {
+    const g = sel ? groupById(sel) : null;
+    const gname = g ? g.name : '미분류';
+    const gBoards = state.projects.filter(b => (b.group || '') === sel);
+    const bIds = new Set(gBoards.map(b => b.id));
+    const gCards = state.cards.filter(c => c.project && bIds.has(c.project));
+    const doneCnt = gCards.filter(c => c.status === 'done').length;
+    const periods = (g && g.periods && g.periods.length) ? g.periods : null;
+    const periodTxt = periods ? `${fmtDate(periods[0].start)} ~ ${fmtDate(periods[periods.length - 1].end)}${periods.length > 1 ? ` 외 ${periods.length - 1}` : ''}` : '기간 미설정';
+    page = `<div class="page-head"><span class="page-icon c-${g ? g.color : 'gray'}">📁</span><h2 class="page-title">${esc(gname)}</h2>
+        ${g ? `<button class="mini-btn" data-action="group-edit" data-id="${g.id}">설정</button>` : ''}
+        <button class="mini-btn" data-action="proj-add" ${sel ? `data-group="${sel}"` : ''}>+ 보드</button></div>
+      <div class="prop-bar">
+        <span class="prop-chip" ${g ? `data-action="group-edit" data-id="${g.id}" title="클릭해서 기간 수정"` : ''}>📅 ${periodTxt}</span>
+        <span class="prop-chip">🗂 보드 ${gBoards.length}</span>
+        <span class="prop-chip">✅ 진행 ${doneCnt}/${gCards.length}</span>
+      </div>` + groupSecHtml(sel, true);
+  }
   return legendHtml()
-    + boardFilterBar()
-    + `<div class="addbar"><button class="pill" data-action="group-add">📁 + 프로젝트 추가</button><button class="pill" data-action="proj-add">+ 보드 추가</button><span class="board-hint">보드 드래그: 다른 보드 위=앞 순서 / 가운데=하위로 / 아래=뒤 순서 · 프로젝트 영역=편입 · 왼쪽=분리 · 오른쪽=삭제</span></div>`
-    + inboxHtml
-    + sections.join('')
+    + `<div class="board-wrap">${side}<div class="board-page">
+        <div class="addbar"><span class="board-hint">보드 드래그: 다른 보드 위=앞 순서 / 가운데=하위로 / 아래=뒤 순서 · 왼쪽 사이드바 프로젝트=편입 · 왼쪽 끝=분리 · 오른쪽 끝=삭제</span></div>
+        ${inboxHtml}
+        ${page}
+      </div></div>`
     + `<div class="detach-lane"><span>◀<br>여기에 놓으면<br>보드 분리<br>(독립)</span></div>`
     + `<div class="delete-lane"><span>🗑<br>여기에 놓으면<br>보드 삭제</span></div>`;
 }
@@ -1553,16 +1571,7 @@ document.addEventListener('click', e => {
       if (item) { item.scrollIntoView({ behavior: 'smooth', block: 'center' }); item.classList.add('flash'); setTimeout(() => item.classList.remove('flash'), 1500); }
     }
   }
-  else if (act === 'board-filter') {
-    const gid = el.dataset.gid;
-    if (gid === '__all') state.sel.boardFilter = [];
-    else {
-      let f = Array.isArray(state.sel.boardFilter) ? state.sel.boardFilter.slice() : [];
-      f.includes(gid) ? (f = f.filter(x => x !== gid)) : f.push(gid);
-      state.sel.boardFilter = f;
-    }
-    render();
-  }
+  else if (act === 'board-group') { state.sel.boardGroup = el.dataset.gid; render(); }
   else if (act === 'cal-filter') {
     const gid = el.dataset.gid;
     if (gid === '__all') state.sel.calFilter = [];
@@ -1761,6 +1770,8 @@ document.addEventListener('dragover', e => {
   if (dragItem && dragItem.kind === 'board') {
     const lane = e.target.closest('.detach-lane,.delete-lane');
     if (lane) { e.preventDefault(); lane.classList.add('over'); return; }
+    const sideIt = e.target.closest('.side-item[data-action="board-group"]');
+    if (sideIt && sideIt.dataset.gid !== '__all') { e.preventDefault(); sideIt.classList.add('drop-into'); return; }
     const panel = e.target.closest('.board-panel');
     if (panel) {
       if (panel.dataset.board !== dragItem.id) {
@@ -1790,6 +1801,8 @@ document.addEventListener('dragleave', e => {
   if (lane && !lane.contains(e.relatedTarget)) lane.classList.remove('over');
   const sec = e.target.closest('.group-sec');
   if (sec && !sec.contains(e.relatedTarget)) sec.classList.remove('drop-into');
+  const sideIt = e.target.closest('.side-item');
+  if (sideIt && !sideIt.contains(e.relatedTarget)) sideIt.classList.remove('drop-into');
   const panel = e.target.closest('.board-panel');
   if (panel && !panel.contains(e.relatedTarget)) panel.classList.remove('drop-before', 'drop-after', 'drop-nest');
 });
@@ -1821,7 +1834,11 @@ document.addEventListener('drop', e => {
   if (dragItem && dragItem.kind === 'board') {
     e.preventDefault();
     const draggedId = dragItem.id, dragged = boardById(draggedId);
-    if (e.target.closest('.detach-lane')) {
+    const sideIt = e.target.closest('.side-item[data-action="board-group"]');
+    if (sideIt && sideIt.dataset.gid !== '__all') {          // 사이드바 프로젝트에 드롭 → 편입
+      dragged.parent = null;
+      setGroupDeep(draggedId, sideIt.dataset.gid || null);
+    } else if (e.target.closest('.detach-lane')) {
       dragged.parent = null;
     } else if (e.target.closest('.delete-lane')) {
       const cardCnt = state.cards.filter(c => c.project === draggedId).length;
