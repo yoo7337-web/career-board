@@ -877,8 +877,8 @@ function renderDash() {
   const big3Strip = `<div class="dash-big3" data-action="dash-big3-go" title="타임박스로 이동">
     <span class="db3-label">🎯 오늘의 Big 3</span>
     ${hasBig3
-      ? [0, 1, 2].map(i => { const b = td.big3[i], c = TBOX_COLORS[i];
-          return b ? `<span class="db3 ${b.done ? 'done' : ''}" style="background:${c.bg};color:${c.fg}">${b.done ? '✓ ' : ''}${esc(b.title)}</span>`
+      ? [0, 1, 2].map(i => { const b = td.big3[i], c = TBOX_COLORS[i], bd = tbDone(b);
+          return b ? `<span class="db3 ${bd ? 'done' : ''}" style="background:${c.bg};color:${c.fg}">${bd ? '✓ ' : ''}${esc(b.title)}</span>`
                    : `<span class="db3 empty">Big ${i + 1}</span>`; }).join('')
       : '<span class="db3 empty">타임박스에서 오늘의 Big 3를 정해보세요 →</span>'}
   </div>`;
@@ -1075,6 +1075,12 @@ function tbData(date) {
   return d;
 }
 function tbSum(d, idx) { return Object.values(d.slots).filter(v => v === idx).length * 0.5; }
+// Big3 항목의 완수 여부는 실제 카드 상태를 진실의 원천으로 사용 → 어느 날짜에서 완료해도 모든 날에 반영
+function tbDone(b) {
+  if (!b) return false;
+  if (b.cardId) { const c = state.cards.find(x => x.id === b.cardId); if (c) return c.status === 'done'; }
+  return !!b.done;
+}
 function tbShift(n) {
   const [y, m, dd] = (state.sel.tboxDate || todayStr()).split('-').map(Number);
   state.sel.tboxDate = dstr(new Date(y, m - 1, dd + n));
@@ -1098,9 +1104,10 @@ function renderTbox() {
       diff > 0 ? `<span class="tb-diff over">+${diff}h 초과</span>` :
       diff < 0 ? `<span class="tb-diff under">${diff}h 단축</span>` :
       `<span class="tb-diff even">정확</span>`;
-    return `<div class="tb-big3-row ${tbSel === i ? 'sel' : ''} ${b.done ? 'done' : ''}" data-idx="${i}" data-action="tb-select" title="클릭=선택 후 시간 칸 드래그로 배정">
+    const done = tbDone(b);
+    return `<div class="tb-big3-row ${tbSel === i ? 'sel' : ''} ${done ? 'done' : ''}" data-idx="${i}" data-action="tb-select" title="클릭=선택 후 시간 칸 드래그로 배정">
       <span class="tb-chip" style="background:${c.bg}"></span>
-      <input type="checkbox" data-action="tb-check" data-idx="${i}" ${b.done ? 'checked' : ''} title="완수 처리 (보드에도 반영)">
+      <input type="checkbox" data-action="tb-check" data-idx="${i}" ${done ? 'checked' : ''} title="완수 처리 (보드에도 반영)">
       <span class="tb-title">${esc(b.title)}</span>
       <span class="tb-sum">${sum ? '계획 ' + sum + 'h' : ''}</span>
       <span class="tb-actual-wrap" title="실제 소요 시간 기록">실제 <input type="number" class="tb-actual-input" data-idx="${i}" step="0.5" min="0" placeholder="-" value="${hasActual ? b.actual : ''}">h</span>
@@ -1526,7 +1533,11 @@ document.addEventListener('click', e => {
     if (b) {
       b.done = el.checked;
       const c = state.cards.find(x => x.id === b.cardId);
-      if (c) { c.status = b.done ? 'done' : 'todo'; c.doneAt = b.done ? todayStr() : null; }
+      if (c) {
+        c.status = b.done ? 'done' : 'todo'; c.doneAt = b.done ? todayStr() : null;
+        // 같은 카드가 담긴 모든 날짜의 Big3 완수 표시를 동기화(미래 계획 포함)
+        Object.values(state.timebox || {}).forEach(day => (day.big3 || []).forEach(x => { if (x && x.cardId === c.id) x.done = b.done; }));
+      }
     }
     render();
   }
