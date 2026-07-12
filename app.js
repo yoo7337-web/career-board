@@ -238,6 +238,23 @@ function weekDone() {
   mon.setDate(now.getDate() - ((now.getDay() + 6) % 7));
   return state.cards.filter(c => c.doneAt && new Date(c.doneAt + 'T00:00:00') >= mon).length;
 }
+function mondayOf(d) {
+  const dt = new Date(d); dt.setHours(0, 0, 0, 0);
+  dt.setDate(dt.getDate() - ((dt.getDay() + 6) % 7));
+  return dt;
+}
+function doneWeekRange(offset) {
+  const start = mondayOf(new Date());
+  start.setDate(start.getDate() + offset * 7);
+  const end = new Date(start); end.setDate(end.getDate() + 6);
+  return { start, end, startStr: dstr(start), endStr: dstr(end) };
+}
+function doneWeekLabel(offset, start, end) {
+  const f = dt => `${dt.getMonth() + 1}/${dt.getDate()}`;
+  const rel = offset === 0 ? '이번 주' : offset === -1 ? '지난 주' : offset === 1 ? '다음 주'
+    : offset < 0 ? `${-offset}주 전` : `${offset}주 후`;
+  return `${f(start)} ~ ${f(end)} · ${rel}`;
+}
 
 function orderedBoards() {
   const byParent = {};
@@ -791,6 +808,24 @@ function dashSection(title, sub, cards, emptyMsg, limit, opts) {
     <div class="dash-list">${body}</div>
   </section>`;
 }
+function doneWeekSection(cards, offset, start, end) {
+  const limit = 15;
+  const shown = cards.slice(0, limit);
+  const more = cards.length > limit ? `<div class="dash-more">+${cards.length - limit}건 더</div>` : '';
+  const body = shown.length ? shown.map(dashRow).join('') + more : '<div class="empty">이 주에 완료한 업무가 없어요</div>';
+  return `<section class="dash-sec stage-done" id="sec-done">
+    <div class="dash-sec-head">
+      <h2>✓ 최근 완수 <span class="cnt">${cards.length}</span></h2>
+      <span class="dash-sub">${doneWeekLabel(offset, start, end)}</span>
+      <div class="dash-week-nav">
+        <button class="mini-btn" data-action="done-week-prev" title="지난 주">◀</button>
+        ${offset !== 0 ? `<button class="mini-btn" data-action="done-week-today" title="이번 주로">이번 주</button>` : ''}
+        <button class="mini-btn" data-action="done-week-next" title="다음 주">▶</button>
+      </div>
+    </div>
+    <div class="dash-list">${body}</div>
+  </section>`;
+}
 function recentNotesSec() {
   const notes = (state.notes || []).slice()
     .sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt || '').localeCompare(a.createdAt || ''))
@@ -814,7 +849,9 @@ function renderDash() {
   const todo = cards.filter(c => c.status === 'todo').sort(byProject(dueSort));
   const doing = cards.filter(c => c.status === 'doing').sort(byProject(dueSort));
   const urgent = incomplete.filter(isUrgent).sort(byProject(dueSort));
-  const recentDone = cards.filter(c => c.status === 'done' && c.doneAt).sort(byProject(doneSort));
+  const doneWeekOffset = state.sel.doneWeekOffset || 0;
+  const dw = doneWeekRange(doneWeekOffset);
+  const recentDone = cards.filter(c => c.status === 'done' && c.doneAt && c.doneAt >= dw.startStr && c.doneAt <= dw.endStr).sort(byProject(doneSort));
   const kpi = (label, val, cls, target) => `<div class="kpi ${cls || ''}" data-action="kpi-go" data-target="${target}"><div class="kpi-val">${val}</div><div class="kpi-lbl">${label}</div></div>`;
   // 프로젝트별 진행률
   const gpRows = [];
@@ -857,7 +894,7 @@ function renderDash() {
     <div class="dash-flow">
       ${dashSection('📅 예정', '마감 임박순', todo, '예정 업무가 없어요', 10, { id: 'sec-todo', stage: 'todo' })}
       ${dashSection('▶ 진행 중', '지금 하고 있는 일', doing, '진행 중인 업무가 없어요', 10, { id: 'sec-doing', stage: 'doing' })}
-      ${dashSection('✓ 최근 완수', '최근 완료한 업무', recentDone, '완료 내역이 없어요', 10, { id: 'sec-done', stage: 'done' })}
+      ${doneWeekSection(recentDone, doneWeekOffset, dw.start, dw.end)}
     </div>
     ${recentNotesSec()}
   </div>`;
@@ -1436,6 +1473,9 @@ document.addEventListener('click', e => {
     const sec = document.getElementById(el.dataset.target);
     if (sec) { sec.scrollIntoView({ behavior: 'smooth', block: 'start' }); sec.classList.add('flash'); setTimeout(() => sec.classList.remove('flash'), 1500); }
   }
+  else if (act === 'done-week-prev') { state.sel.doneWeekOffset = (state.sel.doneWeekOffset || 0) - 1; render(); }
+  else if (act === 'done-week-next') { state.sel.doneWeekOffset = (state.sel.doneWeekOffset || 0) + 1; render(); }
+  else if (act === 'done-week-today') { state.sel.doneWeekOffset = 0; render(); }
   else if (act === 'cal-prev') calShift(-1);
   else if (act === 'cal-next') calShift(1);
   else if (act === 'cal-today') { state.sel.calYm = todayStr().slice(0, 7); render(); }
