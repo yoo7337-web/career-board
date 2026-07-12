@@ -743,6 +743,24 @@ function dueSort(a, b) {
   if (da !== db) return da - db;
   return (PRIO_RANK[b.priority] || 0) - (PRIO_RANK[a.priority] || 0);
 }
+function cardProjKey(c) {
+  const b = boardById(c.project);
+  return b ? (b.group || '') : '__inbox';
+}
+function projOrder(key) {
+  if (key === '__inbox') return 100000;
+  if (key === '') return 99999;                       // 미분류 보드는 프로젝트들 뒤
+  const i = (state.groups || []).findIndex(g => g.id === key);
+  return i < 0 ? 99998 : i;
+}
+function byProject(secondary) {
+  return (a, b) => {
+    const pa = projOrder(cardProjKey(a)), pb = projOrder(cardProjKey(b));
+    if (pa !== pb) return pa - pb;
+    return secondary(a, b);
+  };
+}
+function doneSort(a, b) { return (b.doneAt || '').localeCompare(a.doneAt || ''); }
 function dashRow(c) {
   const b = boardById(c.project);
   const g = b && b.group ? groupById(b.group) : null;
@@ -793,11 +811,10 @@ function renderDash() {
   const today = todayStr();
   const cards = state.cards;
   const incomplete = cards.filter(c => c.status !== 'done');
-  const todo = cards.filter(c => c.status === 'todo')
-    .sort((a, b) => (a.due || '9999').localeCompare(b.due || '9999') || (PRIO_RANK[b.priority] || 0) - (PRIO_RANK[a.priority] || 0));
-  const doing = cards.filter(c => c.status === 'doing').sort(dueSort);
-  const urgent = incomplete.filter(isUrgent).sort(dueSort);
-  const recentDone = cards.filter(c => c.status === 'done' && c.doneAt).sort((a, b) => (b.doneAt || '').localeCompare(a.doneAt || ''));
+  const todo = cards.filter(c => c.status === 'todo').sort(byProject(dueSort));
+  const doing = cards.filter(c => c.status === 'doing').sort(byProject(dueSort));
+  const urgent = incomplete.filter(isUrgent).sort(byProject(dueSort));
+  const recentDone = cards.filter(c => c.status === 'done' && c.doneAt).sort(byProject(doneSort));
   const kpi = (label, val, cls, target) => `<div class="kpi ${cls || ''}" data-action="kpi-go" data-target="${target}"><div class="kpi-val">${val}</div><div class="kpi-lbl">${label}</div></div>`;
   // 프로젝트별 진행률
   const gpRows = [];
