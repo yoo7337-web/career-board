@@ -23,6 +23,7 @@ const TBOX_COLORS = [
   { bg: '#F7CE6B', fg: '#5A3406' },   // Big 2 — amber
   { bg: '#9FD0F0', fg: '#0C3A66' },   // Big 3 — blue
 ];
+const TB_PLAN_DAYS = 5;   // 타임박스 계획 창: 오늘 포함 5일 (오늘 ~ 오늘+4)
 const NOTE_TYPES = {
   interview: { label: '인터뷰', icon: '🎤', color: 'purple' },
   meeting: { label: '회의', icon: '📋', color: 'blue' },
@@ -1084,6 +1085,8 @@ function renderTbox() {
   state.sel.tboxDate = date;
   const d = tbData(date);
   const isToday = date === todayStr();
+  const offset = dday(date);                                   // 0=오늘, 양수=미래, 음수=과거
+  const inPlanWindow = offset >= 0 && offset <= TB_PLAN_DAYS - 1;   // 오늘 ~ 오늘+4
   const dow = ['일', '월', '화', '수', '목', '금', '토'][new Date(date + 'T00:00:00').getDay()];
   const rows = [0, 1, 2].map(i => {
     const b = d.big3[i], c = TBOX_COLORS[i];
@@ -1106,9 +1109,10 @@ function renderTbox() {
     </div>`;
   }).join('');
   let dumpHtml;
-  if (isToday) {
+  if (inPlanWindow) {
     const dump = state.cards.filter(c => c.status !== 'done');
-    dumpHtml = `<div class="tb-sec-h" style="margin-top:16px">Brain Dump <span class="cnt">${dump.length}</span><span class="dash-sub">미완료 To-do 전체 — Big3로 드래그</span></div>
+    const sub = isToday ? '미완료 To-do 전체 — Big3로 드래그' : `D+${offset} · ${offset}일 뒤 계획 — 현재 미완료 To-do를 미리 배치`;
+    dumpHtml = `<div class="tb-sec-h" style="margin-top:16px">Brain Dump <span class="cnt">${dump.length}</span><span class="dash-sub">${sub}</span></div>
       <div class="tb-dump">${dump.map(c => {
         const b = c.project ? boardById(c.project) : null;
         const g = b && b.group ? groupById(b.group) : null;
@@ -1123,7 +1127,10 @@ function renderTbox() {
       </div>
       <form class="quick" data-project="__inbox"><input name="t" placeholder="+ 쏟아내기 — 미배정 할 일로 추가" autocomplete="off"></form>`;
   } else {
-    dumpHtml = `<div class="tb-note-past">📖 ${isTodayFuture(date) ? '미래' : '지난'} 날짜의 타임박스입니다 · <button class="mini-btn" data-action="tbox-today">오늘로 이동</button></div>`;
+    const msg = offset > 0
+      ? `📅 ${TB_PLAN_DAYS}일 이후 날짜입니다 · 가까운 날짜에서 계획하세요`
+      : '📖 지난 날짜의 타임박스입니다';
+    dumpHtml = `<div class="tb-note-past">${msg} · <button class="mini-btn" data-action="tbox-today">오늘로 이동</button></div>`;
   }
   let grid = '<div class="tb-grid" id="tb-grid"><div class="tb-grid-h"><span></span><span>:00</span><span>:30</span></div>';
   for (let h = 6; h < 24; h++) {
@@ -1153,7 +1160,6 @@ function renderTbox() {
       <div class="tb-right">${grid}</div>
     </div>`;
 }
-function isTodayFuture(date) { return date > todayStr(); }
 function tbApplyCell(cell) {
   const d = tbData(state.sel.tboxDate || todayStr());
   const k = cell.dataset.slot;
