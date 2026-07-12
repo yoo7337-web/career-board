@@ -1052,11 +1052,19 @@ function renderTbox() {
     const b = d.big3[i], c = TBOX_COLORS[i];
     if (!b) return `<div class="tb-big3-row empty" data-idx="${i}"><span class="tb-chip" style="background:${c.bg}"></span><span class="tb-empty-txt">Brain Dump에서 여기로 드래그</span></div>`;
     const sum = tbSum(d, i);
+    const hasActual = b.actual !== undefined && b.actual !== null && b.actual !== '';
+    const diff = hasActual ? Math.round((b.actual - sum) * 100) / 100 : null;
+    const diffHtml = !hasActual ? '' :
+      diff > 0 ? `<span class="tb-diff over">+${diff}h 초과</span>` :
+      diff < 0 ? `<span class="tb-diff under">${diff}h 단축</span>` :
+      `<span class="tb-diff even">정확</span>`;
     return `<div class="tb-big3-row ${tbSel === i ? 'sel' : ''} ${b.done ? 'done' : ''}" data-idx="${i}" data-action="tb-select" title="클릭=선택 후 시간 칸 드래그로 배정">
       <span class="tb-chip" style="background:${c.bg}"></span>
       <input type="checkbox" data-action="tb-check" data-idx="${i}" ${b.done ? 'checked' : ''} title="완수 처리 (보드에도 반영)">
       <span class="tb-title">${esc(b.title)}</span>
-      <span class="tb-sum">${sum ? 'Σ ' + sum + 'h' : ''}</span>
+      <span class="tb-sum">${sum ? '계획 ' + sum + 'h' : ''}</span>
+      <span class="tb-actual-wrap" title="실제 소요 시간 기록">실제 <input type="number" class="tb-actual-input" data-idx="${i}" step="0.5" min="0" placeholder="-" value="${hasActual ? b.actual : ''}">h</span>
+      ${diffHtml}
       <button class="tb-x" data-action="tb-remove" data-idx="${i}" title="Big3에서 빼기 (배정 시간도 삭제)">✕</button>
     </div>`;
   }).join('');
@@ -1404,6 +1412,7 @@ function moveCard(id, status, boardId) {
 }
 
 document.addEventListener('click', e => {
+  if (e.target.closest('.tb-actual-input')) return;
   const sw = e.target.closest('.swatch');
   if (sw) {
     const box = document.getElementById('m-prio');
@@ -2000,6 +2009,18 @@ document.addEventListener('input', e => {
 
 /* 기록 모달: 유형이 인터뷰일 때만 대상자 필드 표시 */
 document.addEventListener('change', e => {
+  const ai = e.target.closest && e.target.closest('.tb-actual-input');
+  if (ai) {
+    const i = +ai.dataset.idx;
+    const d = tbData(state.sel.tboxDate || todayStr());
+    const b = d.big3[i];
+    if (b) {
+      const v = ai.value.trim();
+      b.actual = v === '' ? null : Math.max(0, parseFloat(v));
+    }
+    render();
+    return;
+  }
   if (e.target.id === 'm-ntype') {
     const wrap = document.getElementById('m-who-wrap');
     if (wrap) wrap.style.display = e.target.value === 'interview' ? 'block' : 'none';
