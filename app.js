@@ -18,16 +18,16 @@ const NOTE_TEMPLATES = {
   issue: '[이슈]\n\n[영향]\n\n[대응]\n',
   memo: '',
 };
-// Big3 색: To-do 중요도(coral/amber/blue)와 겹치지 않는 별도 팔레트 (violet/green/pink…)
+// Big3 색: To-do 중요도(coral/amber/blue)와 겹치지 않는 밝고 선명한 파스텔 팔레트
 const TBOX_COLORS = [
-  { bg: '#B79CED', fg: '#33206B' },   // violet
-  { bg: '#8FD19E', fg: '#14472A' },   // green
-  { bg: '#F0A6C6', fg: '#5E1F3D' },   // pink
-  { bg: '#6FC7BE', fg: '#0C3F3A' },   // teal
-  { bg: '#A9B4CC', fg: '#26304A' },   // slate
-  { bg: '#D8A7E0', fg: '#4A1F52' },   // orchid
-  { bg: '#9DBF7E', fg: '#2C3F17' },   // moss
-  { bg: '#C7A3D9', fg: '#3E2358' },   // mauve
+  { bg: '#A78BFA', fg: '#3A1D80' },   // violet
+  { bg: '#5AD8A6', fg: '#07533A' },   // emerald
+  { bg: '#FB8FC0', fg: '#7A1D46' },   // rose
+  { bg: '#7FA9FB', fg: '#1E2E7A' },   // periwinkle
+  { bg: '#E58FDE', fg: '#5E1E6E' },   // orchid
+  { bg: '#5FD3DC', fg: '#0B4A50' },   // teal
+  { bg: '#B7D06A', fg: '#33440D' },   // lime
+  { bg: '#F6A96B', fg: '#6B3208' },   // (예비) mango
 ];
 function tbColor(i) { return TBOX_COLORS[((i % TBOX_COLORS.length) + TBOX_COLORS.length) % TBOX_COLORS.length]; }
 const TB_PLAN_DAYS = 5;   // 타임박스 계획 창: 오늘 포함 5일 (오늘 ~ 오늘+4)
