@@ -1320,10 +1320,10 @@ function buildJrPrompt(date, a) {
 ${lines.join('\n')}`;
 }
 async function callGeminiJr(prompt, key) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`;
+  const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
   for (let attempt = 0; attempt <= 3; attempt++) {
     const res = await fetch(url, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },   // 키는 헤더로(URL 노출 방지, 신형 AQ. 키 호환)
       body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.6, maxOutputTokens: 2048, thinkingConfig: { thinkingBudget: 0 } } })
     });
     if (res.ok) {
