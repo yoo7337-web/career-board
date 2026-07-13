@@ -1300,6 +1300,50 @@ function journalProse(a) {
   if (a.created) s.push(`새 할 일 ${a.created}건도 등록했다.`);
   return s.join(' ');
 }
+// 파생 데이터 → 구조화 마크다운(문장 요약 + 카테고리별 불렛). AI 없이.
+function journalMarkdown(a) {
+  const L = [journalProse(a), ''];
+  if (a.done.length) {
+    L.push('✅ **완수**');
+    const byP = {};
+    a.done.forEach(d => { const k = d.proj || '미배정'; (byP[k] = byP[k] || []).push(d.title); });
+    Object.keys(byP).forEach(k => L.push(`- ${k}: ${byP[k].join(', ')}`));
+  }
+  if (a.big3.length) {
+    L.push('🎯 **핵심 Big3**');
+    a.big3.forEach(b => {
+      const meta = [b.plan ? `계획 ${b.plan}h` : '', (b.actual != null ? `실제 ${b.actual}h` : '')].filter(Boolean).join('·');
+      L.push(`- ${b.done ? '✓' : '○'} ${b.title}${meta ? ` (${meta})` : ''}`);
+    });
+  }
+  if (a.planH || a.actualH) {
+    const diff = Math.round((a.actualH - a.planH) * 100) / 100;
+    L.push('⏱ **시간**', `- 계획 ${a.planH}h${a.actualH ? ` → 실제 ${a.actualH}h (${diff > 0 ? '+' : ''}${diff}h)` : ''}`);
+  }
+  if (a.notes.length) {
+    L.push('📝 **기록**');
+    a.notes.forEach(n => { const nt = NOTE_TYPES[n.type] || NOTE_TYPES.memo; L.push(`- [${nt.label}] ${n.title}`); });
+  }
+  if (a.created) L.push('➕ **신규 등록**', `- 새 할 일 ${a.created}건`);
+  return L.join('\n');
+}
+// 마크다운(불렛·**굵게**) → HTML. 기본 요약·AI 출력 공통 렌더.
+function jrRichText(md) {
+  const lines = String(md).split('\n');
+  let html = '', inUl = false;
+  const bold = s => esc(s).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  const closeUl = () => { if (inUl) { html += '</ul>'; inUl = false; } };
+  lines.forEach(line => {
+    const t = line.trim();
+    if (!t) { closeUl(); return; }
+    const m = t.match(/^[-*•]\s+(.*)$/);
+    if (m) { if (!inUl) { html += '<ul class="jr-ul">'; inUl = true; } html += `<li>${bold(m[1])}</li>`; return; }
+    closeUl();
+    html += `<div class="jr-line">${bold(t)}</div>`;
+  });
+  closeUl();
+  return html;
+}
 
 // ---- 선택적 Gemini 윤문 (클릭 시에만 호출, 그 하루 데이터만 전송) ----
 const jrAiBusy = new Set();
@@ -1312,9 +1356,13 @@ function buildJrPrompt(date, a) {
   if (a.notes.length) lines.push('남긴 기록: ' + a.notes.map(n => n.title).join(', '));
   if (a.created) lines.push(`새로 등록한 할 일: ${a.created}건`);
   return `당신은 회계사(외부감사·내부회계관리제도 감사 업무)의 하루 업무 일지를 대신 정리합니다.
-아래 '오늘 한 일' 데이터만 근거로, 과장이나 지어내기 없이 1인칭 회고 일기를 한국어 3~4문장으로 작성하세요.
-- 담백한 서술체("~했다")로 문단 하나. 이모지·불릿·머리말 없이.
-- 데이터에 없는 성과·감정은 만들지 말 것. 시간 계획 대비 실제가 있으면 자연스럽게 짚어줄 것.
+아래 '오늘 한 일' 데이터만 근거로(과장·지어내기 금지), 다음 형식의 한국어 일지를 작성하세요.
+
+1) 첫 부분: 오늘 하루를 돌아보는 자연스러운 1인칭 서술 2~3문장("~했다" 체).
+2) 빈 줄 뒤: 카테고리별 불렛 정리. 아래 중 데이터가 있는 것만 소제목으로 쓰고, 각 항목은 "- "로 시작.
+   소제목은 반드시 이 표기 그대로: ✅ **완수** / 🎯 **핵심 Big3** / ⏱ **시간** / 📝 **기록**
+   - 완수는 프로젝트별로 묶고, 시간은 계획 대비 실제를 짚을 것.
+데이터에 없는 내용은 절대 만들지 마세요.
 
 [${date}] 오늘 한 일
 ${lines.join('\n')}`;
@@ -1381,16 +1429,15 @@ function jrDayCard(date, a, entry, live) {
     if (a.created) chips.push(`<span class="prop-chip">➕ 등록 ${a.created}</span>`);
   }
   const busy = jrAiBusy.has(date);
-  const prose = a ? journalProse(a) : '';
   let bodyHtml, actions = '';
   if (busy) {
     bodyHtml = `<div class="jr-body jr-loading">✨ AI가 하루를 정리하는 중…</div>`;
   } else if (aiText) {
-    bodyHtml = `<div class="jr-body jr-ai">${esc(aiText)}</div>`;
+    bodyHtml = `<div class="jr-body jr-rich jr-ai">${jrRichText(aiText)}</div>`;
     actions = `<button class="jr-mini" data-action="jr-ai" data-date="${date}" title="다시 생성">↺ 다시</button>
       <button class="jr-mini" data-action="jr-ai-clear" data-date="${date}" title="기본 요약으로">기본</button>`;
-  } else if (prose) {
-    bodyHtml = `<div class="jr-body">${esc(prose)}</div>`;
+  } else if (a) {
+    bodyHtml = `<div class="jr-body jr-rich">${jrRichText(journalMarkdown(a))}</div>`;
     actions = `<button class="jr-mini" data-action="jr-ai" data-date="${date}" title="Gemini로 자연스럽게 다듬기">✨ AI로 다듬기</button>`;
   } else {
     bodyHtml = `<div class="empty">${live ? '아직 오늘 활동이 없어요 — 완수·타임박스·기록이 자동으로 쌓입니다' : '기록 없음'}</div>`;
