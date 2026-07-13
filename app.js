@@ -491,14 +491,16 @@ function renderBoardView() {
       <form class="quick" data-project="__inbox"><input name="t" placeholder="+ 예정 할 일 추가하고 Enter" autocomplete="off"></form>
     </div>
   </section>`;
-  let page;
+  let page, topArea = inboxHtml;   // 기본: 미배정 예정 전체폭
   if (sel === '__all') {
+    // 상단 2단: 좌=미배정 예정 / 우=미분류 보드
+    topArea = `<div class="board-top">${inboxHtml}<div class="board-top-un">${groupSecHtml('')}</div></div>`;
     const allScheds = (state.schedules || []).slice().sort(schedSort);
     const schedPanel = `<section class="sched-panel">
         <div class="group-head"><span class="gname">📌 일정 · 마감 (전체)</span><span class="gcnt">${allScheds.length}</span><button class="mini-btn" data-action="sched-add">+ 일정 추가</button></div>
         ${allScheds.length ? `<div class="sched-list">${allScheds.map(schedRow).join('')}</div>` : '<div class="empty">보고서 제출·마감 등 프로젝트 일정을 추가하세요 (추가 시 프로젝트 선택)</div>'}
       </section>`;
-    page = schedPanel + groups.map(g => groupSecHtml(g.id)).join('') + groupSecHtml('');
+    page = schedPanel + groups.map(g => groupSecHtml(g.id)).join('');   // 미분류는 상단으로 이동
   } else {
     const g = sel ? groupById(sel) : null;
     const gname = g ? g.name : '미분류';
@@ -529,7 +531,7 @@ function renderBoardView() {
   return legendHtml()
     + `<div class="board-wrap">${side}<div class="board-page">
         <div class="addbar"><span class="board-hint">보드 드래그: 다른 보드 위=앞 순서 / 가운데=하위로 / 아래=뒤 순서 · 왼쪽 사이드바 프로젝트=편입 · 왼쪽 끝=분리 · 오른쪽 끝=삭제</span></div>
-        ${inboxHtml}
+        ${topArea}
         ${page}
       </div></div>`
     + `<div class="detach-lane"><span>◀<br>여기에 놓으면<br>보드 분리<br>(독립)</span></div>`
@@ -932,7 +934,7 @@ function dashRow(c, hidePill) {
   const overdue = c.status !== 'done' && c.due && dday(c.due) < 0 ? ' overdue' : '';
   const metaInner = `${board}${tag}`;
   const meta = metaInner ? `<div class="drow-meta">${metaInner}</div>` : '';
-  return `<div class="drow${overdue}" data-action="card" data-id="${c.id}">
+  return `<div class="drow${overdue}" data-kind="card" data-id="${c.id}" title="클릭=수정 · 더블클릭=보드로 이동">
     <span class="drow-prio" style="${pr.bg ? `background:${pr.bg}` : ''}"></span>
     <div class="drow-body">
       <div class="drow-l1">${stPill}<span class="drow-title">${esc(c.title)}</span>${note}</div>
@@ -991,7 +993,7 @@ function upcomingSchedSec() {
     const g = s.group ? groupById(s.group) : null;
     const dd = dday(s.date);
     const over = dd < 0 ? ' overdue' : '';
-    return `<div class="drow${over}" data-action="sched-edit" data-id="${s.id}">
+    return `<div class="drow${over}" data-kind="sched" data-id="${s.id}" title="클릭=수정 · 더블클릭=보드로 이동">
       <input type="checkbox" data-action="sched-toggle" data-id="${s.id}" title="완료 체크">
       <div class="drow-body"><div class="drow-l1"><span class="drow-title">${esc(s.title)}</span></div>
         <div class="drow-meta">${g ? `<span class="drow-proj c-${g.color}">${esc(g.name)}</span>` : ''}${dueBadge(s.date)}</div></div>
@@ -1414,6 +1416,32 @@ document.addEventListener('dblclick', e => {
 document.addEventListener('click', e => {
   const it = e.target.closest && e.target.closest('.map-todo-item');
   if (it) openCardModal(it.dataset.id);
+});
+// 현황 To-do/일정 행: 한 번 클릭 = 수정 / 더블클릭 = 해당 보드로 이동
+let dashClickTimer = null;
+function dashGoBoard(kind, id) {
+  if (kind === 'card') {
+    const c = state.cards.find(x => x.id === id);
+    if (c && c.project) { const b = boardById(c.project); focusBoard = c.project; state.sel.boardGroup = b && b.group ? b.group : ''; }
+    else state.sel.boardGroup = '';
+  } else if (kind === 'sched') {
+    const s = schedById(id); state.sel.boardGroup = s ? (s.group || '') : '__all';
+  }
+  state.sel.view = 'board'; render();
+}
+document.addEventListener('click', e => {
+  if (e.target.closest('input,button,a')) return;   // 체크박스 등은 그대로
+  const row = e.target.closest('.dash .drow[data-kind]');
+  if (!row) return;
+  if (dashClickTimer) { clearTimeout(dashClickTimer); dashClickTimer = null; return; }   // 더블클릭 첫 클릭 무시
+  const kind = row.dataset.kind, id = row.dataset.id;
+  dashClickTimer = setTimeout(() => { dashClickTimer = null; kind === 'card' ? openCardModal(id) : openSchedModal(id); }, 250);
+});
+document.addEventListener('dblclick', e => {
+  const row = e.target.closest('.dash .drow[data-kind]');
+  if (!row) return;
+  if (dashClickTimer) { clearTimeout(dashClickTimer); dashClickTimer = null; }
+  dashGoBoard(row.dataset.kind, row.dataset.id);
 });
 
 /* ---------- 일지 (To-do·타임박스 기반 자동 일일 기록) ---------- */
