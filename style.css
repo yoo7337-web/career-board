@@ -178,7 +178,8 @@ body.dragging-board .delete-lane{display:flex}
 .node-prog{height:4px;background:rgba(0,0,0,.18);border-radius:2px;margin-top:7px;overflow:hidden;pointer-events:none}
 .node-prog-fill{height:100%;background:var(--ok);border-radius:2px}
 .mp{position:absolute;left:50%;transform:translateX(-50%);width:14px;height:14px;border-radius:50%;
-  background:var(--accent);border:2px solid var(--surface);cursor:crosshair;z-index:2}
+  background:var(--accent);border:2px solid var(--surface);cursor:crosshair;z-index:2;opacity:0;transition:opacity .12s}
+.mapnode:hover .mp,.map.linking .mp{opacity:1}
 .mp-top{top:-8px}
 .mp-bot{bottom:-8px}
 .board-panel.flash{outline:2px solid var(--accent);outline-offset:2px}
@@ -326,9 +327,14 @@ footer button:hover{border-color:var(--accent);color:var(--text)}
 .tb-diff.even{background:var(--border);color:var(--muted)}
 .tb-x{border:0;background:transparent;color:var(--faint);cursor:pointer;font-size:12px;padding:2px 4px}
 .tb-x:hover{color:var(--danger-fg)}
+.tb-add{width:100%;border:1px dashed var(--border);background:transparent;color:var(--muted);font:inherit;font-size:12.5px;padding:7px;border-radius:10px;cursor:pointer;margin-bottom:7px}
+.tb-add:hover{border-color:var(--accent);color:var(--accent)}
 .tb-dump{display:flex;flex-direction:column;gap:5px;max-height:420px;overflow-y:auto;padding-right:2px;margin-bottom:8px}
+.tb-dump-grp{font-size:11.5px;font-weight:700;color:var(--muted);margin:6px 2px 1px;display:flex;align-items:center;gap:6px}
+.tb-dump-grp:first-child{margin-top:0}
 .tb-dump-item{display:flex;align-items:center;gap:7px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 9px;cursor:grab;font-size:13px}
 .tb-dump-item:hover{border-color:var(--accent)}
+.tb-dump-item .drow-board{margin-left:auto;flex:none}
 .tb-dump-item.in-big{opacity:.55}
 .tb-dump-t{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tb-star{color:var(--accent);font-size:12px}
@@ -338,8 +344,11 @@ footer button:hover{border-color:var(--accent);color:var(--text)}
 .tb-row{display:grid;grid-template-columns:30px 1fr 1fr;border-bottom:1px solid var(--border)}
 .tb-row:last-child{border-bottom:0}
 .tb-hour{font-size:11.5px;color:var(--muted);display:flex;align-items:center;justify-content:center}
-.tb-cell{height:24px;border-left:1px solid var(--border);cursor:crosshair;font-size:10.5px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.tb-cell{height:24px;border-left:1px solid var(--border);cursor:crosshair;font-size:10.5px;font-weight:700;display:flex;align-items:center;justify-content:center;position:relative}
 .tb-cell:hover{background:var(--accent-soft)}
+/* 완료된 Big3의 배정 시간칸: 빗금 + 숫자 취소선 */
+.tb-cell.done-slot{background-image:repeating-linear-gradient(45deg,rgba(0,0,0,.28) 0 2px,transparent 2px 5px)}
+.tb-cell.done-slot{text-decoration:line-through;opacity:.85}
 .dash-big3{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;margin-bottom:14px;cursor:pointer}
 .dash-big3:hover{border-color:var(--accent)}
 .db3-label{font-size:13px;font-weight:700}

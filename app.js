@@ -18,11 +18,18 @@ const NOTE_TEMPLATES = {
   issue: '[이슈]\n\n[영향]\n\n[대응]\n',
   memo: '',
 };
+// Big3 색: To-do 중요도(coral/amber/blue)와 겹치지 않는 별도 팔레트 (violet/green/pink…)
 const TBOX_COLORS = [
-  { bg: '#F5A88A', fg: '#5A1F0C' },   // Big 1 — coral
-  { bg: '#F7CE6B', fg: '#5A3406' },   // Big 2 — amber
-  { bg: '#9FD0F0', fg: '#0C3A66' },   // Big 3 — blue
+  { bg: '#B79CED', fg: '#33206B' },   // violet
+  { bg: '#8FD19E', fg: '#14472A' },   // green
+  { bg: '#F0A6C6', fg: '#5E1F3D' },   // pink
+  { bg: '#6FC7BE', fg: '#0C3F3A' },   // teal
+  { bg: '#A9B4CC', fg: '#26304A' },   // slate
+  { bg: '#D8A7E0', fg: '#4A1F52' },   // orchid
+  { bg: '#9DBF7E', fg: '#2C3F17' },   // moss
+  { bg: '#C7A3D9', fg: '#3E2358' },   // mauve
 ];
+function tbColor(i) { return TBOX_COLORS[((i % TBOX_COLORS.length) + TBOX_COLORS.length) % TBOX_COLORS.length]; }
 const TB_PLAN_DAYS = 5;   // 타임박스 계획 창: 오늘 포함 5일 (오늘 ~ 오늘+4)
 const NOTE_TYPES = {
   interview: { label: '인터뷰', icon: '🎤', color: 'purple' },
@@ -450,17 +457,19 @@ function ensurePositions() {
   });
 }
 function autoLayout() {
-  const COLW = 175, ROWH = 110, PADY = 60;
-  let offX = 40;
-  const layout = (members) => {
+  const COLW = 175, ROWH = 110, GAPX = 50, GAPY = 80, STARTX = 30, STARTY = 46;
+  const mapEl = document.getElementById('map');
+  const MAXW = Math.max(700, (mapEl ? mapEl.clientWidth : 1100) - 30);
+  let curX = STARTX, curY = STARTY, rowH = 0, placedAny = false;
+  const place = (members) => {   // 한 프로젝트(구역)를 내부 트리로 배치 → 블록으로 반환
     const ids = new Set(members.map(b => b.id));
     const byParent = {};
     members.forEach(b => { const p = (b.parent && ids.has(b.parent)) ? b.parent : 'root'; (byParent[p] = byParent[p] || []).push(b); });
     const xOf = {}, depthOf = {}, visited = new Set();
-    let leaf = 0;
+    let leaf = 0, maxDepth = 0;
     const assign = (id, depth) => {
       if (visited.has(id)) return; visited.add(id);
-      depthOf[id] = depth;
+      depthOf[id] = depth; if (depth > maxDepth) maxDepth = depth;
       const kids = byParent[id] || [];
       if (!kids.length) { xOf[id] = leaf++; }
       else {
@@ -471,18 +480,21 @@ function autoLayout() {
     };
     (byParent.root || []).forEach(r => assign(r.id, 0));
     members.forEach(b => { if (!visited.has(b.id)) assign(b.id, 0); });
+    const blockW = Math.max(1, leaf) * COLW;
+    const blockH = (maxDepth + 1) * ROWH;
+    if (placedAny && curX > STARTX && curX + blockW > MAXW) { curX = STARTX; curY += rowH + GAPY; rowH = 0; }   // 폭 넘치면 다음 줄로
     members.forEach(b => {
-      b.x = offX + (xOf[b.id] || 0) * COLW;
-      b.y = PADY + (depthOf[b.id] || 0) * ROWH;
+      b.x = curX + (xOf[b.id] || 0) * COLW;
+      b.y = curY + (depthOf[b.id] || 0) * ROWH;
     });
-    offX += Math.max(1, leaf) * COLW + 70;   // 다음 프로젝트 구역은 오른쪽에
+    curX += blockW + GAPX; rowH = Math.max(rowH, blockH); placedAny = true;
   };
   (state.groups || []).forEach(g => {
     const ms = state.projects.filter(b => (b.group || null) === g.id);
-    if (ms.length) layout(ms);
+    if (ms.length) place(ms);
   });
   const un = state.projects.filter(b => !b.group);
-  if (un.length) layout(un);
+  if (un.length) place(un);
   save();
 }
 let focusBoard = null;   // board to scroll to in board view after nav
@@ -558,7 +570,7 @@ function initMap() {
     const cut = e.target.closest('.mapcut');
     if (cut) { mode = 'cut'; cutId = cut.dataset.child; e.preventDefault(); return; }
     const cp = e.target.closest('.mp');
-    if (cp) { mode = 'link'; id = cp.dataset.id; role = cp.dataset.role; map.setPointerCapture(e.pointerId); e.preventDefault(); return; }
+    if (cp) { mode = 'link'; id = cp.dataset.id; role = cp.dataset.role; map.classList.add('linking'); map.setPointerCapture(e.pointerId); e.preventDefault(); return; }
     const node = e.target.closest('.mapnode');
     if (node) {
       mode = 'pending'; id = node.dataset.id; sx = e.clientX; sy = e.clientY;
@@ -594,6 +606,7 @@ function initMap() {
 
   map.addEventListener('pointerup', e => {
     const mr = map.getBoundingClientRect();
+    map.classList.remove('linking');
     if (mode === 'cut') {
       const b = boardById(cutId);
       if (b) { b.parent = null; save(); render(); }   // 연결선 끊기 → 상위 해제
@@ -616,8 +629,10 @@ function initMap() {
       else { save(); drawLines(); }
     } else if (mode === 'pending') {
       const nid = id, now = Date.now();
-      if (lastId === nid && now - lastTime < CLICK_MS) {   // double click → go to board
+      if (lastId === nid && now - lastTime < CLICK_MS) {   // double click → go to board (해당 프로젝트 선택 + 포커스)
         clearTimeout(clickTimer); clickTimer = null; lastId = null;
+        const bd = boardById(nid);
+        state.sel.boardGroup = bd && bd.group ? bd.group : '';
         focusBoard = nid; state.sel.view = 'board'; render();
       } else {                                              // single click → settings (delayed to allow dblclick)
         lastId = nid; lastTime = now;
@@ -784,7 +799,7 @@ function byProject(secondary) {
   };
 }
 function doneSort(a, b) { return (b.doneAt || '').localeCompare(a.doneAt || ''); }
-function dashRow(c) {
+function dashRow(c, hidePill) {
   const b = boardById(c.project);
   const g = b && b.group ? groupById(b.group) : null;
   const pr = PRIORITIES[c.priority] || PRIORITIES.none;
@@ -794,9 +809,9 @@ function dashRow(c) {
   const tag = c.status === 'done'
     ? (c.doneAt ? `<span class="tag">${fmtDate(c.doneAt)} 완수</span>` : '')
     : (c.due ? dueBadge(c.due) : '');
-  const stPill = c.status === 'doing' ? '<span class="st-pill doing">진행중</span>'
+  const stPill = hidePill ? '' : (c.status === 'doing' ? '<span class="st-pill doing">진행중</span>'
     : c.status === 'done' ? '<span class="st-pill done">완수</span>'
-      : '<span class="st-pill todo">예정</span>';
+      : '<span class="st-pill todo">예정</span>');
   const overdue = c.status !== 'done' && c.due && dday(c.due) < 0 ? ' overdue' : '';
   return `<div class="drow${overdue}" data-action="card" data-id="${c.id}">
     <span class="drow-prio" style="${pr.bg ? `background:${pr.bg}` : ''}"></span>
@@ -808,7 +823,7 @@ function dashSection(title, sub, cards, emptyMsg, limit, opts) {
   const o = opts || {};
   const shown = limit ? cards.slice(0, limit) : cards;
   const more = limit && cards.length > limit ? `<div class="dash-more">+${cards.length - limit}건 더</div>` : '';
-  const body = o.rowsHtml !== undefined ? o.rowsHtml : (shown.length ? shown.map(dashRow).join('') + more : `<div class="empty">${emptyMsg}</div>`);
+  const body = o.rowsHtml !== undefined ? o.rowsHtml : (shown.length ? shown.map(c => dashRow(c, o.hidePill)).join('') + more : `<div class="empty">${emptyMsg}</div>`);
   return `<section class="dash-sec ${o.full ? 'full' : ''} ${o.stage ? 'stage-' + o.stage : ''}" ${o.id ? `id="${o.id}"` : ''}>
     <div class="dash-sec-head"><h2>${title} <span class="cnt">${cards.length}</span></h2><span class="dash-sub">${sub}</span></div>
     <div class="dash-list">${body}</div>
@@ -818,7 +833,7 @@ function doneWeekSection(cards, offset, start, end) {
   const limit = 15;
   const shown = cards.slice(0, limit);
   const more = cards.length > limit ? `<div class="dash-more">+${cards.length - limit}건 더</div>` : '';
-  const body = shown.length ? shown.map(dashRow).join('') + more : '<div class="empty">이 주에 완료한 업무가 없어요</div>';
+  const body = shown.length ? shown.map(c => dashRow(c, true)).join('') + more : '<div class="empty">이 주에 완료한 업무가 없어요</div>';
   return `<section class="dash-sec stage-done" id="sec-done">
     <div class="dash-sec-head">
       <h2>✓ 최근 완수 <span class="cnt">${cards.length}</span></h2>
@@ -882,7 +897,7 @@ function renderDash() {
   const big3Strip = `<div class="dash-big3" data-action="dash-big3-go" title="타임박스로 이동">
     <span class="db3-label">🎯 오늘의 Big 3</span>
     ${hasBig3
-      ? [0, 1, 2].map(i => { const b = td.big3[i], c = TBOX_COLORS[i], bd = tbDone(b);
+      ? [0, 1, 2].map(i => { const b = td.big3[i], c = tbColor(i), bd = tbDone(b);
           return b ? `<span class="db3 ${bd ? 'done' : ''}" style="background:${c.bg};color:${c.fg}">${bd ? '✓ ' : ''}${esc(b.title)}</span>`
                    : `<span class="db3 empty">Big ${i + 1}</span>`; }).join('')
       : '<span class="db3 empty">타임박스에서 오늘의 Big 3를 정해보세요 →</span>'}
@@ -902,8 +917,8 @@ function renderDash() {
         </div>`
       : dashSection('🔥 급한 업무', '마감 임박·지남 또는 중요도 높음', urgent, '급한 업무가 없어요 👍', 8, { full: true, id: 'sec-urgent' })}
     <div class="dash-flow">
-      ${dashSection('📅 예정', '마감 임박순', todo, '예정 업무가 없어요', 10, { id: 'sec-todo', stage: 'todo' })}
-      ${dashSection('▶ 진행 중', '지금 하고 있는 일', doing, '진행 중인 업무가 없어요', 10, { id: 'sec-doing', stage: 'doing' })}
+      ${dashSection('📅 예정', '마감 임박순', todo, '예정 업무가 없어요', 10, { id: 'sec-todo', stage: 'todo', hidePill: true })}
+      ${dashSection('▶ 진행 중', '지금 하고 있는 일', doing, '진행 중인 업무가 없어요', 10, { id: 'sec-doing', stage: 'doing', hidePill: true })}
       ${doneWeekSection(recentDone, doneWeekOffset, dw.start, dw.end)}
     </div>
     ${recentNotesSec()}
@@ -1103,9 +1118,10 @@ function renderTbox() {
   const offset = dday(date);                                   // 0=오늘, 양수=미래, 음수=과거
   const inPlanWindow = offset >= 0 && offset <= TB_PLAN_DAYS - 1;   // 오늘 ~ 오늘+4
   const dow = ['일', '월', '화', '수', '목', '금', '토'][new Date(date + 'T00:00:00').getDay()];
-  const rows = [0, 1, 2].map(i => {
-    const b = d.big3[i], c = TBOX_COLORS[i];
-    if (!b) return `<div class="tb-big3-row empty" data-idx="${i}"><span class="tb-chip" style="background:${c.bg}"></span><span class="tb-empty-txt">Brain Dump에서 여기로 드래그</span></div>`;
+  const slotCount = Math.max(3, d.big3.length);
+  const rows = Array.from({ length: slotCount }, (_, i) => {
+    const b = d.big3[i], c = tbColor(i);
+    if (!b) return `<div class="tb-big3-row empty" data-idx="${i}"><span class="tb-chip" style="background:${c.bg}"></span><span class="tb-empty-txt">Brain Dump에서 여기로 드래그</span>${i >= 3 ? `<button class="tb-x" data-action="tb-remove" data-idx="${i}" title="빈 우선순위 삭제">✕</button>` : ''}</div>`;
     const sum = tbSum(d, i);
     const hasActual = b.actual !== undefined && b.actual !== null && b.actual !== '';
     const diff = hasActual ? Math.round((b.actual - sum) * 100) / 100 : null;
@@ -1121,26 +1137,40 @@ function renderTbox() {
       <span class="tb-sum">${sum ? '계획 ' + sum + 'h' : ''}</span>
       <span class="tb-actual-wrap" title="실제 소요 시간 기록">실제 <input type="number" class="tb-actual-input" data-idx="${i}" step="0.5" min="0" placeholder="-" value="${hasActual ? b.actual : ''}">h</span>
       ${diffHtml}
-      <button class="tb-x" data-action="tb-remove" data-idx="${i}" title="Big3에서 빼기 (배정 시간도 삭제)">✕</button>
+      <button class="tb-x" data-action="tb-remove" data-idx="${i}" title="빼기 (배정 시간도 삭제)">✕</button>
     </div>`;
-  }).join('');
+  }).join('') + `<button class="tb-add" data-action="tb-add" title="우선순위 항목 추가">＋ 우선순위 추가</button>`;
   let dumpHtml;
   if (inPlanWindow) {
-    const dump = state.cards.filter(c => c.status !== 'done');
-    const sub = isToday ? '미완료 To-do 전체 — Big3로 드래그' : `D+${offset} · ${offset}일 뒤 계획 — 현재 미완료 To-do를 미리 배치`;
+    const dump = state.cards.filter(c => c.status !== 'done').sort(byProject(dueSort));
+    const sub = isToday ? '미완료 To-do 전체 · 클릭=수정 / 더블클릭=보드 / 드래그=Big3' : `D+${offset} · ${offset}일 뒤 계획 — 현재 미완료 To-do를 미리 배치`;
+    const dumpItem = c => {
+      const b = c.project ? boardById(c.project) : null;
+      const g = b && b.group ? groupById(b.group) : null;
+      const pr = PRIORITIES[c.priority] || PRIORITIES.none;
+      const inBig = d.big3.some(x => x && x.cardId === c.id);
+      return `<div class="tb-dump-item ${inBig ? 'in-big' : ''}" draggable="true" data-id="${c.id}" title="클릭=수정 · 더블클릭=보드로 이동">
+        <span class="drow-prio" style="${pr.bg ? 'background:' + pr.bg : ''}"></span>
+        <span class="tb-dump-t">${esc(c.title)}</span>${b ? `<span class="drow-board">${esc(b.name)}</span>` : ''}${inBig ? '<span class="tb-star">★</span>' : ''}
+      </div>`;
+    };
+    // 프로젝트별 그룹핑
+    let dumpBody = '';
+    if (dump.length) {
+      let lastKey = '__init';
+      dump.forEach(c => {
+        const key = cardProjKey(c);
+        if (key !== lastKey) {
+          lastKey = key;
+          const g = (key && key !== '__inbox') ? groupById(key) : null;
+          const label = g ? `<span class="drow-proj c-${g.color}">${esc(g.name)}</span>` : (key === '' ? '📄 미분류 보드' : '📥 미배정');
+          dumpBody += `<div class="tb-dump-grp">${label}</div>`;
+        }
+        dumpBody += dumpItem(c);
+      });
+    } else dumpBody = '<div class="empty">미완료 할 일이 없어요 👍</div>';
     dumpHtml = `<div class="tb-sec-h" style="margin-top:16px">Brain Dump <span class="cnt">${dump.length}</span><span class="dash-sub">${sub}</span></div>
-      <div class="tb-dump">${dump.map(c => {
-        const b = c.project ? boardById(c.project) : null;
-        const g = b && b.group ? groupById(b.group) : null;
-        const pr = PRIORITIES[c.priority] || PRIORITIES.none;
-        const inBig = d.big3.some(x => x && x.cardId === c.id);
-        return `<div class="tb-dump-item ${inBig ? 'in-big' : ''}" draggable="true" data-id="${c.id}" title="${esc((g ? g.name + ' · ' : '') + (b ? b.name : '미배정'))}">
-          <span class="drow-prio" style="${pr.bg ? 'background:' + pr.bg : ''}"></span>
-          ${g ? `<span class="drow-proj c-${g.color}">${esc(g.name)}</span>` : ''}
-          <span class="tb-dump-t">${esc(c.title)}</span>${inBig ? '<span class="tb-star">★</span>' : ''}
-        </div>`;
-      }).join('') || '<div class="empty">미완료 할 일이 없어요 👍</div>'}
-      </div>
+      <div class="tb-dump">${dumpBody}</div>
       <form class="quick" data-project="__inbox"><input name="t" placeholder="+ 쏟아내기 — 미배정 할 일로 추가" autocomplete="off"></form>`;
   } else {
     const msg = offset > 0
@@ -1153,7 +1183,8 @@ function renderTbox() {
     const cell = half => {
       const k = h + '.' + half;
       const v = d.slots[k];
-      return `<div class="tb-cell" data-slot="${k}" ${v !== undefined ? `style="background:${TBOX_COLORS[v].bg};color:${TBOX_COLORS[v].fg}"` : ''}>${v !== undefined ? v + 1 : ''}</div>`;
+      const doneSlot = v !== undefined && tbDone(d.big3[v]);
+      return `<div class="tb-cell${doneSlot ? ' done-slot' : ''}" data-slot="${k}" ${v !== undefined ? `style="background:${tbColor(v).bg};color:${tbColor(v).fg}"` : ''}>${v !== undefined ? v + 1 : ''}</div>`;
     };
     grid += `<div class="tb-row"><span class="tb-hour">${h}</span>${cell(0)}${cell(5)}</div>`;
   }
@@ -1180,12 +1211,13 @@ function tbApplyCell(cell) {
   const d = tbData(state.sel.tboxDate || todayStr());
   const k = cell.dataset.slot;
   if (tbPaint.erase) {
-    if (d.slots[k] === tbSel) { delete d.slots[k]; cell.style.background = ''; cell.style.color = ''; cell.textContent = ''; }
+    if (d.slots[k] === tbSel) { delete d.slots[k]; cell.style.background = ''; cell.style.color = ''; cell.textContent = ''; cell.classList.remove('done-slot'); }
   } else {
     d.slots[k] = tbSel;
-    cell.style.background = TBOX_COLORS[tbSel].bg;
-    cell.style.color = TBOX_COLORS[tbSel].fg;
+    cell.style.background = tbColor(tbSel).bg;
+    cell.style.color = tbColor(tbSel).fg;
     cell.textContent = tbSel + 1;
+    cell.classList.toggle('done-slot', tbDone(d.big3[tbSel]));
   }
 }
 document.addEventListener('pointerdown', e => {
@@ -1204,6 +1236,24 @@ document.addEventListener('pointermove', e => {
 });
 document.addEventListener('pointerup', () => {
   if (tbPaint) { tbPaint = null; save(); render(); }
+});
+// Brain Dump 항목: 한 번 클릭=내용 수정 / 더블클릭=보드로 이동 (드래그는 그대로)
+let tbDumpClickTimer = null;
+document.addEventListener('click', e => {
+  const it = e.target.closest && e.target.closest('.tb-dump-item');
+  if (!it) return;
+  if (tbDumpClickTimer) { clearTimeout(tbDumpClickTimer); tbDumpClickTimer = null; return; }   // 더블클릭 첫 클릭 무시
+  const id = it.dataset.id;
+  tbDumpClickTimer = setTimeout(() => { tbDumpClickTimer = null; openCardModal(id); }, 250);
+});
+document.addEventListener('dblclick', e => {
+  const it = e.target.closest && e.target.closest('.tb-dump-item');
+  if (!it) return;
+  if (tbDumpClickTimer) { clearTimeout(tbDumpClickTimer); tbDumpClickTimer = null; }
+  const c = state.cards.find(x => x.id === it.dataset.id);
+  if (c && c.project) { const b = boardById(c.project); focusBoard = c.project; state.sel.boardGroup = b && b.group ? b.group : ''; }
+  else state.sel.boardGroup = '';
+  state.sel.view = 'board'; render();
 });
 
 /* ---------- 일지 (To-do·타임박스 기반 자동 일일 기록) ---------- */
@@ -1851,6 +1901,12 @@ document.addEventListener('click', e => {
     d.big3[i] = null;
     Object.keys(d.slots).forEach(k => { if (d.slots[k] === i) delete d.slots[k]; });
     if (tbSel === i) tbSel = null;
+    while (d.big3.length > 3 && d.big3[d.big3.length - 1] == null) d.big3.pop();   // 뒤쪽 빈 슬롯 정리
+    render();
+  }
+  else if (act === 'tb-add') {
+    const d = tbData(state.sel.tboxDate || todayStr());
+    d.big3.push(null);   // 빈 우선순위 슬롯 추가 → Brain Dump에서 드래그
     render();
   }
   else if (act === 'dash-big3-go') { state.sel.view = 'tbox'; state.sel.tboxDate = todayStr(); render(); }
