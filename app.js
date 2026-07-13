@@ -72,6 +72,7 @@ function load() {
       s.groups = s.groups || [];
       s.notes = s.notes || [];
       s.timebox = s.timebox || {};
+      s.journal = s.journal || {};
       return s;
     }
   } catch (e) { /* corrupt storage -> reseed */ }
@@ -180,10 +181,12 @@ function subscribeBoard(uid) {
       state.groups = state.groups || [];
       state.notes = state.notes || [];
       state.timebox = state.timebox || {};
+      state.journal = state.journal || {};
       localStorage.setItem(LS_KEY, JSON.stringify(state));
       render();
       applyingRemote = false;
       if (ensureDevlog()) { save(); render(); }
+      if (journalFreeze()) save();
       pushSnapshot();
     } else {
       ensureDevlog();
@@ -1197,6 +1200,115 @@ document.addEventListener('pointerup', () => {
   if (tbPaint) { tbPaint = null; save(); render(); }
 });
 
+/* ---------- 일지 (To-do·타임박스 기반 자동 일일 기록) ---------- */
+function journalDerive(date) {
+  const done = state.cards.filter(c => c.status === 'done' && c.doneAt === date).map(c => {
+    const b = c.project ? boardById(c.project) : null;
+    const g = b && b.group ? groupById(b.group) : null;
+    return { title: c.title, proj: g ? g.name : '', color: g ? g.color : '', board: b ? b.name : '' };
+  });
+  const created = state.cards.filter(c => c.createdAt === date).length;
+  const td = (state.timebox || {})[date];
+  const big3 = []; let planH = 0, actualH = 0;
+  if (td && td.big3) {
+    td.big3.forEach((b, i) => {
+      if (!b) return;
+      const plan = tbSum(td, i);
+      const actual = (b.actual !== undefined && b.actual !== null && b.actual !== '') ? b.actual : null;
+      planH += plan; if (actual !== null) actualH += actual;
+      big3.push({ title: b.title, done: tbDone(b), plan, actual });
+    });
+  }
+  const notes = (state.notes || []).filter(n => n.date === date).map(n => ({ type: n.type, title: n.title }));
+  if (!done.length && !big3.length && !notes.length && !created) return null;
+  return { done, created, big3, planH: Math.round(planH * 100) / 100, actualH: Math.round(actualH * 100) / 100, notes };
+}
+function journalFreeze() {   // 어제까지의 미확정 일지를 스냅샷으로 저장 (원본 삭제에도 보존)
+  state.journal = state.journal || {};
+  const t = new Date(); t.setHours(0, 0, 0, 0);
+  const y = new Date(t); y.setDate(y.getDate() - 1);
+  const yStr = dstr(y);
+  let startStr = state.journalUpto ? nextDay(state.journalUpto) : null;
+  if (!startStr) {
+    const dates = [];
+    state.cards.forEach(c => { if (c.doneAt) dates.push(c.doneAt); if (c.createdAt) dates.push(c.createdAt); });
+    Object.keys(state.timebox || {}).forEach(k => dates.push(k));
+    (state.notes || []).forEach(n => { if (n.date) dates.push(n.date); });
+    startStr = dates.length ? dates.reduce((a, b) => a < b ? a : b) : null;
+  }
+  let changed = false;
+  if (startStr && startStr <= yStr) {
+    let cur = startStr, guard = 0;
+    while (cur <= yStr && guard++ < 400) {
+      if (!(state.journal[cur] && state.journal[cur].auto)) {
+        const a = journalDerive(cur);
+        if (a) { state.journal[cur] = Object.assign({}, state.journal[cur], { auto: a }); changed = true; }
+      }
+      cur = nextDay(cur);
+    }
+  }
+  if (state.journalUpto !== yStr) { state.journalUpto = yStr; changed = true; }
+  return changed;
+}
+function jrDayCard(date, a, memo, live) {
+  const dowName = ['일', '월', '화', '수', '목', '금', '토'][new Date(date + 'T00:00:00').getDay()];
+  const chips = [];
+  if (a) {
+    if (a.done.length) chips.push(`<span class="prop-chip">✅ 완수 ${a.done.length}</span>`);
+    if (a.big3.length) chips.push(`<span class="prop-chip">🎯 Big3 ${a.big3.filter(b => b.done).length}/${a.big3.length}</span>`);
+    if (a.planH || a.actualH) {
+      const diff = Math.round((a.actualH - a.planH) * 100) / 100;
+      chips.push(`<span class="prop-chip">⏱ 계획 ${a.planH}h${a.actualH ? ` → 실제 ${a.actualH}h (${diff > 0 ? '+' : ''}${diff}h)` : ''}</span>`);
+    }
+    if (a.notes.length) chips.push(`<span class="prop-chip">📝 기록 ${a.notes.length}</span>`);
+    if (a.created) chips.push(`<span class="prop-chip">➕ 등록 ${a.created}</span>`);
+  }
+  let rows = '';
+  if (a) {
+    rows += a.done.map(d => `<div class="jr-row">✅ ${d.proj ? `<span class="drow-proj c-${d.color}">${esc(d.proj)}</span>` : ''}<span class="jr-t">${esc(d.title)}</span>${d.board ? `<span class="jr-b">${esc(d.board)}</span>` : ''}</div>`).join('');
+    rows += a.big3.map(b => `<div class="jr-row">${b.done ? '🎯' : '◻'} <span class="jr-t ${b.done ? '' : 'jr-undone'}">${esc(b.title)}</span><span class="jr-b">${b.plan ? `계획 ${b.plan}h` : ''}${b.actual !== null && b.actual !== undefined ? ` · 실제 ${b.actual}h` : ''}</span></div>`).join('');
+    rows += a.notes.map(n => `<div class="jr-row">${noteTypeBadge(n.type)}<span class="jr-t">${esc(n.title)}</span></div>`).join('');
+  }
+  if (!rows) rows = `<div class="empty">${live ? '아직 오늘 활동이 없어요 — 완수·타임박스·기록이 자동으로 쌓입니다' : '기록 없음'}</div>`;
+  return `<section class="jr-day ${live ? 'live' : ''}">
+    <div class="jr-head"><span class="jr-date">${fmtDate(date)} (${dowName})</span>${live ? '<span class="jr-live">오늘 · 실시간</span>' : ''}<div class="jr-chips">${chips.join('')}</div></div>
+    <div class="jr-rows">${rows}</div>
+    <div class="jr-memo" data-action="jr-memo" data-date="${date}" title="클릭해서 회고 쓰기">${memo ? `💭 ${esc(memo)}` : '<span class="jr-memo-ph">💭 클릭해 한 줄 회고 남기기</span>'}</div>
+  </section>`;
+}
+function renderJournal() {
+  journalFreeze();   // 열 때 과거 확정 (render 끝의 save()가 영속화)
+  const today = todayStr();
+  const limit = state.sel.jrLimit || 30;
+  const pastDates = Object.keys(state.journal || {})
+    .filter(d => d < today && (state.journal[d].auto || state.journal[d].memo))
+    .sort().reverse();
+  const shown = pastDates.slice(0, limit);
+  let feed = '', lastMonth = null;
+  const pushMonth = date => {
+    const m = date.slice(0, 7);
+    if (m !== lastMonth) { lastMonth = m; const [yy, mm] = m.split('-'); feed += `<div class="note-group-h">${yy}년 ${Number(mm)}월</div>`; }
+  };
+  pushMonth(today);
+  feed += jrDayCard(today, journalDerive(today), (state.journal[today] || {}).memo, true);
+  shown.forEach(d => { pushMonth(d); feed += jrDayCard(d, state.journal[d].auto, state.journal[d].memo, false); });
+  const moreBtn = pastDates.length > limit ? `<button class="pill jr-more" data-action="jr-more">+ 이전 일지 더 보기 (${pastDates.length - limit}일)</button>` : '';
+  return `<div class="journal">
+    <div class="jr-intro">📔 완수한 To-do·타임박스·기록을 토대로 하루가 자동 정리됩니다. 지난 날짜는 확정 저장되어 원본을 지워도 남아요.</div>
+    ${feed}${moreBtn}
+  </div>`;
+}
+function openJrMemoModal(date) {
+  const cur = ((state.journal || {})[date] || {}).memo || '';
+  showModal(`
+    <h3>💭 회고 — ${fmtDate(date)}</h3>
+    <label>하루를 한 줄로<textarea id="m-jrmemo" rows="4" placeholder="예: 실사 준비로 하루가 다 갔다. 내일은 조서 정리 먼저.">${esc(cur)}</textarea></label>
+    <div class="m-actions">
+      <button class="ghost" data-action="modal-close">취소</button>
+      <button class="primary" data-action="jr-memo-save" data-date="${date}">저장</button>
+    </div>`);
+}
+
 /* ---------- dev log (admin only) ---------- */
 function renderDevlog() {
   const dl = state.devlog || { done: [], future: [] };
@@ -1242,7 +1354,7 @@ function render() {
   let view = state.sel.view || 'board';
   if (view === 'devlog' && !isAdmin()) view = 'board';
   const vbtn = (k, label) => `<button class="${view === k ? 'on' : ''}" data-action="view" data-view="${k}">${label}</button>`;
-  const nav = vbtn('dash', '현황') + vbtn('map', '구조도') + vbtn('board', '보드') + vbtn('tbox', '타임박스') + vbtn('notes', '기록') + vbtn('cal', '달력') + (isAdmin() ? vbtn('devlog', '개발일지') : '');
+  const nav = vbtn('dash', '현황') + vbtn('map', '구조도') + vbtn('board', '보드') + vbtn('tbox', '타임박스') + vbtn('notes', '기록') + vbtn('journal', '일지') + vbtn('cal', '달력') + (isAdmin() ? vbtn('devlog', '개발일지') : '');
   document.getElementById('app').classList.toggle('wide', view === 'map');
   document.getElementById('app').innerHTML = `
     <header>
@@ -1250,7 +1362,7 @@ function render() {
       <nav class="views">${nav}</nav>
       <span class="week-count">이번 주 ${weekDone()}개 완료</span>
     </header>
-    ${view === 'map' ? renderMap() : view === 'cal' ? renderCal() : view === 'devlog' ? renderDevlog() : view === 'dash' ? renderDash() : view === 'notes' ? renderNotes() : view === 'tbox' ? renderTbox() : renderBoardView()}
+    ${view === 'map' ? renderMap() : view === 'cal' ? renderCal() : view === 'devlog' ? renderDevlog() : view === 'dash' ? renderDash() : view === 'notes' ? renderNotes() : view === 'journal' ? renderJournal() : view === 'tbox' ? renderTbox() : renderBoardView()}
     <footer>
       <button data-action="restore-open">🛟 백업·복원</button>
       <button data-action="export">JSON 내보내기</button>
@@ -1550,6 +1662,16 @@ document.addEventListener('click', e => {
     render();
   }
   else if (act === 'dash-big3-go') { state.sel.view = 'tbox'; state.sel.tboxDate = todayStr(); render(); }
+  else if (act === 'jr-memo') openJrMemoModal(el.dataset.date);
+  else if (act === 'jr-memo-save') {
+    const v = document.getElementById('m-jrmemo').value.trim();
+    state.journal = state.journal || {};
+    const je = state.journal[el.dataset.date] || {};
+    if (v) je.memo = v; else delete je.memo;
+    if (je.memo || je.auto) state.journal[el.dataset.date] = je; else delete state.journal[el.dataset.date];
+    closeModal(); render();
+  }
+  else if (act === 'jr-more') { state.sel.jrLimit = (state.sel.jrLimit || 30) + 30; render(); }
   else if (act === 'note-group') { state.sel.noteGroup = el.dataset.gid; render(); }
   else if (act === 'note-type') { state.sel.noteType = el.dataset.t; render(); }
   else if (act === 'note-pin') {

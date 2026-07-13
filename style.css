@@ -461,3 +461,22 @@ footer button:hover{border-color:var(--accent);color:var(--text)}
 .m-actions .primary{background:var(--accent);color:#fff;border:0;border-radius:8px;padding:7px 16px;font:inherit;cursor:pointer}
 .m-actions .danger{background:transparent;border:1px solid var(--danger-fg);color:var(--danger-fg);border-radius:8px;padding:7px 14px;font:inherit;cursor:pointer;margin-right:auto}
 .m-actions .ghost{background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:7px 14px;font:inherit;cursor:pointer}
+
+/* ---- 일지 (자동 일일 기록) ---- */
+.journal{display:flex;flex-direction:column;gap:10px}
+.jr-intro{font-size:12.5px;color:var(--faint)}
+.jr-day{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px}
+.jr-day.live{border-color:var(--accent)}
+.jr-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.jr-date{font-weight:700;font-size:15px}
+.jr-live{font-size:11px;color:var(--accent);font-weight:700;border:1px solid var(--accent);border-radius:999px;padding:1px 8px}
+.jr-chips{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}
+.jr-rows{display:flex;flex-direction:column;gap:4px;margin-bottom:8px}
+.jr-row{display:flex;align-items:center;gap:7px;font-size:13.5px;min-width:0}
+.jr-t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.jr-undone{color:var(--muted)}
+.jr-b{font-size:11.5px;color:var(--faint);flex:none}
+.jr-memo{background:var(--accent-soft);border-radius:8px;padding:8px 11px;font-size:13px;cursor:pointer;border:1px solid transparent}
+.jr-memo:hover{border-color:var(--accent)}
+.jr-memo-ph{color:var(--faint)}
+.jr-more{align-self:center}
