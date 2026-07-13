@@ -562,11 +562,29 @@ function renderMap() {
     </div>`;
   }).join('');
   const h = Math.max(640, state.projects.reduce((m, b) => Math.max(m, b.y || 0), 0) + 140);
-  return `<div class="map-toolbar">
-      <button class="pill" data-action="map-arrange" title="프로젝트별 구역으로 나눠 상위→하위 자동 배치">⟲ 자동정렬</button>
-      <span class="maphint">색 구역 = 프로젝트 · 노드를 구역 안으로 끌면 그 프로젝트 소속 · 빈 곳 클릭 = 보드 추가 · 더블클릭 = 보드로 이동</span>
+  const unassigned = state.cards.filter(c => c.status !== 'done' && !c.project);
+  const todoItems = unassigned.map(c => {
+    const pr = PRIORITIES[c.priority] || PRIORITIES.none;
+    return `<div class="map-todo-item" draggable="true" data-id="${c.id}" title="왼쪽 보드로 끌어 배정 · 클릭=수정">
+      <span class="drow-prio" style="${pr.bg ? 'background:' + pr.bg : ''}"></span>
+      <span class="mt-t">${esc(c.title)}</span>
+    </div>`;
+  }).join('') || '<div class="empty">미배정 할 일이 없어요 👍</div>';
+  return `<div class="map-split">
+    <div class="map-main">
+      <div class="map-toolbar">
+        <button class="pill" data-action="map-arrange" title="프로젝트별 구역으로 나눠 상위→하위 자동 배치">⟲ 자동정렬</button>
+        <span class="maphint">색 구역 = 프로젝트 · 노드를 구역 안으로 끌면 소속 · 빈 곳 클릭 = 보드 추가 · 더블클릭 = 보드로 이동</span>
+      </div>
+      <div class="map" id="map" style="height:${h}px">${regions}<svg class="maplines" id="maplines"></svg>${nodes}</div>
     </div>
-    <div class="map" id="map" style="height:${h}px">${regions}<svg class="maplines" id="maplines"></svg>${nodes}</div>`;
+    <aside class="map-todos">
+      <div class="side-h">📥 미배정 할 일 <span class="gcnt">${unassigned.length}</span></div>
+      <p class="maphint2">할 일을 왼쪽 보드로 끌어 배정 · 클릭해 수정</p>
+      <div class="map-todo-list">${todoItems}</div>
+      <form class="quick" data-project="__inbox"><input name="t" placeholder="+ 할 일 추가하고 Enter" autocomplete="off"></form>
+    </aside>
+  </div>`;
 }
 function drawLines(temp) {
   const map = document.getElementById('map');
@@ -1292,6 +1310,11 @@ document.addEventListener('dblclick', e => {
   if (c && c.project) { const b = boardById(c.project); focusBoard = c.project; state.sel.boardGroup = b && b.group ? b.group : ''; }
   else state.sel.boardGroup = '';
   state.sel.view = 'board'; render();
+});
+// 구조도 미배정 할 일: 클릭 = 수정 (드래그는 배정)
+document.addEventListener('click', e => {
+  const it = e.target.closest && e.target.closest('.map-todo-item');
+  if (it) openCardModal(it.dataset.id);
 });
 
 /* ---------- 일지 (To-do·타임박스 기반 자동 일일 기록) ---------- */
@@ -2194,7 +2217,7 @@ document.addEventListener('submit', e => {
 /* ---------- drag & drop: cards(columns) + boards(순서/계층) + 달력 칩(날짜) ---------- */
 let dragItem = null; // { kind:'card'|'board'|'cal', id }
 function clearDropHints() {
-  document.querySelectorAll('.dragover,.over,.cal-drop').forEach(el => el.classList.remove('dragover', 'over', 'cal-drop'));
+  document.querySelectorAll('.dragover,.over,.cal-drop,.drop-assign').forEach(el => el.classList.remove('dragover', 'over', 'cal-drop', 'drop-assign'));
   document.querySelectorAll('.drop-before,.drop-after,.drop-nest,.drop-into').forEach(el => el.classList.remove('drop-before', 'drop-after', 'drop-nest', 'drop-into'));
 }
 function reorderBoard(draggedId, targetId, after) {
@@ -2208,6 +2231,8 @@ function reorderBoard(draggedId, targetId, after) {
   arr.splice(after ? ti + 1 : ti, 0, dragged);
 }
 document.addEventListener('dragstart', e => {
+  const mt = e.target.closest('.map-todo-item');
+  if (mt) { dragItem = { kind: 'maptodo', id: mt.dataset.id }; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', 'maptodo'); return; }
   const td = e.target.closest('.tb-dump-item');
   if (td) { dragItem = { kind: 'tbdump', id: td.dataset.id }; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', 'tb'); return; }
   const chip = e.target.closest('.chip');
@@ -2219,6 +2244,11 @@ document.addEventListener('dragstart', e => {
 });
 document.addEventListener('dragend', () => { dragItem = null; document.body.classList.remove('dragging-board'); clearDropHints(); });
 document.addEventListener('dragover', e => {
+  if (dragItem && dragItem.kind === 'maptodo') {
+    const node = e.target.closest('.mapnode');
+    if (node) { e.preventDefault(); node.classList.add('drop-assign'); }
+    return;
+  }
   if (dragItem && dragItem.kind === 'tbdump') {
     const row = e.target.closest('.tb-big3-row');
     if (row) { e.preventDefault(); row.classList.add('drop-into'); }
@@ -2259,6 +2289,8 @@ document.addEventListener('dragleave', e => {
   if (row && !row.contains(e.relatedTarget)) row.classList.remove('drop-into');
   const day = e.target.closest('.cal-day');
   if (day && !day.contains(e.relatedTarget)) day.classList.remove('cal-drop');
+  const mnode = e.target.closest('.mapnode');
+  if (mnode && !mnode.contains(e.relatedTarget)) mnode.classList.remove('drop-assign');
   const lane = e.target.closest('.detach-lane,.delete-lane');
   if (lane && !lane.contains(e.relatedTarget)) lane.classList.remove('over');
   const sec = e.target.closest('.group-sec');
@@ -2269,6 +2301,13 @@ document.addEventListener('dragleave', e => {
   if (panel && !panel.contains(e.relatedTarget)) panel.classList.remove('drop-before', 'drop-after', 'drop-nest');
 });
 document.addEventListener('drop', e => {
+  if (dragItem && dragItem.kind === 'maptodo') {     // 구조도: 미배정 할 일 → 보드에 배정
+    e.preventDefault();
+    const node = e.target.closest('.mapnode');
+    if (node) { const c = state.cards.find(x => x.id === dragItem.id); if (c) c.project = node.dataset.id; }
+    dragItem = null; clearDropHints(); render();
+    return;
+  }
   if (dragItem && dragItem.kind === 'tbdump') {      // Brain Dump → Big 3
     e.preventDefault();
     const row = e.target.closest('.tb-big3-row');
