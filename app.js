@@ -73,6 +73,7 @@ function load() {
       s.notes = s.notes || [];
       s.timebox = s.timebox || {};
       s.journal = s.journal || {};
+      s.settings = s.settings || {};
       return s;
     }
   } catch (e) { /* corrupt storage -> reseed */ }
@@ -182,6 +183,7 @@ function subscribeBoard(uid) {
       state.notes = state.notes || [];
       state.timebox = state.timebox || {};
       state.journal = state.journal || {};
+      state.settings = state.settings || {};
       localStorage.setItem(LS_KEY, JSON.stringify(state));
       render();
       applyingRemote = false;
@@ -1336,12 +1338,20 @@ async function callGeminiJr(prompt, key) {
     throw new Error(`Gemini ${res.status}: ${errText.slice(0, 120)}`);
   }
 }
+function geminiKey() {
+  return (state.settings && state.settings.geminiKey) || localStorage.getItem('gemini_key') || '';
+}
+function saveGeminiKey(k) {
+  state.settings = state.settings || {};
+  if (k) { state.settings.geminiKey = k; localStorage.setItem('gemini_key', k); }
+  else { delete state.settings.geminiKey; localStorage.removeItem('gemini_key'); }
+}
 async function runJrAi(date) {
-  let key = localStorage.getItem('gemini_key') || '';
+  let key = geminiKey();
   if (!key) {
-    key = (window.prompt('Gemini API 키를 입력하세요.\n(aistudio.google.com에서 무료 발급 · 이 브라우저에만 저장됩니다)') || '').trim();
+    key = (window.prompt('Gemini API 키를 입력하세요.\n(aistudio.google.com에서 무료 발급 · 계정 클라우드에 저장되어 모든 기기에서 쓰입니다)') || '').trim();
     if (!key) return;
-    localStorage.setItem('gemini_key', key);
+    saveGeminiKey(key);
   }
   const a = date === todayStr() ? journalDerive(date) : ((state.journal[date] || {}).auto);
   if (!a) { alert('이 날짜엔 정리할 활동이 없어요.'); return; }
@@ -1409,10 +1419,25 @@ function renderJournal() {
   feed += jrDayCard(today, journalDerive(today), state.journal[today], true);
   shown.forEach(d => { pushMonth(d); feed += jrDayCard(d, state.journal[d].auto, state.journal[d], false); });
   const moreBtn = pastDates.length > limit ? `<button class="pill jr-more" data-action="jr-more">+ 이전 일지 더 보기 (${pastDates.length - limit}일)</button>` : '';
+  const keyBtn = `<button class="jr-mini jr-key-btn" data-action="jr-key">🔑 AI 키 ${geminiKey() ? '✓' : '설정'}</button>`;
   return `<div class="journal">
-    <div class="jr-intro">📔 완수한 To-do·타임박스·기록을 토대로 하루가 자동 정리됩니다. 지난 날짜는 확정 저장되어 원본을 지워도 남아요.</div>
+    <div class="jr-intro">📔 완수한 To-do·타임박스·기록을 토대로 하루가 자동 정리됩니다. 지난 날짜는 확정 저장되어 원본을 지워도 남아요.${keyBtn}</div>
     ${feed}${moreBtn}
   </div>`;
+}
+function openJrKeyModal() {
+  const cur = geminiKey();
+  const masked = cur ? cur.slice(0, 4) + '••••••••' + cur.slice(-4) : '';
+  showModal(`
+    <h3>🔑 Gemini AI 키</h3>
+    <p class="restore-note">일지 'AI로 다듬기'에 쓰이는 무료 키입니다. <b>본인 계정 클라우드에 저장</b>되어 로그인된 모든 기기에서 자동으로 쓰여요. (공개 코드에는 저장되지 않음)<br>키 발급: <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> (무료)</p>
+    ${cur ? `<p class="restore-note">현재 등록됨: <code>${esc(masked)}</code></p>` : ''}
+    <label>API 키<input type="text" id="m-gkey" placeholder="AIza…" value="" autocomplete="off"></label>
+    <div class="m-actions">
+      ${cur ? `<button class="danger" data-action="jr-key-del">삭제</button>` : ''}
+      <button class="ghost" data-action="modal-close">취소</button>
+      <button class="primary" data-action="jr-key-save">저장</button>
+    </div>`);
 }
 function openJrMemoModal(date) {
   const cur = ((state.journal || {})[date] || {}).memo || '';
@@ -1788,6 +1813,13 @@ document.addEventListener('click', e => {
     closeModal(); render();
   }
   else if (act === 'jr-more') { state.sel.jrLimit = (state.sel.jrLimit || 30) + 30; render(); }
+  else if (act === 'jr-key') openJrKeyModal();
+  else if (act === 'jr-key-save') {
+    const v = document.getElementById('m-gkey').value.trim();
+    if (v) { saveGeminiKey(v); closeModal(); render(); }
+    else closeModal();
+  }
+  else if (act === 'jr-key-del') { saveGeminiKey(''); closeModal(); render(); }
   else if (act === 'jr-ai') runJrAi(el.dataset.date);
   else if (act === 'jr-ai-clear') {
     const d = el.dataset.date, e = (state.journal || {})[d];
@@ -1962,7 +1994,9 @@ document.addEventListener('click', e => {
     closeModal(); render();
   }
   else if (act === 'export') {
-    const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+    const clean = JSON.parse(JSON.stringify(state));
+    if (clean.settings) delete clean.settings.geminiKey;   // 공유 파일에 API 키 유출 방지
+    const blob = new Blob([JSON.stringify(clean, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = `board-export-${todayStr()}.json`;
