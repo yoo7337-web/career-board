@@ -18,16 +18,16 @@ const NOTE_TEMPLATES = {
   issue: '[이슈]\n\n[영향]\n\n[대응]\n',
   memo: '',
 };
-// Big3 색: To-do 중요도(coral/amber/blue)와 겹치지 않는 밝고 선명한 파스텔 팔레트
+// Big3 색: 차분한 뮤트 주얼톤(전문적·톤 통일). To-do 중요도(coral/amber/blue)와도 구분
 const TBOX_COLORS = [
-  { bg: '#A78BFA', fg: '#3A1D80' },   // violet
-  { bg: '#5AD8A6', fg: '#07533A' },   // emerald
-  { bg: '#FB8FC0', fg: '#7A1D46' },   // rose
-  { bg: '#7FA9FB', fg: '#1E2E7A' },   // periwinkle
-  { bg: '#E58FDE', fg: '#5E1E6E' },   // orchid
-  { bg: '#5FD3DC', fg: '#0B4A50' },   // teal
-  { bg: '#B7D06A', fg: '#33440D' },   // lime
-  { bg: '#F6A96B', fg: '#6B3208' },   // (예비) mango
+  { bg: '#8592C9', fg: '#262E52' },   // indigo
+  { bg: '#6FB393', fg: '#123A2A' },   // jade
+  { bg: '#CE93A9', fg: '#48212F' },   // rose
+  { bg: '#6FADB8', fg: '#123840' },   // teal
+  { bg: '#AC93C9', fg: '#35244B' },   // amethyst
+  { bg: '#B98BB3', fg: '#3E2440' },   // plum
+  { bg: '#8AA9A0', fg: '#203833' },   // sage
+  { bg: '#9C9AC0', fg: '#2B2A4D' },   // periwinkle
 ];
 function tbColor(i) { return TBOX_COLORS[((i % TBOX_COLORS.length) + TBOX_COLORS.length) % TBOX_COLORS.length]; }
 const TB_PLAN_DAYS = 5;   // 타임박스 계획 창: 오늘 포함 5일 (오늘 ~ 오늘+4)
@@ -875,11 +875,25 @@ function dashRow(c, hidePill) {
     </div>
   </div>`;
 }
+function dashGroupHeader(key) {
+  const g = (key && key !== '__inbox') ? groupById(key) : null;
+  const label = g ? `<span class="drow-proj c-${g.color}">${esc(g.name)}</span>` : (key === '' ? '📄 미분류 보드' : '📥 미배정');
+  return `<div class="dash-grp">${label}</div>`;
+}
+function dashRowsGrouped(cards, hidePill) {   // 프로젝트별 그룹 헤더 + 행 (Brain Dump 방식)
+  let html = '', last = '__init';
+  cards.forEach(c => {
+    const k = cardProjKey(c);
+    if (k !== last) { last = k; html += dashGroupHeader(k); }
+    html += dashRow(c, hidePill);
+  });
+  return html;
+}
 function dashSection(title, sub, cards, emptyMsg, limit, opts) {
   const o = opts || {};
   const shown = limit ? cards.slice(0, limit) : cards;
   const more = limit && cards.length > limit ? `<div class="dash-more">+${cards.length - limit}건 더</div>` : '';
-  const body = o.rowsHtml !== undefined ? o.rowsHtml : (shown.length ? shown.map(c => dashRow(c, o.hidePill)).join('') + more : `<div class="empty">${emptyMsg}</div>`);
+  const body = o.rowsHtml !== undefined ? o.rowsHtml : (shown.length ? dashRowsGrouped(shown, o.hidePill) + more : `<div class="empty">${emptyMsg}</div>`);
   return `<section class="dash-sec ${o.full ? 'full' : ''} ${o.stage ? 'stage-' + o.stage : ''}" ${o.id ? `id="${o.id}"` : ''}>
     <div class="dash-sec-head"><h2>${title} <span class="cnt">${cards.length}</span></h2><span class="dash-sub">${sub}</span></div>
     <div class="dash-list">${body}</div>
@@ -889,7 +903,7 @@ function doneWeekSection(cards, offset, start, end) {
   const limit = 15;
   const shown = cards.slice(0, limit);
   const more = cards.length > limit ? `<div class="dash-more">+${cards.length - limit}건 더</div>` : '';
-  const body = shown.length ? shown.map(c => dashRow(c, true)).join('') + more : '<div class="empty">이 주에 완료한 업무가 없어요</div>';
+  const body = shown.length ? dashRowsGrouped(shown, true) + more : '<div class="empty">이 주에 완료한 업무가 없어요</div>';
   return `<section class="dash-sec stage-done" id="sec-done">
     <div class="dash-sec-head">
       <h2>✓ 최근 완수 <span class="cnt">${cards.length}</span></h2>
