@@ -47,6 +47,7 @@ const SEED = {
   cards: [],
   notes: [],
   timebox: {},
+  schedules: [],
   sel: { view: 'board' },
 };
 
@@ -81,6 +82,7 @@ function load() {
       s.timebox = s.timebox || {};
       s.journal = s.journal || {};
       s.settings = s.settings || {};
+      s.schedules = s.schedules || [];
       return s;
     }
   } catch (e) { /* corrupt storage -> reseed */ }
@@ -209,7 +211,7 @@ function subscribeBoard(uid) {
           console.warn('로컬 캐시가 클라우드보다 최신 → 로컬 유지 후 재동기화 (미동기화 편집 복구)');
           state = cached;
           state.sel = state.sel || { view: 'board' }; state.groups = state.groups || []; state.notes = state.notes || [];
-          state.timebox = state.timebox || {}; state.journal = state.journal || {}; state.settings = state.settings || {};
+          state.timebox = state.timebox || {}; state.journal = state.journal || {}; state.settings = state.settings || {}; state.schedules = state.schedules || [];
           render();
           pushSnapshot(true);   // 덮어쓰기 전 스냅샷
           doCloudWrite();       // 로컬을 클라우드로 밀어올림
@@ -224,6 +226,7 @@ function subscribeBoard(uid) {
       state.timebox = state.timebox || {};
       state.journal = state.journal || {};
       state.settings = state.settings || {};
+      state.schedules = state.schedules || [];
       localStorage.setItem(LS_KEY, JSON.stringify(state));
       render();
       applyingRemote = false;
@@ -401,6 +404,45 @@ function legendHtml() {
 }
 
 function groupById(id) { return (state.groups || []).find(g => g.id === id); }
+/* ---------- 프로젝트 일정(마감) ---------- */
+function schedById(id) { return (state.schedules || []).find(s => s.id === id); }
+function schedulesOf(gid) { return (state.schedules || []).filter(s => (s.group || '') === (gid || '')); }
+function schedSort(a, b) {   // 미완료 먼저 → 마감일 오름차순 → 완료는 뒤(최신 완료 위)
+  if (!!a.done !== !!b.done) return a.done ? 1 : -1;
+  if (a.done) return (b.doneAt || '').localeCompare(a.doneAt || '');
+  return (a.date || '').localeCompare(b.date || '');
+}
+function schedRow(s) {
+  const g = s.group ? groupById(s.group) : null;
+  const badge = s.done ? `<span class="tag">${s.doneAt ? fmtDate(s.doneAt) + ' 완료' : '완료'}</span>` : dueBadge(s.date);
+  return `<div class="sched-row ${s.done ? 'done' : ''}" data-action="sched-edit" data-id="${s.id}" title="클릭해서 수정">
+    <input type="checkbox" data-action="sched-toggle" data-id="${s.id}" ${s.done ? 'checked' : ''} title="완료 체크">
+    ${g ? `<span class="drow-proj c-${g.color}">${esc(g.name)}</span>` : ''}
+    <span class="sched-t">${esc(s.title)}</span>
+    ${s.note ? '<span class="card-note" data-note="' + esc(s.note) + '">💬</span>' : ''}
+    ${badge}
+  </div>`;
+}
+function openSchedModal(id, groupPrefill) {
+  const s = id ? schedById(id) : null;
+  const gid = s ? (s.group || '') : (groupPrefill || '');
+  showModal(`
+    <h3>${s ? '일정 수정' : '일정 추가'}</h3>
+    <label>내용<input type="text" id="m-stitle" value="${s ? esc(s.title) : ''}" placeholder="예: 반기검토 보고서 제출 / 감사보고서 마감"></label>
+    <div class="two">
+      <label>마감일<input type="date" id="m-sdate" value="${s ? (s.date || '') : todayStr()}"></label>
+      <label>프로젝트<select id="m-sgroup">
+        ${(state.groups || []).map(g => `<option value="${g.id}" ${gid === g.id ? 'selected' : ''}>${esc(g.name)}</option>`).join('')}
+        <option value="" ${gid === '' ? 'selected' : ''}>미분류</option>
+      </select></label>
+    </div>
+    <label>메모 (선택)<input type="text" id="m-snote" value="${s ? esc(s.note || '') : ''}" placeholder="예: 팀장 검토 후 제출"></label>
+    <div class="m-actions">
+      ${s ? `<button class="danger" data-action="sched-del" data-id="${s.id}">삭제</button>` : ''}
+      <button class="ghost" data-action="modal-close">취소</button>
+      <button class="primary" data-action="sched-save" data-id="${s ? s.id : ''}">저장</button>
+    </div>`);
+}
 function orderedBoardsIn(gid) {
   const members = state.projects.filter(b => (b.group || null) === gid);
   const ids = new Set(members.map(b => b.id));
@@ -461,6 +503,14 @@ function renderBoardView() {
     const doneCnt = gCards.filter(c => c.status === 'done').length;
     const periods = (g && g.periods && g.periods.length) ? g.periods : null;
     const periodTxt = periods ? `${fmtDate(periods[0].start)} ~ ${fmtDate(periods[periods.length - 1].end)}${periods.length > 1 ? ` 외 ${periods.length - 1}` : ''}` : '기간 미설정';
+    const scheds = schedulesOf(sel).slice().sort(schedSort);
+    const nextSched = scheds.find(s => !s.done);
+    const dd = nextSched ? dday(nextSched.date) : 0;
+    const schedChip = nextSched ? `<span class="prop-chip sched-chip" data-action="sched-edit" data-id="${nextSched.id}" title="다가오는 일정">📌 ${esc(nextSched.title)} · ${dd < 0 ? -dd + '일 지남' : dd === 0 ? 'D-day' : 'D-' + dd}</span>` : '';
+    const schedPanel = `<section class="sched-panel">
+        <div class="group-head"><span class="gname">📌 일정 · 마감</span><span class="gcnt">${scheds.length}</span><button class="mini-btn" data-action="sched-add" data-group="${sel}">+ 일정 추가</button></div>
+        ${scheds.length ? `<div class="sched-list">${scheds.map(schedRow).join('')}</div>` : '<div class="empty">보고서 제출·마감 등 이 프로젝트의 일정을 추가하세요</div>'}
+      </section>`;
     page = `<div class="page-head"><span class="page-icon c-${g ? g.color : 'gray'}">📁</span><h2 class="page-title">${esc(gname)}</h2>
         ${g ? `<button class="mini-btn" data-action="group-edit" data-id="${g.id}">설정</button>` : ''}
         <button class="mini-btn" data-action="proj-add" ${sel ? `data-group="${sel}"` : ''}>+ 보드</button></div>
@@ -468,7 +518,8 @@ function renderBoardView() {
         <span class="prop-chip" ${g ? `data-action="group-edit" data-id="${g.id}" title="클릭해서 기간 수정"` : ''}>📅 ${periodTxt}</span>
         <span class="prop-chip">🗂 보드 ${gBoards.length}</span>
         <span class="prop-chip">✅ 진행 ${doneCnt}/${gCards.length}</span>
-      </div>` + groupSecHtml(sel, true);
+        ${schedChip}
+      </div>` + schedPanel + groupSecHtml(sel, true);
   }
   return legendHtml()
     + `<div class="board-wrap">${side}<div class="board-page">
@@ -721,6 +772,12 @@ function chipHtml(c) {
   const title = (g ? '📁' + g.name + ' · ' : '') + (b ? b.name + ' · ' : '') + `[${stName}] ` + c.title + (c.note ? '\n💬 ' + c.note : '');
   return `<span class="chip ${c.status}" style="${style}" draggable="true" data-action="card" data-id="${c.id}" title="${esc(title)}">${projTop}<span class="chip-task">${mark}${esc(c.title)}</span></span>`;
 }
+function schedChipHtml(s) {
+  const g = s.group ? groupById(s.group) : null;
+  const over = !s.done && dday(s.date) < 0;
+  const title = (g ? '📁' + g.name + ' · ' : '') + '[일정] ' + s.title + (s.note ? '\n💬 ' + s.note : '');
+  return `<span class="chip chip-sched c-${g ? g.color : 'gray'} ${s.done ? 'done' : ''} ${over ? 'over' : ''}" data-action="sched-edit" data-id="${s.id}" title="${esc(title)}">📌 ${esc(s.title)}</span>`;
+}
 function calFilterActive() { return Array.isArray(state.sel.calFilter) && state.sel.calFilter.length > 0; }
 function calCardVisible(c) {
   if (!calFilterActive()) return true;
@@ -755,6 +812,11 @@ function renderCal() {
     const d = c.due || (c.status === 'done' ? c.doneAt : null);
     if (d) (cardsByDate[d] = cardsByDate[d] || []).push(c);
   });
+  const schedByDate = {};
+  (state.schedules || []).forEach(s => {
+    if (!s.date || !calPeriodVisible(s.group || '')) return;
+    (schedByDate[s.date] = schedByDate[s.date] || []).push(s);
+  });
   const periodItems = [];
   state.projects.filter(b => b.start && b.end && b.start <= b.end).forEach(b => {
     if (calPeriodVisible(b.group || '')) periodItems.push({ name: b.name, color: b.color, start: b.start, end: b.end, kind: 'board', id: b.id });
@@ -786,8 +848,9 @@ function renderCal() {
       const inMonth = dt.getMonth() === m - 1;
       const dayCards = cardsByDate[ds] || [];
       const chips = dayCards.map(chipHtml).join('');
+      const schedChips = (schedByDate[ds] || []).map(schedChipHtml).join('');
       cells += `<div class="cal-day ${inMonth ? '' : 'out'} ${ds === today ? 'today' : ''}" data-action="cal-add" data-date="${ds}" title="클릭하면 이 날짜로 할 일 추가">
-        <div class="cal-scroll"><span class="dnum ${d === 0 ? 'sun' : ''}">${dt.getDate()}</span>${chips}</div></div>`;
+        <div class="cal-scroll"><span class="dnum ${d === 0 ? 'sun' : ''}">${dt.getDate()}</span>${schedChips}${chips}</div></div>`;
     }
     weeksHtml += `<div class="cal-week">
       ${laneCnt ? `<div class="cal-bars" style="height:${laneCnt * 19 + 2}px">${bars.join('')}</div>` : ''}
@@ -914,6 +977,25 @@ function doneWeekSection(cards, offset, start, end) {
     <div class="dash-list">${body}</div>
   </section>`;
 }
+function upcomingSchedSec() {
+  const items = (state.schedules || []).filter(s => !s.done).slice()
+    .sort((a, b) => (a.date || '').localeCompare(b.date || ''))
+    .slice(0, 8);
+  if (!items.length) return '';
+  const row = s => {
+    const g = s.group ? groupById(s.group) : null;
+    const dd = dday(s.date);
+    const over = dd < 0 ? ' overdue' : '';
+    return `<div class="drow${over}" data-action="sched-edit" data-id="${s.id}">
+      <input type="checkbox" data-action="sched-toggle" data-id="${s.id}" title="완료 체크">
+      <div class="drow-body"><div class="drow-l1"><span class="drow-title">${esc(s.title)}</span></div>
+        <div class="drow-meta">${g ? `<span class="drow-proj c-${g.color}">${esc(g.name)}</span>` : ''}${dueBadge(s.date)}</div></div>
+    </div>`;
+  };
+  return `<section class="dash-sec full" id="sec-sched"><div class="dash-sec-head"><h2>📌 다가오는 일정 <span class="cnt">${items.length}</span></h2><span class="dash-sub">프로젝트 마감·제출 · 마감 임박순</span></div>
+    <div class="dash-list">${items.map(row).join('')}</div>
+  </section>`;
+}
 function recentNotesSec() {
   const notes = (state.notes || []).slice()
     .sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt || '').localeCompare(a.createdAt || ''))
@@ -983,6 +1065,7 @@ function renderDash() {
           ${dashSection('🔥 급한 업무', '마감 임박·지남 또는 중요도 높음', urgent, '급한 업무가 없어요 👍', 8, { id: 'sec-urgent' })}
         </div>`
       : dashSection('🔥 급한 업무', '마감 임박·지남 또는 중요도 높음', urgent, '급한 업무가 없어요 👍', 8, { full: true, id: 'sec-urgent' })}
+    ${upcomingSchedSec()}
     <div class="dash-flow">
       ${dashSection('📅 예정', '마감 임박순', todo, '예정 업무가 없어요', 10, { id: 'sec-todo', stage: 'todo', hidePill: true })}
       ${dashSection('▶ 진행 중', '지금 하고 있는 일', doing, '진행 중인 업무가 없어요', 10, { id: 'sec-doing', stage: 'doing', hidePill: true })}
@@ -1947,6 +2030,26 @@ document.addEventListener('click', e => {
       else state.groups.push({ id: 'g-' + uid(), name: t, color: RAMP[state.groups.length % RAMP.length], periods });
     }
     closeModal(); render();
+  }
+  else if (act === 'sched-add') openSchedModal(null, el.dataset.group || '');
+  else if (act === 'sched-edit') openSchedModal(el.dataset.id);
+  else if (act === 'sched-save') {
+    const t = document.getElementById('m-stitle').value.trim();
+    const date = document.getElementById('m-sdate').value || null;
+    if (t && date) {
+      const grp = document.getElementById('m-sgroup').value;
+      const note = document.getElementById('m-snote').value.trim() || null;
+      const s = el.dataset.id ? schedById(el.dataset.id) : null;
+      if (s) { s.title = t; s.date = date; s.group = grp; s.note = note; }
+      else state.schedules.push({ id: 's-' + uid(), group: grp, title: t, date, done: false, doneAt: null, note });
+    }
+    closeModal(); render();
+  }
+  else if (act === 'sched-del') { state.schedules = state.schedules.filter(s => s.id !== el.dataset.id); closeModal(); render(); }
+  else if (act === 'sched-toggle') {
+    const s = schedById(el.dataset.id);
+    if (s) { s.done = el.checked; s.doneAt = s.done ? todayStr() : null; }
+    render();
   }
   else if (act === 'tbox-prev') tbShift(-1);
   else if (act === 'tbox-next') tbShift(1);

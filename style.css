@@ -394,6 +394,19 @@ footer button:hover{border-color:var(--accent);color:var(--text)}
 .prop-chip{font-size:12px;color:var(--muted);background:var(--surface);border:1px solid var(--border);border-radius:999px;padding:4px 12px}
 .prop-chip[data-action]{cursor:pointer}
 .prop-chip[data-action]:hover{border-color:var(--accent)}
+.prop-chip.sched-chip{background:var(--warn-bg);color:var(--warn-fg);border-color:transparent;font-weight:600}
+/* 프로젝트 일정(마감) 패널 */
+.sched-panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px}
+.sched-list{display:flex;flex-direction:column;gap:5px}
+.sched-row{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;background:var(--bg);cursor:pointer;font-size:13px}
+.sched-row:hover{background:var(--accent-soft)}
+.sched-row.overdue,.drow.overdue{box-shadow:inset 3px 0 0 var(--danger-fg)}
+.sched-row.done{opacity:.55}
+.sched-row.done .sched-t{text-decoration:line-through;color:var(--muted)}
+.sched-t{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chip.chip-sched{font-weight:700;border:1px solid transparent}
+.chip.chip-sched.over{outline:2px solid var(--danger-fg);outline-offset:-2px}
+.chip.chip-sched.done{opacity:.5;filter:grayscale(.4);text-decoration:line-through}
 .note-overview.callout{display:flex;gap:12px;align-items:flex-start;background:var(--accent-soft);border:0;padding:14px 16px}
 .co-icon{font-size:19px;line-height:1.2;flex:none}
 .co-body{flex:1}
