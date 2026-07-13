@@ -141,19 +141,35 @@ function subscribeBackups(uid) {
   }, e => console.warn('backup sub failed', e));
 }
 
+function doCloudWrite() {
+  if (!(CLOUD && db && authUser)) return;
+  db.collection('boards').doc(authUser.uid)
+    .set({ state, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
+    .catch(e => console.warn('sync write failed', e));
+  pushSnapshot();
+}
 function save() {
+  if (!applyingRemote) state.savedAt = Date.now();   // 로컬 편집 시각 스탬프 — 로드 시 클라우드보다 최신인지 판별용
   localStorage.setItem(LS_KEY, JSON.stringify(state));
   if (CLOUD && db && authUser && !applyingRemote) {
     clearTimeout(writeTimer);
-    writeTimer = setTimeout(() => {
-      db.collection('boards').doc(authUser.uid)
-        .set({ state, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
-        .catch(e => console.warn('sync write failed', e));
-      pushSnapshot();
-    }, 600);
+    writeTimer = setTimeout(() => { writeTimer = null; doCloudWrite(); }, 600);
   } else if (!CLOUD) {
     pushSnapshot();
   }
+}
+function flushWrite() {   // 대기 중인 디바운스 write를 즉시 반영 (탭 닫힘·백그라운드 전환 시 유실 방지)
+  if (writeTimer) { clearTimeout(writeTimer); writeTimer = null; doCloudWrite(); }
+}
+// 클라우드 로드 판정: 로컬 캐시가 클라우드보다 확실히 최신이면(마지막 편집이 미동기화) 로컬 유지
+function localCacheNewer(localCached, remote) {
+  if (!localCached) return false;
+  const lt = localCached.savedAt || 0, rt = (remote && remote.savedAt) || 0;
+  return lt > rt + 1500;   // 1.5s 여유(시계 오차 방지)
+}
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushWrite(); });
+  window.addEventListener('pagehide', flushWrite);
 }
 
 function loadScript(src) {
@@ -179,10 +195,27 @@ async function initCloud() {
 function subscribeBoard(uid) {
   render();
   if (unsubDoc) unsubDoc();
+  let firstSnap = true;
   unsubDoc = db.collection('boards').doc(uid).onSnapshot(snap => {
     if (snap.metadata.hasPendingWrites) return;
     const data = snap.data();
     if (data && data.state) {
+      // 최초 로드 시: 로컬 캐시가 클라우드보다 최신이면(마지막 편집 미동기화) 로컬을 유지하고 클라우드로 밀어올림
+      if (firstSnap) {
+        firstSnap = false;
+        let cached = null;
+        try { cached = JSON.parse(localStorage.getItem(LS_KEY) || 'null'); } catch (e) { cached = null; }
+        if (cached && cached.groups && localCacheNewer(cached, data.state)) {
+          console.warn('로컬 캐시가 클라우드보다 최신 → 로컬 유지 후 재동기화 (미동기화 편집 복구)');
+          state = cached;
+          state.sel = state.sel || { view: 'board' }; state.groups = state.groups || []; state.notes = state.notes || [];
+          state.timebox = state.timebox || {}; state.journal = state.journal || {}; state.settings = state.settings || {};
+          render();
+          pushSnapshot(true);   // 덮어쓰기 전 스냅샷
+          doCloudWrite();       // 로컬을 클라우드로 밀어올림
+          return;
+        }
+      }
       applyingRemote = true;
       state = data.state;
       state.sel = state.sel || { view: 'board' };
@@ -198,6 +231,7 @@ function subscribeBoard(uid) {
       if (journalFreeze()) save();
       pushSnapshot();
     } else {
+      firstSnap = false;
       ensureDevlog();
       db.collection('boards').doc(uid).set({ state, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
     }
