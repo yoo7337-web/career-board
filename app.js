@@ -493,7 +493,12 @@ function renderBoardView() {
   </section>`;
   let page;
   if (sel === '__all') {
-    page = groups.map(g => groupSecHtml(g.id)).join('') + groupSecHtml('');
+    const allScheds = (state.schedules || []).slice().sort(schedSort);
+    const schedPanel = `<section class="sched-panel">
+        <div class="group-head"><span class="gname">📌 일정 · 마감 (전체)</span><span class="gcnt">${allScheds.length}</span><button class="mini-btn" data-action="sched-add">+ 일정 추가</button></div>
+        ${allScheds.length ? `<div class="sched-list">${allScheds.map(schedRow).join('')}</div>` : '<div class="empty">보고서 제출·마감 등 프로젝트 일정을 추가하세요 (추가 시 프로젝트 선택)</div>'}
+      </section>`;
+    page = schedPanel + groups.map(g => groupSecHtml(g.id)).join('') + groupSecHtml('');
   } else {
     const g = sel ? groupById(sel) : null;
     const gname = g ? g.name : '미분류';
