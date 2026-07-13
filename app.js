@@ -571,13 +571,11 @@ function renderMap() {
     </div>`;
   }).join('') || '<div class="empty">미배정 할 일이 없어요 👍</div>';
   return `<div class="map-split">
-    <div class="map-main">
-      <div class="map-toolbar">
-        <button class="pill" data-action="map-arrange" title="프로젝트별 구역으로 나눠 상위→하위 자동 배치">⟲ 자동정렬</button>
-        <span class="maphint">색 구역 = 프로젝트 · 노드를 구역 안으로 끌면 소속 · 빈 곳 클릭 = 보드 추가 · 더블클릭 = 보드로 이동</span>
-      </div>
-      <div class="map" id="map" style="height:${h}px">${regions}<svg class="maplines" id="maplines"></svg>${nodes}</div>
+    <div class="map-toolbar">
+      <button class="pill" data-action="map-arrange" title="프로젝트별 구역으로 나눠 상위→하위 자동 배치">⟲ 자동정렬</button>
+      <span class="maphint">색 구역 = 프로젝트 · 노드를 구역 안으로 끌면 소속 · 빈 곳 클릭 = 보드 추가 · 더블클릭 = 보드로 이동</span>
     </div>
+    <div class="map" id="map" style="height:${h}px">${regions}<svg class="maplines" id="maplines"></svg>${nodes}</div>
     <aside class="map-todos">
       <div class="side-h">📥 미배정 할 일 <span class="gcnt">${unassigned.length}</span></div>
       <p class="maphint2">할 일을 왼쪽 보드로 끌어 배정 · 클릭해 수정</p>
@@ -855,8 +853,7 @@ function dashRow(c, hidePill) {
   const b = boardById(c.project);
   const g = b && b.group ? groupById(b.group) : null;
   const pr = PRIORITIES[c.priority] || PRIORITIES.none;
-  const proj = g ? `<span class="drow-proj c-${g.color}">${esc(g.name)}</span>` : '';
-  const board = b ? `<span class="drow-board">${esc(b.name)}</span>` : '';
+  const board = b ? `<span class="drow-board">${esc(b.name)}</span>` : '';   // 프로젝트는 그룹 헤더에 있으므로 행에는 보드명만
   const note = c.note ? `<span class="card-note" data-note="${esc(c.note)}">💬</span>` : '';
   const tag = c.status === 'done'
     ? (c.doneAt ? `<span class="tag">${fmtDate(c.doneAt)} 완수</span>` : '')
@@ -865,7 +862,7 @@ function dashRow(c, hidePill) {
     : c.status === 'done' ? '<span class="st-pill done">완수</span>'
       : '<span class="st-pill todo">예정</span>');
   const overdue = c.status !== 'done' && c.due && dday(c.due) < 0 ? ' overdue' : '';
-  const metaInner = `${proj}${board}${tag}`;
+  const metaInner = `${board}${tag}`;
   const meta = metaInner ? `<div class="drow-meta">${metaInner}</div>` : '';
   return `<div class="drow${overdue}" data-action="card" data-id="${c.id}">
     <span class="drow-prio" style="${pr.bg ? `background:${pr.bg}` : ''}"></span>
