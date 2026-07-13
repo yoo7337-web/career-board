@@ -813,10 +813,14 @@ function dashRow(c, hidePill) {
     : c.status === 'done' ? '<span class="st-pill done">완수</span>'
       : '<span class="st-pill todo">예정</span>');
   const overdue = c.status !== 'done' && c.due && dday(c.due) < 0 ? ' overdue' : '';
+  const metaInner = `${proj}${board}${tag}`;
+  const meta = metaInner ? `<div class="drow-meta">${metaInner}</div>` : '';
   return `<div class="drow${overdue}" data-action="card" data-id="${c.id}">
     <span class="drow-prio" style="${pr.bg ? `background:${pr.bg}` : ''}"></span>
-    ${stPill}<span class="drow-title">${esc(c.title)}</span>${note}
-    <span class="drow-meta">${proj}${board}${tag}</span>
+    <div class="drow-body">
+      <div class="drow-l1">${stPill}<span class="drow-title">${esc(c.title)}</span>${note}</div>
+      ${meta}
+    </div>
   </div>`;
 }
 function dashSection(title, sub, cards, emptyMsg, limit, opts) {
@@ -1184,7 +1188,7 @@ function renderTbox() {
       const k = h + '.' + half;
       const v = d.slots[k];
       const doneSlot = v !== undefined && tbDone(d.big3[v]);
-      return `<div class="tb-cell${doneSlot ? ' done-slot' : ''}" data-slot="${k}" ${v !== undefined ? `style="background:${tbColor(v).bg};color:${tbColor(v).fg}"` : ''}>${v !== undefined ? v + 1 : ''}</div>`;
+      return `<div class="tb-cell${doneSlot ? ' done-slot' : ''}" data-slot="${k}" ${v !== undefined ? `style="background-color:${tbColor(v).bg};color:${tbColor(v).fg}"` : ''}>${v !== undefined ? v + 1 : ''}</div>`;
     };
     grid += `<div class="tb-row"><span class="tb-hour">${h}</span>${cell(0)}${cell(5)}</div>`;
   }
@@ -1211,10 +1215,10 @@ function tbApplyCell(cell) {
   const d = tbData(state.sel.tboxDate || todayStr());
   const k = cell.dataset.slot;
   if (tbPaint.erase) {
-    if (d.slots[k] === tbSel) { delete d.slots[k]; cell.style.background = ''; cell.style.color = ''; cell.textContent = ''; cell.classList.remove('done-slot'); }
+    if (d.slots[k] === tbSel) { delete d.slots[k]; cell.style.backgroundColor = ''; cell.style.color = ''; cell.textContent = ''; cell.classList.remove('done-slot'); }
   } else {
     d.slots[k] = tbSel;
-    cell.style.background = tbColor(tbSel).bg;
+    cell.style.backgroundColor = tbColor(tbSel).bg;
     cell.style.color = tbColor(tbSel).fg;
     cell.textContent = tbSel + 1;
     cell.classList.toggle('done-slot', tbDone(d.big3[tbSel]));
