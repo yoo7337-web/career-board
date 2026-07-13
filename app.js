@@ -895,8 +895,12 @@ function renderDash() {
       ${kpi('✓ 이번 주 완수', weekDone(), 'k-done', 'sec-done')}
       ${kpi('🔥 급한 일', urgent.length, 'k-urgent', 'sec-urgent')}
     </div>
-    ${gpRows.length ? `<section class="dash-sec full"><div class="dash-sec-head"><h2>📊 프로젝트 진행률 <span class="cnt">${gpRows.length}</span></h2><span class="dash-sub">완수/전체</span></div><div class="dash-list gp-grid">${gpRows.join('')}</div></section>` : ''}
-    ${dashSection('🔥 급한 업무', '마감 임박·지남 또는 중요도 높음', urgent, '급한 업무가 없어요 👍', 8, { full: true, id: 'sec-urgent' })}
+    ${gpRows.length
+      ? `<div class="dash-top">
+          <section class="dash-sec"><div class="dash-sec-head"><h2>📊 프로젝트 진행률 <span class="cnt">${gpRows.length}</span></h2><span class="dash-sub">완수/전체</span></div><div class="dash-list gp-list">${gpRows.join('')}</div></section>
+          ${dashSection('🔥 급한 업무', '마감 임박·지남 또는 중요도 높음', urgent, '급한 업무가 없어요 👍', 8, { id: 'sec-urgent' })}
+        </div>`
+      : dashSection('🔥 급한 업무', '마감 임박·지남 또는 중요도 높음', urgent, '급한 업무가 없어요 👍', 8, { full: true, id: 'sec-urgent' })}
     <div class="dash-flow">
       ${dashSection('📅 예정', '마감 임박순', todo, '예정 업무가 없어요', 10, { id: 'sec-todo', stage: 'todo' })}
       ${dashSection('▶ 진행 중', '지금 하고 있는 일', doing, '진행 중인 업무가 없어요', 10, { id: 'sec-doing', stage: 'doing' })}
