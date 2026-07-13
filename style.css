@@ -60,8 +60,7 @@ header h1{font-size:20px;margin:0;font-weight:600}
 }
 
 /* board view */
-.inbox{margin-bottom:22px;padding:10px 12px;background:var(--surface);border:1px solid var(--border);border-radius:12px}
-.inbox .group-head{margin-bottom:8px}
+.inbox{margin:0}
 .inbox-col{min-height:44px;border-radius:8px;padding:6px;display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start}
 .inbox-col .card{width:190px;margin-bottom:0}
 .inbox-col .quick{flex-basis:100%}
@@ -376,11 +375,16 @@ footer button:hover{border-color:var(--accent);color:var(--text)}
 /* notes — 노션 스타일 레이아웃 */
 .notes-wrap,.board-wrap{display:grid;grid-template-columns:210px minmax(0,1fr);gap:20px;align-items:start}
 .board-page{min-width:0}
-.board-top{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
+.board-top{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:stretch;margin-bottom:16px}
 @media (max-width:760px){.board-top{grid-template-columns:1fr}}
-.board-top .inbox{margin-bottom:0}
-.board-top-un{min-width:0}
-.board-top-un .group-sec{margin-bottom:0}
+.top-panel{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin:0 0 16px;display:flex;flex-direction:column;min-width:0}
+.board-top .top-panel{margin-bottom:0}
+.tp-head{display:flex;align-items:center;gap:8px}
+.tp-title{font-size:14px;font-weight:700;color:var(--text)}
+.tp-cnt{background:var(--bg);border:1px solid var(--border);border-radius:999px;padding:0 8px;font-size:11.5px;color:var(--muted);font-weight:600}
+.tp-sub{font-size:11.5px;color:var(--faint);margin:3px 0 12px}
+.top-panel .group-sec{margin:0}
+.top-panel .droptip{margin:0}
 .side-actions{display:flex;flex-direction:column;gap:6px;margin-top:14px;padding:0 4px}
 .side-actions .pill{width:100%;text-align:center}
 .side-item.drop-into{outline:2px dashed var(--accent);outline-offset:-2px;background:var(--accent-soft)}
@@ -401,7 +405,10 @@ footer button:hover{border-color:var(--accent);color:var(--text)}
 .prop-chip[data-action]:hover{border-color:var(--accent)}
 .prop-chip.sched-chip{background:var(--warn-bg);color:var(--warn-fg);border-color:transparent;font-weight:600}
 /* 프로젝트 일정(마감) 패널 */
-.sched-panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px}
+.sched-panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:16px}
+.sched-panel .group-head{margin-bottom:10px}
+.sched-panel .gname{padding:0;font-size:14px;cursor:default;color:var(--text)}
+.sched-panel .gcnt{background:var(--bg);border:1px solid var(--border);border-radius:999px;padding:0 8px;font-size:11.5px;color:var(--muted);font-weight:600}
 .sched-list{display:flex;flex-direction:column;gap:5px}
 .sched-row{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;background:var(--bg);cursor:pointer;font-size:13px}
 .sched-row:hover{background:var(--accent-soft)}

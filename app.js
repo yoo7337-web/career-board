@@ -484,17 +484,23 @@ function renderBoardView() {
     </div>
   </aside>`;
   const inbox = state.cards.filter(c => !c.project && c.status !== 'done');
-  const inboxHtml = `<section class="inbox">
-    <div class="group-head"><span class="gname c-amber">📥 미배정 · 예정</span><span class="gcnt">${inbox.length}</span><span class="dash-sub">보드에 넣기 전 임시 보관 — 카드를 보드로 드래그</span></div>
+  const inboxHtml = `<section class="inbox top-panel">
+    <div class="tp-head"><span class="tp-title">📥 미배정 · 예정</span><span class="tp-cnt">${inbox.length}</span></div>
+    <p class="tp-sub">보드에 넣기 전 임시 보관 · 카드를 보드로 드래그</p>
     <div class="col inbox-col" data-status="todo" data-inbox="1">
       ${inbox.map(cardHtml).join('')}
-      <form class="quick" data-project="__inbox"><input name="t" placeholder="+ 예정 할 일 추가하고 Enter" autocomplete="off"></form>
+      <form class="quick" data-project="__inbox"><input name="t" placeholder="+ 예정 할 일 추가" autocomplete="off"></form>
     </div>
   </section>`;
   let page, topArea = inboxHtml;   // 기본: 미배정 예정 전체폭
   if (sel === '__all') {
     // 상단 2단: 좌=미배정 예정 / 우=미분류 보드
-    topArea = `<div class="board-top">${inboxHtml}<div class="board-top-un">${groupSecHtml('')}</div></div>`;
+    topArea = `<div class="board-top">${inboxHtml}
+      <section class="top-panel">
+        <div class="tp-head"><span class="tp-title">📄 미분류 보드</span><span class="tp-cnt">${bCount('')}</span></div>
+        <p class="tp-sub">프로젝트에 속하지 않은 보드 · 사이드바 프로젝트로 끌어 편입</p>
+        ${groupSecHtml('', true)}
+      </section></div>`;
     const allScheds = (state.schedules || []).slice().sort(schedSort);
     const schedPanel = `<section class="sched-panel">
         <div class="group-head"><span class="gname">📌 일정 · 마감 (전체)</span><span class="gcnt">${allScheds.length}</span><button class="mini-btn" data-action="sched-add">+ 일정 추가</button></div>
