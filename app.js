@@ -1250,7 +1250,114 @@ function journalFreeze() {   // 어제까지의 미확정 일지를 스냅샷으
   if (state.journalUpto !== yStr) { state.journalUpto = yStr; changed = true; }
   return changed;
 }
-function jrDayCard(date, a, memo, live) {
+// 한국어 조사 자동 선택(받침 유무)
+function josa(w, pair) {
+  const [a, b] = pair.split('|');
+  if (!w) return b;
+  const code = w.charCodeAt(w.length - 1);
+  if (code < 0xAC00 || code > 0xD7A3) return b;
+  return ((code - 0xAC00) % 28 !== 0) ? a : b;
+}
+function joinKo(arr) {
+  if (!arr.length) return '';
+  if (arr.length === 1) return arr[0];
+  if (arr.length === 2) return arr[0] + josa(arr[0], '과|와') + ' ' + arr[1];
+  return arr.slice(0, -1).join(', ') + ', 그리고 ' + arr[arr.length - 1];
+}
+// 파생 데이터 → 서술형 한 문단(일기체, AI 없이)
+function journalProse(a) {
+  const s = [];
+  if (a.done.length) {
+    const byP = {};
+    a.done.forEach(d => { const k = d.proj || ''; (byP[k] = byP[k] || []).push(d.title); });
+    const parts = [];
+    Object.keys(byP).forEach(k => {
+      const titles = byP[k], joined = joinKo(titles), last = titles[titles.length - 1];
+      parts.push(k ? `${k}에서 ${joined}${josa(last, '을|를')} 마무리했다` : `미배정 업무로 ${joined}${josa(last, '을|를')} 처리했다`);
+    });
+    s.push(parts.join('. ') + '.');
+  }
+  if (a.big3.length) {
+    const done = a.big3.filter(b => b.done).length, tot = a.big3.length;
+    s.push(done === tot ? `오늘 정한 핵심 ${tot}가지를 모두 해냈다.`
+      : done > 0 ? `핵심 ${tot}가지 중 ${done}가지를 달성했다.`
+      : `핵심 ${tot}가지는 아직 마무리하지 못했다.`);
+  }
+  if (a.planH || a.actualH) {
+    if (a.actualH) {
+      const diff = Math.round((a.actualH - a.planH) * 100) / 100;
+      s.push(diff > 0 ? `타임박스에 ${a.planH}시간을 계획했지만 실제로는 ${a.actualH}시간이 걸렸다(+${diff}시간).`
+        : diff < 0 ? `타임박스에 ${a.planH}시간을 계획했고 실제로는 ${a.actualH}시간 만에 끝냈다(${diff}시간).`
+        : `타임박스 계획대로 ${a.planH}시간을 썼다.`);
+    } else s.push(`타임박스에 ${a.planH}시간을 계획했다.`);
+  }
+  if (a.notes.length) {
+    const titles = a.notes.map(n => n.title);
+    s.push(`${joinKo(titles)}${josa(titles[titles.length - 1], '을|를')} 기록으로 남겼다.`);
+  }
+  if (a.created) s.push(`새 할 일 ${a.created}건도 등록했다.`);
+  return s.join(' ');
+}
+
+// ---- 선택적 Gemini 윤문 (클릭 시에만 호출, 그 하루 데이터만 전송) ----
+const jrAiBusy = new Set();
+function jrSleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+function buildJrPrompt(date, a) {
+  const lines = [];
+  if (a.done.length) lines.push('완수: ' + a.done.map(d => (d.proj ? `[${d.proj}] ` : '') + d.title).join(', '));
+  if (a.big3.length) lines.push('오늘의 핵심 Big3: ' + a.big3.map(b => `${b.title}(${b.done ? '달성' : '미달성'}${b.plan ? `, 계획 ${b.plan}h` : ''}${b.actual != null ? `, 실제 ${b.actual}h` : ''})`).join(' / '));
+  if (a.planH || a.actualH) lines.push(`시간: 계획 ${a.planH}h, 실제 ${a.actualH}h`);
+  if (a.notes.length) lines.push('남긴 기록: ' + a.notes.map(n => n.title).join(', '));
+  if (a.created) lines.push(`새로 등록한 할 일: ${a.created}건`);
+  return `당신은 회계사(외부감사·내부회계관리제도 감사 업무)의 하루 업무 일지를 대신 정리합니다.
+아래 '오늘 한 일' 데이터만 근거로, 과장이나 지어내기 없이 1인칭 회고 일기를 한국어 3~4문장으로 작성하세요.
+- 담백한 서술체("~했다")로 문단 하나. 이모지·불릿·머리말 없이.
+- 데이터에 없는 성과·감정은 만들지 말 것. 시간 계획 대비 실제가 있으면 자연스럽게 짚어줄 것.
+
+[${date}] 오늘 한 일
+${lines.join('\n')}`;
+}
+async function callGeminiJr(prompt, key) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`;
+  for (let attempt = 0; attempt <= 3; attempt++) {
+    const res = await fetch(url, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.6, maxOutputTokens: 2048, thinkingConfig: { thinkingBudget: 0 } } })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const cand = data.candidates && data.candidates[0];
+      const txt = (cand && cand.content && cand.content.parts ? cand.content.parts.map(p => p.text).join('') : '').trim();
+      return txt || '(AI 응답이 비어 있어요. 다시 시도해 주세요.)';
+    }
+    const errText = await res.text();
+    if ((res.status === 429 || res.status === 503) && attempt < 3) { await jrSleep(2000 * (attempt + 1)); continue; }
+    if (res.status === 429) throw new Error('무료 사용량 한도를 초과했어요. 잠시 후 다시 시도해 주세요.');
+    throw new Error(`Gemini ${res.status}: ${errText.slice(0, 120)}`);
+  }
+}
+async function runJrAi(date) {
+  let key = localStorage.getItem('gemini_key') || '';
+  if (!key) {
+    key = (window.prompt('Gemini API 키를 입력하세요.\n(aistudio.google.com에서 무료 발급 · 이 브라우저에만 저장됩니다)') || '').trim();
+    if (!key) return;
+    localStorage.setItem('gemini_key', key);
+  }
+  const a = date === todayStr() ? journalDerive(date) : ((state.journal[date] || {}).auto);
+  if (!a) { alert('이 날짜엔 정리할 활동이 없어요.'); return; }
+  jrAiBusy.add(date); render();
+  try {
+    const txt = await callGeminiJr(buildJrPrompt(date, a), key);
+    state.journal = state.journal || {};
+    const e = state.journal[date] || {}; e.ai = txt; state.journal[date] = e;
+  } catch (err) {
+    alert('AI 다듬기 실패: ' + (err.message || err));
+  } finally { jrAiBusy.delete(date); render(); }
+}
+
+function jrDayCard(date, a, entry, live) {
+  entry = entry || {};
+  const memo = entry.memo, aiText = entry.ai;
   const dowName = ['일', '월', '화', '수', '목', '금', '토'][new Date(date + 'T00:00:00').getDay()];
   const chips = [];
   if (a) {
@@ -1263,16 +1370,25 @@ function jrDayCard(date, a, memo, live) {
     if (a.notes.length) chips.push(`<span class="prop-chip">📝 기록 ${a.notes.length}</span>`);
     if (a.created) chips.push(`<span class="prop-chip">➕ 등록 ${a.created}</span>`);
   }
-  let rows = '';
-  if (a) {
-    rows += a.done.map(d => `<div class="jr-row">✅ ${d.proj ? `<span class="drow-proj c-${d.color}">${esc(d.proj)}</span>` : ''}<span class="jr-t">${esc(d.title)}</span>${d.board ? `<span class="jr-b">${esc(d.board)}</span>` : ''}</div>`).join('');
-    rows += a.big3.map(b => `<div class="jr-row">${b.done ? '🎯' : '◻'} <span class="jr-t ${b.done ? '' : 'jr-undone'}">${esc(b.title)}</span><span class="jr-b">${b.plan ? `계획 ${b.plan}h` : ''}${b.actual !== null && b.actual !== undefined ? ` · 실제 ${b.actual}h` : ''}</span></div>`).join('');
-    rows += a.notes.map(n => `<div class="jr-row">${noteTypeBadge(n.type)}<span class="jr-t">${esc(n.title)}</span></div>`).join('');
+  const busy = jrAiBusy.has(date);
+  const prose = a ? journalProse(a) : '';
+  let bodyHtml, actions = '';
+  if (busy) {
+    bodyHtml = `<div class="jr-body jr-loading">✨ AI가 하루를 정리하는 중…</div>`;
+  } else if (aiText) {
+    bodyHtml = `<div class="jr-body jr-ai">${esc(aiText)}</div>`;
+    actions = `<button class="jr-mini" data-action="jr-ai" data-date="${date}" title="다시 생성">↺ 다시</button>
+      <button class="jr-mini" data-action="jr-ai-clear" data-date="${date}" title="기본 요약으로">기본</button>`;
+  } else if (prose) {
+    bodyHtml = `<div class="jr-body">${esc(prose)}</div>`;
+    actions = `<button class="jr-mini" data-action="jr-ai" data-date="${date}" title="Gemini로 자연스럽게 다듬기">✨ AI로 다듬기</button>`;
+  } else {
+    bodyHtml = `<div class="empty">${live ? '아직 오늘 활동이 없어요 — 완수·타임박스·기록이 자동으로 쌓입니다' : '기록 없음'}</div>`;
   }
-  if (!rows) rows = `<div class="empty">${live ? '아직 오늘 활동이 없어요 — 완수·타임박스·기록이 자동으로 쌓입니다' : '기록 없음'}</div>`;
   return `<section class="jr-day ${live ? 'live' : ''}">
     <div class="jr-head"><span class="jr-date">${fmtDate(date)} (${dowName})</span>${live ? '<span class="jr-live">오늘 · 실시간</span>' : ''}<div class="jr-chips">${chips.join('')}</div></div>
-    <div class="jr-rows">${rows}</div>
+    ${bodyHtml}
+    ${actions ? `<div class="jr-actions">${actions}</div>` : ''}
     <div class="jr-memo" data-action="jr-memo" data-date="${date}" title="클릭해서 회고 쓰기">${memo ? `💭 ${esc(memo)}` : '<span class="jr-memo-ph">💭 클릭해 한 줄 회고 남기기</span>'}</div>
   </section>`;
 }
@@ -1290,8 +1406,8 @@ function renderJournal() {
     if (m !== lastMonth) { lastMonth = m; const [yy, mm] = m.split('-'); feed += `<div class="note-group-h">${yy}년 ${Number(mm)}월</div>`; }
   };
   pushMonth(today);
-  feed += jrDayCard(today, journalDerive(today), (state.journal[today] || {}).memo, true);
-  shown.forEach(d => { pushMonth(d); feed += jrDayCard(d, state.journal[d].auto, state.journal[d].memo, false); });
+  feed += jrDayCard(today, journalDerive(today), state.journal[today], true);
+  shown.forEach(d => { pushMonth(d); feed += jrDayCard(d, state.journal[d].auto, state.journal[d], false); });
   const moreBtn = pastDates.length > limit ? `<button class="pill jr-more" data-action="jr-more">+ 이전 일지 더 보기 (${pastDates.length - limit}일)</button>` : '';
   return `<div class="journal">
     <div class="jr-intro">📔 완수한 To-do·타임박스·기록을 토대로 하루가 자동 정리됩니다. 지난 날짜는 확정 저장되어 원본을 지워도 남아요.</div>
@@ -1672,6 +1788,12 @@ document.addEventListener('click', e => {
     closeModal(); render();
   }
   else if (act === 'jr-more') { state.sel.jrLimit = (state.sel.jrLimit || 30) + 30; render(); }
+  else if (act === 'jr-ai') runJrAi(el.dataset.date);
+  else if (act === 'jr-ai-clear') {
+    const d = el.dataset.date, e = (state.journal || {})[d];
+    if (e) { delete e.ai; if (!e.memo && !e.auto) delete state.journal[d]; }
+    render();
+  }
   else if (act === 'note-group') { state.sel.noteGroup = el.dataset.gid; render(); }
   else if (act === 'note-type') { state.sel.noteType = el.dataset.t; render(); }
   else if (act === 'note-pin') {

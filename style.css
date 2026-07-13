@@ -471,11 +471,12 @@ footer button:hover{border-color:var(--accent);color:var(--text)}
 .jr-date{font-weight:700;font-size:15px}
 .jr-live{font-size:11px;color:var(--accent);font-weight:700;border:1px solid var(--accent);border-radius:999px;padding:1px 8px}
 .jr-chips{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}
-.jr-rows{display:flex;flex-direction:column;gap:4px;margin-bottom:8px}
-.jr-row{display:flex;align-items:center;gap:7px;font-size:13.5px;min-width:0}
-.jr-t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.jr-undone{color:var(--muted)}
-.jr-b{font-size:11.5px;color:var(--faint);flex:none}
+.jr-body{font-size:14px;line-height:1.7;margin-bottom:8px;white-space:pre-wrap}
+.jr-body.jr-ai{background:var(--accent-soft);border-radius:8px;padding:10px 12px}
+.jr-body.jr-loading{color:var(--accent);font-style:italic}
+.jr-actions{display:flex;gap:6px;margin-bottom:8px}
+.jr-mini{border:1px solid var(--border);background:transparent;color:var(--muted);font:inherit;font-size:11.5px;padding:3px 9px;border-radius:999px;cursor:pointer}
+.jr-mini:hover{border-color:var(--accent);color:var(--accent)}
 .jr-memo{background:var(--accent-soft);border-radius:8px;padding:8px 11px;font-size:13px;cursor:pointer;border:1px solid transparent}
 .jr-memo:hover{border-color:var(--accent)}
 .jr-memo-ph{color:var(--faint)}
