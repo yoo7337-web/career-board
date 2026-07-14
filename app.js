@@ -119,7 +119,7 @@ function ensureDevlog() {
 const SNAP_KEY = 'board-v2-snaps', SNAP_MAX = 30, SNAP_LOCAL_MAX = 12, SNAP_MIN_MS = 90000;
 let backupSnaps = [], unsubBackup = null, lastSnapHash = '', lastSnapTime = 0;
 function localSnaps() { try { return JSON.parse(localStorage.getItem(SNAP_KEY) || '[]'); } catch (e) { return []; } }
-function stateHash(s) { try { return JSON.stringify([s.projects, s.cards, s.devlog]); } catch (e) { return 't' + Date.now(); } }
+function stateHash(s) { try { return JSON.stringify([s.projects, s.cards, s.groups, s.notes, s.schedules, s.devlog]); } catch (e) { return 't' + Date.now(); } }
 function snapSummary(st) {
   const p = st && st.projects ? st.projects.length : 0;
   const c = st && st.cards ? st.cards.length : 0;
