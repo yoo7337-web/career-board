@@ -1297,6 +1297,23 @@ function tbShift(n) {
   state.sel.tboxDate = dstr(new Date(y, m - 1, dd + n));
   tbSel = null; render();
 }
+// Big3 순서 변경: from → to. 배정된 시간칸(slots의 인덱스)도 함께 재매핑
+function tbMoveBig3(from, to) {
+  const d = tbData(state.sel.tboxDate || todayStr());
+  const n = d.big3.length;
+  if (from === to || from < 0 || to < 0 || from >= n || to >= n) return;
+  const order = d.big3.map((_, i) => i);
+  const [moved] = order.splice(from, 1);
+  order.splice(to, 0, moved);
+  const oldToNew = {};
+  order.forEach((oldIdx, newIdx) => { oldToNew[oldIdx] = newIdx; });
+  d.big3 = order.map(oldIdx => d.big3[oldIdx]);
+  const newSlots = {};
+  Object.keys(d.slots).forEach(k => { newSlots[k] = oldToNew[d.slots[k]]; });
+  d.slots = newSlots;
+  if (tbSel !== null && oldToNew[tbSel] !== undefined) tbSel = oldToNew[tbSel];
+  save(); render();
+}
 function renderTbox() {
   const date = state.sel.tboxDate || todayStr();
   state.sel.tboxDate = date;
@@ -1318,6 +1335,7 @@ function renderTbox() {
       `<span class="tb-diff even">정확</span>`;
     const done = tbDone(b);
     return `<div class="tb-big3-row ${tbSel === i ? 'sel' : ''} ${done ? 'done' : ''}" data-idx="${i}" data-action="tb-select" title="클릭=선택 후 시간 칸 드래그로 배정">
+      <span class="tb-grip" draggable="true" data-idx="${i}" title="드래그로 순서 변경">⠿</span>
       <span class="tb-chip" style="background:${c.bg}"></span>
       <input type="checkbox" data-action="tb-check" data-idx="${i}" ${done ? 'checked' : ''} title="완수 처리 (보드에도 반영)">
       <span class="tb-title">${esc(b.title)}</span>
@@ -2394,7 +2412,7 @@ document.addEventListener('submit', e => {
 /* ---------- drag & drop: cards(columns) + boards(순서/계층) + 달력 칩(날짜) ---------- */
 let dragItem = null; // { kind:'card'|'board'|'cal', id }
 function clearDropHints() {
-  document.querySelectorAll('.dragover,.over,.cal-drop,.drop-assign').forEach(el => el.classList.remove('dragover', 'over', 'cal-drop', 'drop-assign'));
+  document.querySelectorAll('.dragover,.over,.cal-drop,.drop-assign,.tb-reorder-over').forEach(el => el.classList.remove('dragover', 'over', 'cal-drop', 'drop-assign', 'tb-reorder-over'));
   document.querySelectorAll('.drop-before,.drop-after,.drop-nest,.drop-into').forEach(el => el.classList.remove('drop-before', 'drop-after', 'drop-nest', 'drop-into'));
 }
 function reorderBoard(draggedId, targetId, after) {
@@ -2408,6 +2426,8 @@ function reorderBoard(draggedId, targetId, after) {
   arr.splice(after ? ti + 1 : ti, 0, dragged);
 }
 document.addEventListener('dragstart', e => {
+  const grip = e.target.closest('.tb-grip');
+  if (grip) { dragItem = { kind: 'big3', idx: +grip.dataset.idx }; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', 'big3'); return; }
   const mt = e.target.closest('.map-todo-item');
   if (mt) { dragItem = { kind: 'maptodo', id: mt.dataset.id }; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', 'maptodo'); return; }
   const td = e.target.closest('.tb-dump-item');
@@ -2421,6 +2441,11 @@ document.addEventListener('dragstart', e => {
 });
 document.addEventListener('dragend', () => { dragItem = null; document.body.classList.remove('dragging-board'); clearDropHints(); });
 document.addEventListener('dragover', e => {
+  if (dragItem && dragItem.kind === 'big3') {
+    const row = e.target.closest('.tb-big3-row');
+    if (row && +row.dataset.idx !== dragItem.idx) { e.preventDefault(); row.classList.add('tb-reorder-over'); }
+    return;
+  }
   if (dragItem && dragItem.kind === 'maptodo') {
     const node = e.target.closest('.mapnode');
     if (node) { e.preventDefault(); node.classList.add('drop-assign'); }
@@ -2463,7 +2488,7 @@ document.addEventListener('dragleave', e => {
   const col = e.target.closest('.col');
   if (col) col.classList.remove('dragover');
   const row = e.target.closest('.tb-big3-row');
-  if (row && !row.contains(e.relatedTarget)) row.classList.remove('drop-into');
+  if (row && !row.contains(e.relatedTarget)) row.classList.remove('drop-into', 'tb-reorder-over');
   const day = e.target.closest('.cal-day');
   if (day && !day.contains(e.relatedTarget)) day.classList.remove('cal-drop');
   const mnode = e.target.closest('.mapnode');
@@ -2478,6 +2503,14 @@ document.addEventListener('dragleave', e => {
   if (panel && !panel.contains(e.relatedTarget)) panel.classList.remove('drop-before', 'drop-after', 'drop-nest');
 });
 document.addEventListener('drop', e => {
+  if (dragItem && dragItem.kind === 'big3') {        // Big3 순서 변경
+    e.preventDefault();
+    const row = e.target.closest('.tb-big3-row');
+    const from = dragItem.idx;
+    dragItem = null; clearDropHints();
+    if (row) tbMoveBig3(from, +row.dataset.idx); else render();
+    return;
+  }
   if (dragItem && dragItem.kind === 'maptodo') {     // 구조도: 미배정 할 일 → 보드에 배정
     e.preventDefault();
     const node = e.target.closest('.mapnode');

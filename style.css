@@ -331,6 +331,9 @@ footer button:hover{border-color:var(--accent);color:var(--text)}
 .tb-big3-row.done{opacity:.75}
 .tb-big3-row.empty{border-style:dashed;cursor:default}
 .tb-big3-row.drop-into{outline:2px dashed var(--accent);outline-offset:-1px;background:var(--accent-soft)}
+.tb-big3-row.tb-reorder-over{box-shadow:inset 0 3px 0 var(--accent)}
+.tb-grip{flex:none;cursor:grab;color:var(--faint);font-size:13px;line-height:1;letter-spacing:-2px;padding:0 1px}
+.tb-grip:hover{color:var(--accent)}
 .tb-chip{width:13px;height:13px;border-radius:4px;flex:none}
 .tb-title{flex:1;font-size:14px;min-width:60px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tb-empty-txt{flex:1;font-size:12.5px;color:var(--faint)}
