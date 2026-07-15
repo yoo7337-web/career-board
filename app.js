@@ -119,7 +119,7 @@ function ensureDevlog() {
 const SNAP_KEY = 'board-v2-snaps', SNAP_MAX = 30, SNAP_LOCAL_MAX = 12, SNAP_MIN_MS = 90000;
 let backupSnaps = [], unsubBackup = null, lastSnapHash = '', lastSnapTime = 0;
 function localSnaps() { try { return JSON.parse(localStorage.getItem(SNAP_KEY) || '[]'); } catch (e) { return []; } }
-function stateHash(s) { try { return JSON.stringify([s.projects, s.cards, s.groups, s.notes, s.schedules, s.devlog]); } catch (e) { return 't' + Date.now(); } }
+function stateHash(s) { try { return JSON.stringify([s.projects, s.cards, s.groups, s.notes, s.schedules, s.timebox, s.journal, s.devlog]); } catch (e) { return 't' + Date.now(); } }
 function snapSummary(st) {
   const p = st && st.projects ? st.projects.length : 0;
   const c = st && st.cards ? st.cards.length : 0;
@@ -176,6 +176,21 @@ function mergeById(local, cloud) {
   (local || []).forEach(x => { if (x && x.id) byId.set(x.id, x); });   // 같은 id는 로컬(최신) 우선, 한쪽에만 있는 항목은 모두 보존
   return [...byId.values()];
 }
+// 타임박스 하루 병합: 빈(방금 열어서 생긴) 항목이 채워진 항목을 덮지 않도록 항목별·칸별 병합
+function mergeTimeboxDay(loc, cld) {
+  if (!loc) return cld;
+  if (!cld) return loc;
+  const n = Math.max((loc.big3 || []).length, (cld.big3 || []).length, 3);
+  const big3 = [];
+  for (let i = 0; i < n; i++) big3.push((loc.big3 && loc.big3[i]) || (cld.big3 && cld.big3[i]) || null);
+  return { big3, slots: Object.assign({}, cld.slots, loc.slots) };
+}
+function mergeByDate(locMap, cldMap, dayFn) {
+  const out = {};
+  const keys = new Set([...Object.keys(cldMap || {}), ...Object.keys(locMap || {})]);
+  keys.forEach(k => { out[k] = dayFn((locMap || {})[k], (cldMap || {})[k]); });
+  return out;
+}
 // 유실 방지 병합(union): 로컬·클라우드 어느 쪽에만 있는 항목도 모두 살림
 function mergeStates(local, cloud) {
   const m = Object.assign({}, cloud, local);
@@ -184,10 +199,12 @@ function mergeStates(local, cloud) {
   m.groups = mergeById(local.groups, cloud.groups);
   m.notes = mergeById(local.notes, cloud.notes);
   m.schedules = mergeById(local.schedules, cloud.schedules);
-  m.timebox = Object.assign({}, cloud.timebox, local.timebox);
-  m.journal = Object.assign({}, cloud.journal, local.journal);
+  m.timebox = mergeByDate(local.timebox, cloud.timebox, mergeTimeboxDay);
+  m.journal = mergeByDate(local.journal, cloud.journal, (l, c) => Object.assign({}, c, l));   // 날짜별 필드 병합(auto/memo/ai 보존)
   m.settings = Object.assign({}, cloud.settings, local.settings);
-  m.devlog = local.devlog || cloud.devlog;
+  m.devlog = (local.devlog && cloud.devlog)
+    ? { done: mergeById(local.devlog.done, cloud.devlog.done), future: mergeById(local.devlog.future, cloud.devlog.future) }
+    : (local.devlog || cloud.devlog);
   m.sel = local.sel || cloud.sel;
   return m;
 }
