@@ -192,8 +192,12 @@ function mergeStates(local, cloud) {
   return m;
 }
 if (typeof document !== 'undefined') {
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushWrite(); });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') flushWrite();
+    else if (document.visibilityState === 'visible') resyncOnWake();   // 잠자던 탭 복원 → 서버 최신 확인 전 쓰기 잠금
+  });
   window.addEventListener('pagehide', flushWrite);
+  window.addEventListener('pageshow', e => { if (e.persisted) resyncOnWake(); });   // bfcache 복원 대응
 }
 
 function loadScript(src) {
@@ -216,53 +220,70 @@ async function initCloud() {
     render();
   }
 }
+function normalizeState() {
+  state.sel = state.sel || { view: 'board' };
+  state.groups = state.groups || [];
+  state.notes = state.notes || [];
+  state.timebox = state.timebox || {};
+  state.journal = state.journal || {};
+  state.settings = state.settings || {};
+  state.schedules = state.schedules || [];
+}
+// 클라우드 상태 적용(모든 수신 공통): 로컬에 미동기화 편집이 있으면 union 병합, 아니면 교체
+function applyCloudState(remote) {
+  if (remote.savedAt && state.savedAt === remote.savedAt) { boardLoaded = true; return; }   // 동일 상태 에코 → 재렌더 불필요
+  let cached = null;
+  try { cached = JSON.parse(localStorage.getItem(LS_KEY) || 'null'); } catch (e) { cached = null; }
+  if (cached && cached.groups && localCacheNewer(cached, remote)) {
+    console.warn('로컬이 클라우드보다 최신 → 병합(union) 후 재동기화 (양쪽 데이터 보존)');
+    state = mergeStates(cached, remote);
+    normalizeState();
+    localStorage.setItem(LS_KEY, JSON.stringify(state));
+    render();
+    boardLoaded = true;
+    pushSnapshot(true);   // 병합 결과 스냅샷
+    doCloudWrite();       // 병합본을 클라우드로 밀어올림
+    return;
+  }
+  applyingRemote = true;
+  state = remote;
+  normalizeState();
+  localStorage.setItem(LS_KEY, JSON.stringify(state));
+  render();
+  applyingRemote = false;
+  boardLoaded = true;
+  if (ensureDevlog()) { save(); render(); }
+  if (journalFreeze()) save();
+  pushSnapshot();
+}
 function subscribeBoard(uid) {
   render();
   if (unsubDoc) unsubDoc();
-  let firstSnap = true;
   unsubDoc = db.collection('boards').doc(uid).onSnapshot(snap => {
     if (snap.metadata.hasPendingWrites) return;
     const data = snap.data();
     if (data && data.state) {
-      boardLoaded = true;   // 첫 서버 스냅샷 수신 → 이제부터 클라우드 쓰기 허용
-      // 최초 로드 시: 로컬 캐시가 클라우드보다 최신이면(미동기화 편집) 양쪽을 병합해 재동기화 — 어느 쪽도 잃지 않음
-      if (firstSnap) {
-        firstSnap = false;
-        let cached = null;
-        try { cached = JSON.parse(localStorage.getItem(LS_KEY) || 'null'); } catch (e) { cached = null; }
-        if (cached && cached.groups && localCacheNewer(cached, data.state)) {
-          console.warn('로컬 캐시가 클라우드보다 최신 → 병합(union) 후 재동기화 (양쪽 데이터 보존)');
-          state = mergeStates(cached, data.state);
-          state.sel = state.sel || { view: 'board' }; state.groups = state.groups || []; state.notes = state.notes || [];
-          state.timebox = state.timebox || {}; state.journal = state.journal || {}; state.settings = state.settings || {}; state.schedules = state.schedules || [];
-          localStorage.setItem(LS_KEY, JSON.stringify(state));
-          render();
-          pushSnapshot(true);   // 병합 결과 스냅샷
-          doCloudWrite();       // 병합본을 클라우드로 밀어올림
-          return;
-        }
-      }
-      applyingRemote = true;
-      state = data.state;
-      state.sel = state.sel || { view: 'board' };
-      state.groups = state.groups || [];
-      state.notes = state.notes || [];
-      state.timebox = state.timebox || {};
-      state.journal = state.journal || {};
-      state.settings = state.settings || {};
-      state.schedules = state.schedules || [];
-      localStorage.setItem(LS_KEY, JSON.stringify(state));
-      render();
-      applyingRemote = false;
-      if (ensureDevlog()) { save(); render(); }
-      if (journalFreeze()) save();
-      pushSnapshot();
+      applyCloudState(data.state);
     } else {
-      firstSnap = false; boardLoaded = true;   // 신규 사용자: 문서 없음 → 쓰기 허용
+      boardLoaded = true;   // 신규 사용자: 문서 없음 → 쓰기 허용
       ensureDevlog();
       db.collection('boards').doc(uid).set({ state, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
     }
   }, err => console.warn('snapshot error', err));
+}
+// 탭이 깨어날 때(모바일 탭 복원 등): 쓰기를 잠그고 서버 최신본을 강제로 받아 병합 후 재개
+// — 잠자던 탭의 옛 상태가 다른 기기의 새 데이터를 덮어쓰는 사고 방지
+function resyncOnWake() {
+  if (!(CLOUD && db && authUser)) return;
+  boardLoaded = false;                       // 동기화 확인 전까지 클라우드 쓰기 금지 (로컬 저장은 계속됨)
+  clearTimeout(writeTimer); writeTimer = null;   // 잠들기 전 예약된 옛 상태 쓰기 폐기
+  db.collection('boards').doc(authUser.uid).get()
+    .then(snap => {
+      const data = snap.data();
+      if (data && data.state) applyCloudState(data.state);
+      else boardLoaded = true;
+    })
+    .catch(() => { /* 오프라인: 쓰기 잠금 유지 — 편집은 로컬에 쌓이고 다음 동기화 때 병합됨 */ });
 }
 function authErr(e) {
   const c = e.code || '';
