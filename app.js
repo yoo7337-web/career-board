@@ -518,7 +518,7 @@ function openSchedModal(id, groupPrefill) {
     <label>내용<input type="text" id="m-stitle" value="${s ? esc(s.title) : ''}" placeholder="예: 반기검토 보고서 제출 / 감사보고서 마감"></label>
     <div class="two">
       <label>마감일<input type="date" id="m-sdate" value="${s ? (s.date || '') : todayStr()}"></label>
-      <label>시간 (선택 — 입력 시 타임박스에 표시)<input type="time" id="m-stime" value="${s ? (s.time || '') : ''}"></label>
+      <label title="입력하면 타임박스 해당 시간칸에 표시됩니다">시간 (선택)<input type="time" id="m-stime" value="${s ? (s.time || '') : ''}"></label>
     </div>
     <label>프로젝트<select id="m-sgroup">
       ${(state.groups || []).map(g => `<option value="${g.id}" ${gid === g.id ? 'selected' : ''}>${esc(g.name)}</option>`).join('')}
@@ -1191,9 +1191,9 @@ function renderDash() {
     ${gpRows.length
       ? `<div class="dash-top">
           <section class="dash-sec"><div class="dash-sec-head"><h2>📊 프로젝트 진행률 <span class="cnt">${gpRows.length}</span></h2><span class="dash-sub">완수/전체</span></div><div class="dash-list gp-list">${gpRows.join('')}</div></section>
-          ${dashSection('🔥 급한 업무', '마감 임박·지남 또는 중요도 높음 · 스크롤', urgent, '급한 업무가 없어요 👍', null, { id: 'sec-urgent' })}
+          ${dashSection('🔥 급한 업무', '마감 임박·지남 또는 중요도 높음', urgent, '급한 업무가 없어요 👍', null, { id: 'sec-urgent' })}
         </div>`
-      : dashSection('🔥 급한 업무', '마감 임박·지남 또는 중요도 높음 · 스크롤', urgent, '급한 업무가 없어요 👍', null, { full: true, id: 'sec-urgent' })}
+      : dashSection('🔥 급한 업무', '마감 임박·지남 또는 중요도 높음', urgent, '급한 업무가 없어요 👍', null, { full: true, id: 'sec-urgent' })}
     ${upcomingSchedSec()}
     <div class="dash-flow">
       ${dashSection('📅 예정', '마감 임박순', todo, '예정 업무가 없어요', 10, { id: 'sec-todo', stage: 'todo', hidePill: true })}
