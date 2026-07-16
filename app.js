@@ -1994,6 +1994,7 @@ function render() {
       <h1>업무 보드</h1>
       <nav class="views">${nav}</nav>
       <span class="week-count">이번 주 ${weekDone()}개 완료</span>
+      <button class="theme-toggle" data-action="theme-toggle" title="${document.documentElement.dataset.theme === 'dark' ? '밝은 테마로 전환' : '어두운 테마로 전환'}">${document.documentElement.dataset.theme === 'dark' ? '☀️' : '🌙'}</button>
     </header>
     ${view === 'map' ? renderMap() : view === 'cal' ? renderCal() : view === 'devlog' ? renderDevlog() : view === 'dash' ? renderDash() : view === 'notes' ? renderNotes() : view === 'journal' ? renderJournal() : view === 'tbox' ? renderTbox() : renderBoardView()}
     <footer>
@@ -2318,6 +2319,12 @@ document.addEventListener('click', e => {
   }
   else if (act === 'dash-big3-go') { state.sel.view = 'tbox'; state.sel.tboxDate = todayStr(); render(); }
   else if (act === 'dash-week-go') { state.sel.view = 'cal'; state.sel.calYm = todayStr().slice(0, 7); render(); }
+  else if (act === 'theme-toggle') {
+    const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem('board-theme', next); } catch (e) { }
+    render();
+  }
   else if (act === 'jr-memo') openJrMemoModal(el.dataset.date);
   else if (act === 'jr-memo-save') {
     const v = document.getElementById('m-jrmemo').value.trim();

@@ -4,6 +4,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>업무 보드</title>
+<script>
+// 테마를 CSS 로드 전에 결정(FOUC 방지): 저장된 선택 > OS 설정
+(function(){
+  var t = null;
+  try { t = localStorage.getItem('board-theme'); } catch(e){}
+  if (t !== 'light' && t !== 'dark') t = (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+  document.documentElement.dataset.theme = t;
+})();
+</script>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>

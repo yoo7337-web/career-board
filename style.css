@@ -7,15 +7,16 @@
   --ok:#1d9e75;
   --radius:10px;
 }
-@media (prefers-color-scheme:dark){
-  :root{
-    --bg:#1d1d1b; --surface:#282826; --text:#ecebe5; --muted:#a5a49c; --faint:#7c7b74;
-    --border:#3b3b37; --accent:#8f86e6; --accent-soft:#37325e;
-    --danger-bg:#4a2020; --danger-fg:#f0a5a5;
-    --warn-bg:#4a3a18; --warn-fg:#f4c877;
-    --ok:#5dcaa5;
-  }
+/* 테마는 <html data-theme>로 제어 (index.html 인라인 스크립트가 저장값/OS 설정으로 초기화, 헤더 토글로 전환) */
+:root[data-theme=dark]{
+  --bg:#1d1d1b; --surface:#282826; --text:#ecebe5; --muted:#a5a49c; --faint:#7c7b74;
+  --border:#3b3b37; --accent:#8f86e6; --accent-soft:#37325e;
+  --danger-bg:#4a2020; --danger-fg:#f0a5a5;
+  --warn-bg:#4a3a18; --warn-fg:#f4c877;
+  --ok:#5dcaa5;
 }
+:root[data-theme=light]{color-scheme:light}
+:root[data-theme=dark]{color-scheme:dark}
 body{margin:0;background:var(--bg);color:var(--text);font:15px/1.55 'Segoe UI','Malgun Gothic',system-ui,sans-serif;overflow-x:hidden}
 #app{max-width:1100px;margin:0 auto;padding:20px 16px 60px}
 /* 구조도: 헤더/푸터는 고정(1100), 지도만 뷰포트 전체폭으로 full-bleed */
@@ -27,6 +28,8 @@ header h1{font-size:20px;margin:0;font-weight:600}
 .views button{border:0;background:transparent;color:var(--muted);font:inherit;font-size:13.5px;padding:5px 16px;border-radius:999px;cursor:pointer}
 .views button.on{background:var(--accent);color:#fff}
 .week-count{margin-left:auto;font-size:13px;color:var(--muted)}
+.theme-toggle{border:1px solid var(--border);background:var(--surface);border-radius:999px;width:34px;height:34px;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
+.theme-toggle:hover{border-color:var(--accent)}
 
 .legend{display:flex;align-items:center;gap:14px;font-size:12.5px;color:var(--muted);margin-bottom:12px;flex-wrap:wrap}
 .legend .lg{display:inline-flex;align-items:center;gap:5px}
@@ -47,17 +50,15 @@ header h1{font-size:20px;margin:0;font-weight:600}
 .c-green{background:#EAF3DE;color:#27500A}
 .c-amber{background:#FAEEDA;color:#633806}
 .c-red{background:#FCEBEB;color:#791F1F}
-@media (prefers-color-scheme:dark){
-  .c-purple{background:#3C3489;color:#CECBF6}
-  .c-teal{background:#085041;color:#9FE1CB}
-  .c-coral{background:#712B13;color:#F5C4B3}
-  .c-pink{background:#72243E;color:#F4C0D1}
-  .c-gray{background:#444441;color:#D3D1C7}
-  .c-blue{background:#0C447C;color:#B5D4F4}
-  .c-green{background:#27500A;color:#C0DD97}
-  .c-amber{background:#633806;color:#FAC775}
-  .c-red{background:#791F1F;color:#F7C1C1}
-}
+[data-theme=dark] .c-purple{background:#3C3489;color:#CECBF6}
+[data-theme=dark] .c-teal{background:#085041;color:#9FE1CB}
+[data-theme=dark] .c-coral{background:#712B13;color:#F5C4B3}
+[data-theme=dark] .c-pink{background:#72243E;color:#F4C0D1}
+[data-theme=dark] .c-gray{background:#444441;color:#D3D1C7}
+[data-theme=dark] .c-blue{background:#0C447C;color:#B5D4F4}
+[data-theme=dark] .c-green{background:#27500A;color:#C0DD97}
+[data-theme=dark] .c-amber{background:#633806;color:#FAC775}
+[data-theme=dark] .c-red{background:#791F1F;color:#F7C1C1}
 
 /* board view */
 .inbox{margin:0}
@@ -180,7 +181,7 @@ body.dragging-board .delete-lane{display:flex}
 .map-region{position:absolute;border-radius:16px;border:2px dashed rgba(0,0,0,.15);opacity:.55;pointer-events:none}
 .map-region-label{position:absolute;top:8px;left:14px;font-size:12.5px;font-weight:700;opacity:1;pointer-events:auto;cursor:grab;user-select:none;padding:2px 8px;border-radius:8px}
 .map-region-label:hover{outline:2px solid var(--accent);outline-offset:1px}
-@media (prefers-color-scheme:dark){.map-region{border-color:rgba(255,255,255,.18)}}
+[data-theme=dark] .map-region{border-color:rgba(255,255,255,.18)}
 .mapnode{position:absolute;width:150px;min-height:44px;border-radius:10px;padding:10px 12px;cursor:grab;
   box-shadow:0 1px 3px rgba(0,0,0,.15);border:1px solid rgba(0,0,0,.06);touch-action:none;user-select:none}
 .mapnode.dragging{opacity:.85;cursor:grabbing}
