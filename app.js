@@ -580,15 +580,16 @@ function renderBoardView() {
       <form class="quick" data-project="__inbox"><input name="t" placeholder="+ 예정 할 일 추가" autocomplete="off"></form>
     </div>
   </section>`;
-  let page, topArea = inboxHtml;   // 기본: 미배정 예정 전체폭
+  // 상단 2단: 좌=미배정 예정 / 우=미분류 보드 — 전체·개별 프로젝트 공통
+  // (사이드바에서 '미분류'를 고른 경우엔 본문이 곧 미분류라 중복 방지 위해 미배정만)
+  const unassignedPanel = `<section class="top-panel">
+      <div class="tp-head"><span class="tp-title">📄 미분류 보드</span><span class="tp-cnt">${bCount('')}</span></div>
+      <p class="tp-sub">프로젝트에 속하지 않은 보드 · 사이드바 프로젝트로 끌어 편입</p>
+      ${groupSecHtml('', true)}
+    </section>`;
+  const splitTop = `<div class="board-top">${inboxHtml}${unassignedPanel}</div>`;
+  let page, topArea = sel === '' ? inboxHtml : splitTop;
   if (sel === '__all') {
-    // 상단 2단: 좌=미배정 예정 / 우=미분류 보드
-    topArea = `<div class="board-top">${inboxHtml}
-      <section class="top-panel">
-        <div class="tp-head"><span class="tp-title">📄 미분류 보드</span><span class="tp-cnt">${bCount('')}</span></div>
-        <p class="tp-sub">프로젝트에 속하지 않은 보드 · 사이드바 프로젝트로 끌어 편입</p>
-        ${groupSecHtml('', true)}
-      </section></div>`;
     const allScheds = (state.schedules || []).slice().sort(schedSort);
     const schedPanel = `<section class="sched-panel">
         <div class="group-head"><span class="gname">📌 일정 · 마감 (전체)</span><span class="gcnt">${allScheds.length}</span><button class="mini-btn" data-action="sched-add">+ 일정 추가</button></div>
