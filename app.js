@@ -432,11 +432,13 @@ function cardHtml(c) {
   </div>`;
 }
 
+const openDoneLanes = new Set();   // 완수 레인 펼침 상태 (세션 한정 — 기본 접힘)
 function panelHtml(b, depth) {
   const parent = b.parent ? boardById(b.parent) : null;
   const todo = cardsOf(b.id, 'todo');
   const doing = cardsOf(b.id, 'doing');
   const done = cardsOf(b.id, 'done').sort((a, c) => (c.doneAt || '').localeCompare(a.doneAt || ''));
+  const doneOpen = openDoneLanes.has(b.id);
   return `<section class="board-panel" data-board="${b.id}" style="margin-left:${depth * 22}px">
     <div class="panel-head">
       <span class="bname board-drag c-${b.color}" draggable="true" data-action="board-edit" data-id="${b.id}" title="클릭=설정 · 끌어서 다른 보드 위/아래에 놓으면 상하 구조">${esc(b.name)}</span>
@@ -452,11 +454,46 @@ function panelHtml(b, depth) {
         <h3>진행 중 <span class="cnt">${doing.length}</span></h3>
         ${doing.map(cardHtml).join('') || '<div class="empty">지금 할 1~3장을 여기로 끌어오세요</div>'}
       </div>
-      <div class="col done-col" data-status="done">
-        <h3>완수 <span class="cnt">${done.length}</span></h3>
+      ${doneOpen
+        ? `<div class="col done-col" data-status="done">
+        <h3 data-action="lane-toggle" data-board="${b.id}" title="접기">완수 <span class="cnt">${done.length}</span> <span class="lane-arrow">▾</span></h3>
         ${done.slice(0, 20).map(cardHtml).join('') || '<div class="empty">끝내면 여기로!</div>'}
-      </div>
+      </div>`
+        : `<div class="col done-col col-collapsed" data-status="done">
+        <h3 data-action="lane-toggle" data-board="${b.id}" title="펼치기">완수 <span class="cnt">${done.length}</span> <span class="lane-arrow">▸</span></h3>
+        <div class="drop-strip">카드를 여기로 끌면 완수</div>
+      </div>`}
     </div>
+  </section>`;
+}
+/* ✅ 완수 아카이브 (프로젝트 페이지): 보드별 그룹핑 + 월 필터 + 검색 + FU */
+function archivePanelHtml(gid) {
+  const gBoards = orderedBoardsIn(gid || null).map(x => x.board);
+  const mSel = state.sel.archMonth || '';
+  const ym = todayStr().slice(0, 7);
+  const lastYm = (() => { const [y, m] = ym.split('-').map(Number); return dstr(new Date(y, m - 2, 1)).slice(0, 7); })();
+  const inMonth = c => !mSel || (c.doneAt || '').slice(0, 7) === mSel;
+  let total = 0, body = '';
+  gBoards.forEach(b => {
+    const done = state.cards.filter(c => c.project === b.id && c.status === 'done' && c.doneAt && inMonth(c))
+      .sort((a, c) => (c.doneAt || '').localeCompare(a.doneAt || ''));
+    if (!done.length) return;
+    total += done.length;
+    body += `<div class="arch-board-h"><span class="drow-proj c-${b.color}">${esc(b.name)}</span><span class="gcnt">${done.length}</span></div>`;
+    body += done.map(c => `<div class="arch-row" data-action="card" data-id="${c.id}" data-text="${esc(c.title.toLowerCase())}" title="클릭=수정">
+        <span class="arch-date">✓ ${fmtDate(c.doneAt)}</span>
+        <span class="arch-t">${esc(c.title)}</span>
+        ${c.note ? `<span class="card-note" data-note="${esc(c.note)}">💬</span>` : ''}
+        <button class="mini-btn fu-btn" data-action="card-fu" data-id="${c.id}" title="이 완수건의 후속 할 일(FU) 만들기">→ FU</button>
+      </div>`).join('');
+  });
+  const pill = (v, label) => `<button class="fpill ${mSel === v ? 'on' : ''}" data-action="arch-month" data-m="${v}">${label}</button>`;
+  return `<section class="sched-panel arch-panel">
+    <div class="group-head"><span class="gname">✅ 완수 아카이브</span><span class="gcnt">${total}</span>
+      <span class="arch-filter">${pill('', '전체')}${pill(ym, '이번 달')}${pill(lastYm, '지난 달')}</span>
+      <input type="search" id="arch-q" placeholder="🔍 완수 내역 검색" autocomplete="off">
+    </div>
+    ${total ? `<div class="arch-list slim-scroll">${body}</div>` : `<div class="empty">${mSel ? '이 달에 완수한 내역이 없어요' : '아직 완수한 내역이 없어요'}</div>`}
   </section>`;
 }
 
@@ -621,7 +658,7 @@ function renderBoardView() {
         <span class="prop-chip">🗂 보드 ${gBoards.length}</span>
         <span class="prop-chip">✅ 진행 ${doneCnt}/${gCards.length}</span>
         ${schedChip}
-      </div>` + schedPanel + groupSecHtml(sel, true);
+      </div>` + schedPanel + archivePanelHtml(sel) + groupSecHtml(sel, true);
   }
   return legendHtml()
     + `<div class="board-wrap">${side}<div class="board-page">
@@ -2417,6 +2454,15 @@ document.addEventListener('click', e => {
   else if (act === 'note-edit') { noteEditing = el.dataset.id; noteDraft = null; render(); }
   else if (act === 'ne-cancel') { noteEditing = undefined; noteDraft = null; render(); }
   else if (act === 'note-board-nav') { state.sel.noteBoard = el.dataset.bid; render(); }
+  else if (act === 'lane-toggle') { const bid = el.dataset.board; openDoneLanes.has(bid) ? openDoneLanes.delete(bid) : openDoneLanes.add(bid); render(); }
+  else if (act === 'arch-month') { state.sel.archMonth = el.dataset.m; render(); }
+  else if (act === 'card-fu') {
+    const src = state.cards.find(x => x.id === el.dataset.id);
+    if (src) {
+      state.cards.push({ id: uid(), project: src.project, title: 'FU: ' + src.title, status: 'todo', priority: 'med', due: null, doneAt: null, note: `원본 완수건: ${src.title} (완수 ${src.doneAt})`, createdAt: todayStr() });
+      render();
+    }
+  }
   else if (act === 'note-todo') openNoteTodoModal(el.dataset.id);
   else if (act === 'note-save') {
     const title = document.getElementById('m-ntitle').value.trim();
@@ -2941,6 +2987,13 @@ document.addEventListener('input', e => {
   if (e.target.id === 'note-q') {                 // 기록 검색 — render 없이 필터(포커스 유지)
     const q = e.target.value.trim().toLowerCase();
     document.querySelectorAll('.note-item').forEach(it => {
+      it.style.display = !q || (it.dataset.text || '').includes(q) ? '' : 'none';
+    });
+    return;
+  }
+  if (e.target.id === 'arch-q') {                 // 완수 아카이브 검색 — 동일 패턴
+    const q = e.target.value.trim().toLowerCase();
+    document.querySelectorAll('.arch-row').forEach(it => {
       it.style.display = !q || (it.dataset.text || '').includes(q) ? '' : 'none';
     });
     return;
