@@ -474,17 +474,41 @@ function schedSort(a, b) {   // 미완료 먼저 → 마감일 오름차순 → 
   if (a.done) return (b.doneAt || '').localeCompare(a.doneAt || '');
   return (a.date || '').localeCompare(b.date || '');
 }
-function schedRow(s) {
+function schedRow(s, hideProj) {
   const g = s.group ? groupById(s.group) : null;
   const badge = s.done ? `<span class="tag">${s.doneAt ? fmtDate(s.doneAt) + ' 완료' : '완료'}</span>` : dueBadge(s.date);
-  return `<div class="sched-row ${s.done ? 'done' : ''}" data-action="sched-edit" data-id="${s.id}" title="클릭해서 수정">
-    <input type="checkbox" data-action="sched-toggle" data-id="${s.id}" ${s.done ? 'checked' : ''} title="완료 체크">
-    ${g ? `<span class="drow-proj c-${g.color}">${esc(g.name)}</span>` : ''}
+  return `<div class="sched-row ${s.done ? 'done' : ''}" data-action="sched-edit" data-id="${s.id}" title="클릭해서 수정·삭제">
+    <span class="sched-pin">📌</span>
+    ${!hideProj && g ? `<span class="drow-proj c-${g.color}">${esc(g.name)}</span>` : ''}
     <span class="sched-t">${esc(s.title)}</span>
     ${s.time ? `<span class="sched-time">🕐 ${s.time}</span>` : ''}
     ${s.note ? '<span class="card-note" data-note="' + esc(s.note) + '">💬</span>' : ''}
     ${badge}
   </div>`;
+}
+function schedProjOrder(s) {
+  const key = s.group || '';
+  if (key === '') return 99999;                       // 미분류는 뒤
+  const i = (state.groups || []).findIndex(g => g.id === key);
+  return i < 0 ? 99998 : i;
+}
+function schedGroupHeader(gid) {
+  const g = gid ? groupById(gid) : null;
+  return `<div class="dash-grp">${g ? `<span class="drow-proj c-${g.color}">${esc(g.name)}</span>` : '📄 미분류'}</div>`;
+}
+function schedRowsGrouped(list) {   // 프로젝트별 그룹 헤더 + 그 안에서 마감일순
+  const sorted = list.slice().sort((a, b) => {
+    const pa = schedProjOrder(a), pb = schedProjOrder(b);
+    if (pa !== pb) return pa - pb;
+    return schedSort(a, b);
+  });
+  let html = '', last = '__init';
+  sorted.forEach(s => {
+    const k = s.group || '';
+    if (k !== last) { last = k; html += schedGroupHeader(k); }
+    html += schedRow(s, true);
+  });
+  return html;
 }
 function openSchedModal(id, groupPrefill) {
   const s = id ? schedById(id) : null;
@@ -568,7 +592,7 @@ function renderBoardView() {
     const allScheds = (state.schedules || []).slice().sort(schedSort);
     const schedPanel = `<section class="sched-panel">
         <div class="group-head"><span class="gname">📌 일정 · 마감 (전체)</span><span class="gcnt">${allScheds.length}</span><button class="mini-btn" data-action="sched-add">+ 일정 추가</button></div>
-        ${allScheds.length ? `<div class="sched-list">${allScheds.map(schedRow).join('')}</div>` : '<div class="empty">보고서 제출·마감 등 프로젝트 일정을 추가하세요 (추가 시 프로젝트 선택)</div>'}
+        ${allScheds.length ? `<div class="sched-list">${schedRowsGrouped(allScheds)}</div>` : '<div class="empty">보고서 제출·마감 등 프로젝트 일정을 추가하세요 (추가 시 프로젝트 선택)</div>'}
       </section>`;
     page = schedPanel + groups.map(g => groupSecHtml(g.id)).join('');   // 미분류는 상단으로 이동
   } else {
@@ -586,7 +610,7 @@ function renderBoardView() {
     const schedChip = nextSched ? `<span class="prop-chip sched-chip" data-action="sched-edit" data-id="${nextSched.id}" title="다가오는 일정">📌 ${esc(nextSched.title)} · ${dd < 0 ? -dd + '일 지남' : dd === 0 ? 'D-day' : 'D-' + dd}</span>` : '';
     const schedPanel = `<section class="sched-panel">
         <div class="group-head"><span class="gname">📌 일정 · 마감</span><span class="gcnt">${scheds.length}</span><button class="mini-btn" data-action="sched-add" data-group="${sel}">+ 일정 추가</button></div>
-        ${scheds.length ? `<div class="sched-list">${scheds.map(schedRow).join('')}</div>` : '<div class="empty">보고서 제출·마감 등 이 프로젝트의 일정을 추가하세요</div>'}
+        ${scheds.length ? `<div class="sched-list">${scheds.map(s => schedRow(s, true)).join('')}</div>` : '<div class="empty">보고서 제출·마감 등 이 프로젝트의 일정을 추가하세요</div>'}
       </section>`;
     page = `<div class="page-head"><span class="page-icon c-${g ? g.color : 'gray'}">📁</span><h2 class="page-title">${esc(gname)}</h2>
         ${g ? `<button class="mini-btn" data-action="group-edit" data-id="${g.id}">설정</button>` : ''}
@@ -1092,8 +1116,8 @@ function upcomingSchedSec() {
     const dd = dday(s.date);
     const over = dd < 0 ? ' overdue' : '';
     return `<div class="drow${over}" data-kind="sched" data-id="${s.id}" title="클릭=수정 · 더블클릭=보드로 이동">
-      <input type="checkbox" data-action="sched-toggle" data-id="${s.id}" title="완료 체크">
-      <div class="drow-body"><div class="drow-l1"><span class="drow-title">${esc(s.title)}</span></div>
+      <span class="drow-prio sched-dot">📌</span>
+      <div class="drow-body"><div class="drow-l1"><span class="drow-title">${esc(s.title)}</span>${s.time ? `<span class="sched-time">🕐 ${s.time}</span>` : ''}</div>
         <div class="drow-meta">${g ? `<span class="drow-proj c-${g.color}">${esc(g.name)}</span>` : ''}${dueBadge(s.date)}</div></div>
     </div>`;
   };
@@ -1167,9 +1191,9 @@ function renderDash() {
     ${gpRows.length
       ? `<div class="dash-top">
           <section class="dash-sec"><div class="dash-sec-head"><h2>📊 프로젝트 진행률 <span class="cnt">${gpRows.length}</span></h2><span class="dash-sub">완수/전체</span></div><div class="dash-list gp-list">${gpRows.join('')}</div></section>
-          ${dashSection('🔥 급한 업무', '마감 임박·지남 또는 중요도 높음', urgent, '급한 업무가 없어요 👍', 8, { id: 'sec-urgent' })}
+          ${dashSection('🔥 급한 업무', '마감 임박·지남 또는 중요도 높음 · 스크롤', urgent, '급한 업무가 없어요 👍', null, { id: 'sec-urgent' })}
         </div>`
-      : dashSection('🔥 급한 업무', '마감 임박·지남 또는 중요도 높음', urgent, '급한 업무가 없어요 👍', 8, { full: true, id: 'sec-urgent' })}
+      : dashSection('🔥 급한 업무', '마감 임박·지남 또는 중요도 높음 · 스크롤', urgent, '급한 업무가 없어요 👍', null, { full: true, id: 'sec-urgent' })}
     ${upcomingSchedSec()}
     <div class="dash-flow">
       ${dashSection('📅 예정', '마감 임박순', todo, '예정 업무가 없어요', 10, { id: 'sec-todo', stage: 'todo', hidePill: true })}
@@ -1368,6 +1392,21 @@ function tbData(date) {
   return d;
 }
 function tbSum(d, idx) { return Object.values(d.slots).filter(v => v === idx).length * 0.5; }
+// 카드가 삭제되면(보드 삭제 포함) 모든 날짜의 Big3에서도 제거 + 배정 시간칸 정리
+function purgeTimeboxCards(cardIds) {
+  const ids = new Set(cardIds);
+  if (!ids.size) return;
+  Object.values(state.timebox || {}).forEach(d => {
+    if (!d || !d.big3) return;
+    d.big3.forEach((b, i) => {
+      if (!b || !ids.has(b.cardId)) return;
+      d.big3[i] = null;
+      Object.keys(d.slots || {}).forEach(k => { if (d.slots[k] === i) delete d.slots[k]; });
+    });
+    while (d.big3.length > 3 && d.big3[d.big3.length - 1] == null) d.big3.pop();
+  });
+  tbSel = null;
+}
 // Big3 항목의 완수 여부는 실제 카드 상태를 진실의 원천으로 사용 → 어느 날짜에서 완료해도 모든 날에 반영
 function tbDone(b) {
   if (!b) return false;
@@ -1481,8 +1520,9 @@ function renderTbox() {
       const v = d.slots[k];
       const doneSlot = v !== undefined && tbDone(d.big3[v]);
       const ss = schedBySlot[k];
-      const mark = ss ? `<span class="tb-sched-mark ${ss.every(x => x.done) ? 'done' : ''}" title="${esc(ss.map(x => x.time + ' ' + x.title).join('\n'))}">📌 ${esc(ss[0].title)}${ss.length > 1 ? ` 외 ${ss.length - 1}` : ''}</span>` : '';
-      return `<div class="tb-cell${doneSlot ? ' done-slot' : ''}${ss ? ' has-sched' : ''}" data-slot="${k}" ${v !== undefined ? `style="background-color:${tbColor(v).bg};color:${tbColor(v).fg}"` : ''}>${v !== undefined ? v + 1 : ''}${mark}</div>`;
+      const mark = ss ? `<span class="tb-sched-mark" title="${esc(ss.map(x => x.time + ' ' + x.title).join('\n'))}">📌 ${esc(ss[0].title)}${ss.length > 1 ? ` 외 ${ss.length - 1}` : ''}</span>` : '';
+      const num = v !== undefined ? `<span class="tb-cell-num">${v + 1}</span>` : '';
+      return `<div class="tb-cell${doneSlot ? ' done-slot' : ''}${ss ? ' has-sched' : ''}" data-slot="${k}" ${v !== undefined ? `style="background-color:${tbColor(v).bg};color:${tbColor(v).fg}"` : ''}>${num}${mark}</div>`;
     };
     grid += `<div class="tb-row"><span class="tb-hour">${h}</span>${cell(0)}${cell(5)}</div>`;
   }
@@ -2221,11 +2261,6 @@ document.addEventListener('click', e => {
     closeModal(); render();
   }
   else if (act === 'sched-del') { state.schedules = state.schedules.filter(s => s.id !== el.dataset.id); closeModal(); render(); }
-  else if (act === 'sched-toggle') {
-    const s = schedById(el.dataset.id);
-    if (s) { s.done = el.checked; s.doneAt = s.done ? todayStr() : null; }
-    render();
-  }
   else if (act === 'tbox-prev') tbShift(-1);
   else if (act === 'tbox-next') tbShift(1);
   else if (act === 'tbox-today') { state.sel.tboxDate = todayStr(); tbSel = null; render(); }
@@ -2378,6 +2413,7 @@ document.addEventListener('click', e => {
     closeModal(); render();
   }
   else if (act === 'card-del') {
+    purgeTimeboxCards([el.dataset.id]);
     state.cards = state.cards.filter(x => x.id !== el.dataset.id);
     closeModal(); render();
   }
@@ -2400,6 +2436,7 @@ document.addEventListener('click', e => {
     const id = el.dataset.id;
     state.projects.forEach(x => { if (x.parent === id) x.parent = boardById(id).parent || null; });
     state.projects = state.projects.filter(x => x.id !== id);
+    purgeTimeboxCards(state.cards.filter(c => c.project === id).map(c => c.id));   // Big3에서도 제거
     state.cards = state.cards.filter(c => c.project !== id);
     closeModal(); render();
   }
@@ -2651,6 +2688,7 @@ document.addEventListener('drop', e => {
       if (confirm(`'${dragged.name}' 보드를 삭제할까요?${cardCnt ? `\n(포스트잇 ${cardCnt}개도 함께 삭제)` : ''}`)) {
         state.projects.forEach(x => { if (x.parent === draggedId) x.parent = dragged.parent || null; });
         state.projects = state.projects.filter(x => x.id !== draggedId);
+        purgeTimeboxCards(state.cards.filter(c => c.project === draggedId).map(c => c.id));   // Big3에서도 제거
         state.cards = state.cards.filter(c => c.project !== draggedId);
       }
     } else {
