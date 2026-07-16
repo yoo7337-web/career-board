@@ -481,6 +481,7 @@ function schedRow(s) {
     <input type="checkbox" data-action="sched-toggle" data-id="${s.id}" ${s.done ? 'checked' : ''} title="완료 체크">
     ${g ? `<span class="drow-proj c-${g.color}">${esc(g.name)}</span>` : ''}
     <span class="sched-t">${esc(s.title)}</span>
+    ${s.time ? `<span class="sched-time">🕐 ${s.time}</span>` : ''}
     ${s.note ? '<span class="card-note" data-note="' + esc(s.note) + '">💬</span>' : ''}
     ${badge}
   </div>`;
@@ -493,11 +494,12 @@ function openSchedModal(id, groupPrefill) {
     <label>내용<input type="text" id="m-stitle" value="${s ? esc(s.title) : ''}" placeholder="예: 반기검토 보고서 제출 / 감사보고서 마감"></label>
     <div class="two">
       <label>마감일<input type="date" id="m-sdate" value="${s ? (s.date || '') : todayStr()}"></label>
-      <label>프로젝트<select id="m-sgroup">
-        ${(state.groups || []).map(g => `<option value="${g.id}" ${gid === g.id ? 'selected' : ''}>${esc(g.name)}</option>`).join('')}
-        <option value="" ${gid === '' ? 'selected' : ''}>미분류</option>
-      </select></label>
+      <label>시간 (선택 — 입력 시 타임박스에 표시)<input type="time" id="m-stime" value="${s ? (s.time || '') : ''}"></label>
     </div>
+    <label>프로젝트<select id="m-sgroup">
+      ${(state.groups || []).map(g => `<option value="${g.id}" ${gid === g.id ? 'selected' : ''}>${esc(g.name)}</option>`).join('')}
+      <option value="" ${gid === '' ? 'selected' : ''}>미분류</option>
+    </select></label>
     <label>메모 (선택)<input type="text" id="m-snote" value="${s ? esc(s.note || '') : ''}" placeholder="예: 팀장 검토 후 제출"></label>
     <div class="m-actions">
       ${s ? `<button class="danger" data-action="sched-del" data-id="${s.id}">삭제</button>` : ''}
@@ -671,7 +673,7 @@ function regionRects() {
 function renderMap() {
   ensurePositions();
   const regions = regionRects().map(r =>
-    `<div class="map-region c-${r.color}" style="left:${r.x}px;top:${r.y}px;width:${r.w}px;height:${r.h}px"><span class="map-region-label">📁 ${esc(r.name)}</span></div>`).join('');
+    `<div class="map-region c-${r.color}" data-gid="${r.gid}" style="left:${r.x}px;top:${r.y}px;width:${r.w}px;height:${r.h}px"><span class="map-region-label" data-gid="${r.gid}" title="드래그하면 프로젝트 전체 이동">📁 ${esc(r.name)}</span></div>`).join('');
   const nodes = state.projects.map(b => {
     const cs = state.cards.filter(c => c.project === b.id);
     const done = cs.filter(c => c.status === 'done').length;
@@ -741,12 +743,21 @@ function initMap() {
   const CLICK_MS = 300, THRESH = 4;
   let mode = null, id = null, role = null, offx = 0, offy = 0, sx = 0, sy = 0;
   let clickTimer = null, lastId = null, lastTime = 0, cutId = null;
+  let regionGid = null, regionStart = null;   // 구역 드래그: gid + 멤버 시작좌표
 
   map.addEventListener('pointerdown', e => {
     const cut = e.target.closest('.mapcut');
     if (cut) { mode = 'cut'; cutId = cut.dataset.child; e.preventDefault(); return; }
     const cp = e.target.closest('.mp');
     if (cp) { mode = 'link'; id = cp.dataset.id; role = cp.dataset.role; map.classList.add('linking'); map.setPointerCapture(e.pointerId); e.preventDefault(); return; }
+    const rl = e.target.closest('.map-region-label');
+    if (rl) {   // 프로젝트 구역 라벨 드래그 → 소속 보드 전체 이동
+      mode = 'region'; regionGid = rl.dataset.gid; sx = e.clientX; sy = e.clientY;
+      regionStart = {};
+      state.projects.forEach(b => { if ((b.group || null) === regionGid) regionStart[b.id] = { x: b.x, y: b.y }; });
+      map.setPointerCapture(e.pointerId); e.preventDefault();
+      return;
+    }
     const node = e.target.closest('.mapnode');
     if (node) {
       mode = 'pending'; id = node.dataset.id; sx = e.clientX; sy = e.clientY;
@@ -772,6 +783,22 @@ function initMap() {
       b.y = Math.max(0, Math.min(py - offy, map.clientHeight - 30));
       const el = map.querySelector(`.mapnode[data-id="${id}"]`);
       el.style.left = b.x + 'px'; el.style.top = b.y + 'px';
+      drawLines();
+    } else if (mode === 'region') {
+      const dx = e.clientX - sx, dy = e.clientY - sy;
+      Object.keys(regionStart).forEach(bid => {
+        const b = boardById(bid);
+        if (!b) return;
+        b.x = Math.max(0, regionStart[bid].x + dx);
+        b.y = Math.max(0, regionStart[bid].y + dy);
+        const el = map.querySelector(`.mapnode[data-id="${bid}"]`);
+        if (el) { el.style.left = b.x + 'px'; el.style.top = b.y + 'px'; }
+      });
+      const rg = map.querySelector(`.map-region[data-gid="${regionGid}"]`);
+      if (rg) {   // 구역 박스도 함께 이동 (다음 render에서 정확히 재계산)
+        const rr = regionRects().find(r => r.gid === regionGid);
+        if (rr) { rg.style.left = rr.x + 'px'; rg.style.top = rr.y + 'px'; }
+      }
       drawLines();
     } else if (mode === 'link') {
       const r = map.querySelector(`.mapnode[data-id="${id}"]`).getBoundingClientRect();
@@ -803,6 +830,9 @@ function initMap() {
       const hit = regionRects().filter(r => r.gid !== cur).find(r => cx >= r.x && cx <= r.x + r.w && cy >= r.y && cy <= r.y + r.h);
       if (hit) { setGroupDeep(id, hit.gid); render(); }   // 다른 프로젝트 구역 안에 놓으면 소속 변경(하위 포함)
       else { save(); drawLines(); }
+    } else if (mode === 'region') {
+      regionGid = null; regionStart = null;
+      save(); render();   // 구역·좌표 확정 저장
     } else if (mode === 'pending') {
       const nid = id, now = Date.now();
       if (lastId === nid && now - lastTime < CLICK_MS) {   // double click → go to board (해당 프로젝트 선택 + 포커스)
@@ -851,7 +881,7 @@ function schedChipHtml(s) {
   const g = s.group ? groupById(s.group) : null;
   const over = !s.done && dday(s.date) < 0;
   const title = (g ? '📁' + g.name + ' · ' : '') + '[일정] ' + s.title + (s.note ? '\n💬 ' + s.note : '');
-  return `<span class="chip chip-sched c-${g ? g.color : 'gray'} ${s.done ? 'done' : ''} ${over ? 'over' : ''}" data-action="sched-edit" data-id="${s.id}" title="${esc(title)}">📌 ${esc(s.title)}</span>`;
+  return `<span class="chip chip-sched c-${g ? g.color : 'gray'} ${s.done ? 'done' : ''} ${over ? 'over' : ''}" data-action="sched-edit" data-id="${s.id}" title="${esc(title)}">${g ? `<span class="chip-proj-top">📁 ${esc(g.name)}</span>` : ''}<span class="chip-task">📌 ${s.time ? s.time + ' ' : ''}${esc(s.title)}</span></span>`;
 }
 function calFilterActive() { return Array.isArray(state.sel.calFilter) && state.sel.calFilter.length > 0; }
 function calCardVisible(c) {
@@ -1165,10 +1195,12 @@ function currentNoteGroup() {
 function noteItemHtml(n) {
   const searchText = esc((n.title + ' ' + (n.body || '') + ' ' + (n.who || '')).toLowerCase());
   const nt = NOTE_TYPES[n.type] || NOTE_TYPES.memo;
+  const nb = n.board ? boardById(n.board) : null;
   return `<div class="note-item" data-action="note-edit" data-id="${n.id}" data-text="${searchText}">
     <span class="tl-dot c-${nt.color}"></span>
     <div class="note-head">
       ${noteTypeBadge(n.type)}
+      ${nb ? `<span class="note-board">🗂 ${esc(nb.name)}</span>` : ''}
       <span class="note-date">${n.date ? fmtDate(n.date) : ''}</span>
       <span class="note-title">${esc(n.title)}</span>
       ${n.who ? `<span class="note-who">🎤 ${esc(n.who)}</span>` : ''}
@@ -1219,9 +1251,16 @@ function renderNotes() {
   const tsel = state.sel.noteType || '';
   const typePills = `<button class="fpill ${!tsel ? 'on' : ''}" data-action="note-type" data-t="">전체</button>`
     + Object.entries(NOTE_TYPES).map(([k, v]) => `<button class="fpill ${tsel === k ? 'on c-' + v.color : ''}" data-action="note-type" data-t="${k}">${v.icon} ${v.label}</button>`).join('');
+  const bsel = state.sel.noteBoard || '';
   const notes = gNotes
     .filter(n => !tsel || n.type === tsel)
+    .filter(n => !bsel || (bsel === '__common' ? !n.board : n.board === bsel))
     .sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt || '').localeCompare(a.createdAt || ''));
+  const boardFilter = gBoards.length ? `<select id="note-bfilter" data-action-change="note-board">
+      <option value="">🗂 전체 보드</option>
+      <option value="__common" ${bsel === '__common' ? 'selected' : ''}>프로젝트 공통</option>
+      ${gBoards.map(b => `<option value="${b.id}" ${bsel === b.id ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}
+    </select>` : '';
   // 피드: 📌 고정 → 날짜 그룹 (D·F)
   const today = todayStr();
   const pinned = notes.filter(n => n.pinned);
@@ -1249,6 +1288,7 @@ function renderNotes() {
       </div>
       <div class="note-toolbar">
         ${typePills}
+        ${boardFilter}
         <input type="search" id="note-q" placeholder="🔍 기록 검색" autocomplete="off">
         <button class="pill" data-action="note-add">+ 기록 추가</button>
       </div>
@@ -1268,12 +1308,16 @@ function noteTypeOptions(cur) {
 function openNoteModal(id) {
   const n = id ? (state.notes || []).find(x => x.id === id) : null;
   const type = n ? n.type : 'memo';
+  const gid = n ? (n.group || '') : currentNoteGroup();
+  const gBoards = state.projects.filter(b => (b.group || '') === gid);
+  const boardOpts = `<option value="">— 프로젝트 공통 —</option>` + gBoards.map(b => `<option value="${b.id}" ${n && n.board === b.id ? 'selected' : ''}>${esc(b.name)}</option>`).join('');
   showModal(`
     <h3>${n ? '기록 수정' : '기록 추가'}</h3>
     <div class="two">
       <label>유형<select id="m-ntype">${noteTypeOptions(type)}</select></label>
       <label>날짜<input type="date" id="m-ndate" value="${n ? (n.date || '') : todayStr()}"></label>
     </div>
+    <label>보드 (선택 — 어느 Sub업무 기록인지)<select id="m-nboard">${boardOpts}</select></label>
     <label>제목<input type="text" id="m-ntitle" value="${n ? esc(n.title) : ''}" placeholder="예: 경리팀장 인터뷰 / 중간감사 진행상황"></label>
     <label id="m-who-wrap" style="display:${type === 'interview' ? 'block' : 'none'}">대상자 (누구와)<input type="text" id="m-nwho" value="${n ? esc(n.who || '') : ''}" placeholder="예: 경리팀장 김OO"></label>
     <label>내용<textarea id="m-nbody" rows="7" ${n ? '' : 'data-new="1"'} placeholder="들은 내용, 확인한 사항, 다음 단계 등">${n ? esc(n.body || '') : esc(NOTE_TEMPLATES[type] || '')}</textarea></label>
@@ -1421,13 +1465,24 @@ function renderTbox() {
       : '📖 지난 날짜의 타임박스입니다';
     dumpHtml = `<div class="tb-note-past">${msg} · <button class="mini-btn" data-action="tbox-today">오늘로 이동</button></div>`;
   }
+  // 이 날짜의 시간 지정 일정 → 해당 시간칸에 📌 표시
+  const schedBySlot = {};
+  (state.schedules || []).forEach(s => {
+    if (s.date !== date || !s.time) return;
+    const [hh, mm] = s.time.split(':').map(Number);
+    if (hh < 6 || hh >= 24) return;
+    const k = hh + '.' + (mm >= 30 ? 5 : 0);
+    (schedBySlot[k] = schedBySlot[k] || []).push(s);
+  });
   let grid = '<div class="tb-grid" id="tb-grid"><div class="tb-grid-h"><span></span><span>:00</span><span>:30</span></div>';
   for (let h = 6; h < 24; h++) {
     const cell = half => {
       const k = h + '.' + half;
       const v = d.slots[k];
       const doneSlot = v !== undefined && tbDone(d.big3[v]);
-      return `<div class="tb-cell${doneSlot ? ' done-slot' : ''}" data-slot="${k}" ${v !== undefined ? `style="background-color:${tbColor(v).bg};color:${tbColor(v).fg}"` : ''}>${v !== undefined ? v + 1 : ''}</div>`;
+      const ss = schedBySlot[k];
+      const mark = ss ? `<span class="tb-sched-mark ${ss.every(x => x.done) ? 'done' : ''}" title="${esc(ss.map(x => x.time + ' ' + x.title).join('\n'))}">📌 ${esc(ss[0].title)}${ss.length > 1 ? ` 외 ${ss.length - 1}` : ''}</span>` : '';
+      return `<div class="tb-cell${doneSlot ? ' done-slot' : ''}${ss ? ' has-sched' : ''}" data-slot="${k}" ${v !== undefined ? `style="background-color:${tbColor(v).bg};color:${tbColor(v).fg}"` : ''}>${v !== undefined ? v + 1 : ''}${mark}</div>`;
     };
     grid += `<div class="tb-row"><span class="tb-hour">${h}</span>${cell(0)}${cell(5)}</div>`;
   }
@@ -2157,10 +2212,11 @@ document.addEventListener('click', e => {
     const date = document.getElementById('m-sdate').value || null;
     if (t && date) {
       const grp = document.getElementById('m-sgroup').value;
+      const time = document.getElementById('m-stime').value || null;
       const note = document.getElementById('m-snote').value.trim() || null;
       const s = el.dataset.id ? schedById(el.dataset.id) : null;
-      if (s) { s.title = t; s.date = date; s.group = grp; s.note = note; }
-      else state.schedules.push({ id: 's-' + uid(), group: grp, title: t, date, done: false, doneAt: null, note });
+      if (s) { s.title = t; s.date = date; s.time = time; s.group = grp; s.note = note; }
+      else state.schedules.push({ id: 's-' + uid(), group: grp, title: t, date, time, done: false, doneAt: null, note });
     }
     closeModal(); render();
   }
@@ -2227,7 +2283,7 @@ document.addEventListener('click', e => {
     if (e) { delete e.ai; if (!e.memo && !e.auto) delete state.journal[d]; }
     render();
   }
-  else if (act === 'note-group') { state.sel.noteGroup = el.dataset.gid; render(); }
+  else if (act === 'note-group') { state.sel.noteGroup = el.dataset.gid; state.sel.noteBoard = ''; render(); }
   else if (act === 'note-type') { state.sel.noteType = el.dataset.t; render(); }
   else if (act === 'note-pin') {
     const n = (state.notes || []).find(x => x.id === el.dataset.id);
@@ -2249,6 +2305,7 @@ document.addEventListener('click', e => {
         type, title,
         date: document.getElementById('m-ndate').value || todayStr(),
         who: type === 'interview' ? (document.getElementById('m-nwho').value.trim() || null) : null,
+        board: (document.getElementById('m-nboard') && document.getElementById('m-nboard').value) || null,
         body: document.getElementById('m-nbody').value.trim() || null,
       };
       const id = el.dataset.id;
@@ -2788,6 +2845,7 @@ document.addEventListener('change', e => {
     render();
     return;
   }
+  if (e.target.id === 'note-bfilter') { state.sel.noteBoard = e.target.value; render(); return; }
   if (e.target.id === 'm-ntype') {
     const wrap = document.getElementById('m-who-wrap');
     if (wrap) wrap.style.display = e.target.value === 'interview' ? 'block' : 'none';
