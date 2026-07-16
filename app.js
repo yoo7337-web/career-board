@@ -980,7 +980,7 @@ function renderCal() {
       const chips = dayCards.map(chipHtml).join('');
       const schedChips = (schedByDate[ds] || []).map(schedChipHtml).join('');
       cells += `<div class="cal-day ${inMonth ? '' : 'out'} ${ds === today ? 'today' : ''}" data-action="cal-add" data-date="${ds}" title="클릭하면 이 날짜로 할 일 추가">
-        <div class="cal-scroll"><span class="dnum ${d === 0 ? 'sun' : ''}">${dt.getDate()}</span>${schedChips}${chips}</div></div>`;
+        <div class="cal-scroll slim-scroll"><span class="dnum ${d === 0 ? 'sun' : ''}">${dt.getDate()}</span>${schedChips}${chips}</div></div>`;
     }
     weeksHtml += `<div class="cal-week">
       ${laneCnt ? `<div class="cal-bars" style="height:${laneCnt * 19 + 2}px">${bars.join('')}</div>` : ''}
@@ -1079,21 +1079,16 @@ function dashRowsGrouped(cards, hidePill) {   // 프로젝트별 그룹 헤더 +
   });
   return html;
 }
-function dashSection(title, sub, cards, emptyMsg, limit, opts) {
+function dashSection(title, sub, cards, emptyMsg, limit, opts) {   // limit은 폐기 — 전량 렌더+내부 스크롤
   const o = opts || {};
-  const shown = limit ? cards.slice(0, limit) : cards;
-  const more = limit && cards.length > limit ? `<div class="dash-more">+${cards.length - limit}건 더</div>` : '';
-  const body = o.rowsHtml !== undefined ? o.rowsHtml : (shown.length ? dashRowsGrouped(shown, o.hidePill) + more : `<div class="empty">${emptyMsg}</div>`);
+  const body = o.rowsHtml !== undefined ? o.rowsHtml : (cards.length ? dashRowsGrouped(cards, o.hidePill) : `<div class="empty">${emptyMsg}</div>`);
   return `<section class="dash-sec ${o.full ? 'full' : ''} ${o.stage ? 'stage-' + o.stage : ''}" ${o.id ? `id="${o.id}"` : ''}>
     <div class="dash-sec-head"><h2>${title} <span class="cnt">${cards.length}</span></h2><span class="dash-sub">${sub}</span></div>
-    <div class="dash-list">${body}</div>
+    <div class="dash-list slim-scroll">${body}</div>
   </section>`;
 }
 function doneWeekSection(cards, offset, start, end) {
-  const limit = 15;
-  const shown = cards.slice(0, limit);
-  const more = cards.length > limit ? `<div class="dash-more">+${cards.length - limit}건 더</div>` : '';
-  const body = shown.length ? dashRowsGrouped(shown, true) + more : '<div class="empty">이 주에 완료한 업무가 없어요</div>';
+  const body = cards.length ? dashRowsGrouped(cards, true) : '<div class="empty">이 주에 완료한 업무가 없어요</div>';
   return `<section class="dash-sec stage-done" id="sec-done">
     <div class="dash-sec-head">
       <h2>✓ 최근 완수 <span class="cnt">${cards.length}</span></h2>
@@ -1104,13 +1099,12 @@ function doneWeekSection(cards, offset, start, end) {
         <button class="mini-btn" data-action="done-week-next" title="다음 주">▶</button>
       </div>
     </div>
-    <div class="dash-list">${body}</div>
+    <div class="dash-list slim-scroll">${body}</div>
   </section>`;
 }
 function upcomingSchedSec() {
   const items = (state.schedules || []).filter(s => !s.done).slice()
-    .sort((a, b) => (a.date || '').localeCompare(b.date || ''))
-    .slice(0, 8);
+    .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
   if (!items.length) return '';
   const row = s => {
     const g = s.group ? groupById(s.group) : null;
@@ -1123,7 +1117,7 @@ function upcomingSchedSec() {
     </div>`;
   };
   return `<section class="dash-sec full" id="sec-sched"><div class="dash-sec-head"><h2>📌 다가오는 일정 <span class="cnt">${items.length}</span></h2><span class="dash-sub">프로젝트 마감·제출 · 마감 임박순</span></div>
-    <div class="dash-list">${items.map(row).join('')}</div>
+    <div class="dash-list slim-scroll" id="sched-list">${items.map(row).join('')}</div>
   </section>`;
 }
 function recentNotesSec() {
@@ -1133,9 +1127,11 @@ function recentNotesSec() {
   const row = n => {
     const g = n.group ? groupById(n.group) : null;
     return `<div class="drow" data-action="dash-note-go" data-id="${n.id}">
-      ${noteTypeBadge(n.type)}
-      <span class="drow-title">${esc(n.title)}</span>
-      <span class="drow-meta">${g ? `<span class="drow-proj c-${g.color}">${esc(g.name)}</span>` : ''}<span class="tag">${n.date ? fmtDate(n.date) : ''}</span></span>
+      <span class="drow-prio sched-dot">📝</span>
+      <div class="drow-body">
+        <div class="drow-l1">${noteTypeBadge(n.type)}<span class="drow-title">${esc(n.title)}</span></div>
+        <div class="drow-meta">${g ? `<span class="drow-proj c-${g.color}">${esc(g.name)}</span>` : ''}<span class="tag">${n.date ? fmtDate(n.date) : ''}</span></div>
+      </div>
     </div>`;
   };
   return `<section class="dash-sec full"><div class="dash-sec-head"><h2>📝 최근 기록 <span class="cnt">${notes.length}</span></h2><span class="dash-sub">기록 탭 최신 3건</span></div>
@@ -1153,24 +1149,48 @@ function renderDash() {
   const dw = doneWeekRange(doneWeekOffset);
   const recentDone = cards.filter(c => c.status === 'done' && c.doneAt && c.doneAt >= dw.startStr && c.doneAt <= dw.endStr).sort(byProject(doneSort));
   const kpi = (label, val, cls, target) => `<div class="kpi ${cls || ''}" data-action="kpi-go" data-target="${target}"><div class="kpi-val">${val}</div><div class="kpi-lbl">${label}</div></div>`;
-  // 프로젝트별 진행률
+  // 프로젝트별 진행률 + 다음 마감 D-day
+  const nextSchedOf = gid => (state.schedules || []).filter(s => (s.group || '') === gid && !s.done)
+    .sort((a, b) => (a.date || '').localeCompare(b.date || ''))[0] || null;
   const gpRows = [];
-  const gpRow = (name, color, done, total) => {
+  const gpRow = (name, color, done, total, ns) => {
     const pct = total ? Math.round(done / total * 100) : 0;
+    let dd = '';
+    if (ns) {
+      const n = dday(ns.date);
+      const cls = n < 0 ? 'over' : n <= 3 ? 'warn' : '';
+      const lbl = n < 0 ? `${-n}일 지남` : n === 0 ? 'D-day' : `D-${n}`;
+      dd = `<span class="gp-dday ${cls}" data-action="sched-edit" data-id="${ns.id}" title="다음 마감: ${esc(ns.title)} (${ns.date})">📌 ${lbl}</span>`;
+    }
     return `<div class="gp-row"><span class="drow-proj c-${color}">${esc(name)}</span>
       <div class="gp-track"><div class="gp-fill c-${color}" style="width:${pct}%"></div></div>
-      <span class="gp-num">${done}/${total} · ${pct}%</span></div>`;
+      <span class="gp-num">${done}/${total} · ${pct}%</span>${dd}</div>`;
   };
   (state.groups || []).forEach(g => {
     const bids = new Set(state.projects.filter(b => (b.group || null) === g.id).map(b => b.id));
     const cs = cards.filter(c => bids.has(c.project));
-    if (cs.length) gpRows.push(gpRow(g.name, g.color, cs.filter(c => c.status === 'done').length, cs.length));
+    if (cs.length) gpRows.push(gpRow(g.name, g.color, cs.filter(c => c.status === 'done').length, cs.length, nextSchedOf(g.id)));
   });
   {
     const bids = new Set(state.projects.filter(b => !b.group).map(b => b.id));
     const cs = cards.filter(c => bids.has(c.project));
-    if ((state.groups || []).length && cs.length) gpRows.push(gpRow('미분류', 'gray', cs.filter(c => c.status === 'done').length, cs.length));
+    if ((state.groups || []).length && cs.length) gpRows.push(gpRow('미분류', 'gray', cs.filter(c => c.status === 'done').length, cs.length, nextSchedOf('')));
   }
+  // 이번 주 스트립 (월~일): 요일별 마감 카드·📌일정
+  const mon = mondayOf(new Date());
+  const weekCells = [];
+  for (let i = 0; i < 7; i++) {
+    const dt = new Date(mon); dt.setDate(mon.getDate() + i);
+    const ds = dstr(dt);
+    const dueCnt = cards.filter(c => c.status !== 'done' && c.due === ds).length;
+    const schedCnt = (state.schedules || []).filter(s => !s.done && s.date === ds).length;
+    const cls = [ds === today ? 'today' : '', ds < today ? 'past' : '', i === 6 ? 'sun' : ''].filter(Boolean).join(' ');
+    weekCells.push(`<div class="dw-cell ${cls}" data-action="dash-week-go" title="${ds} · 마감 ${dueCnt} · 일정 ${schedCnt}">
+      <span class="dw-day">${['월', '화', '수', '목', '금', '토', '일'][i]} <b>${dt.getDate()}</b></span>
+      <span class="dw-marks">${dueCnt ? `<span class="dw-badge">${dueCnt}</span>` : ''}${schedCnt ? `<span class="dw-sched">📌${schedCnt}</span>` : ''}</span>
+    </div>`);
+  }
+  const weekStrip = `<div class="dash-week">${weekCells.join('')}</div>`;
   const td = (state.timebox || {})[today];
   const hasBig3 = td && td.big3 && td.big3.some(Boolean);
   const big3Strip = `<div class="dash-big3" data-action="dash-big3-go" title="타임박스로 이동">
@@ -1183,6 +1203,7 @@ function renderDash() {
   </div>`;
   return `<div class="dash">
     ${big3Strip}
+    ${weekStrip}
     <div class="dash-kpis">
       ${kpi('📅 예정', todo.length, 'k-todo', 'sec-todo')}
       ${kpi('▶ 진행 중', doing.length, 'k-doing', 'sec-doing')}
@@ -1191,14 +1212,14 @@ function renderDash() {
     </div>
     ${gpRows.length
       ? `<div class="dash-top">
-          <section class="dash-sec"><div class="dash-sec-head"><h2>📊 프로젝트 진행률 <span class="cnt">${gpRows.length}</span></h2><span class="dash-sub">완수/전체</span></div><div class="dash-list gp-list">${gpRows.join('')}</div></section>
+          <section class="dash-sec"><div class="dash-sec-head"><h2>📊 프로젝트 진행률 <span class="cnt">${gpRows.length}</span></h2><span class="dash-sub">완수/전체 · 📌 다음 마감</span></div><div class="dash-list slim-scroll gp-list">${gpRows.join('')}</div></section>
           ${dashSection('🔥 급한 업무', '마감 임박·지남 또는 중요도 높음', urgent, '급한 업무가 없어요 👍', null, { id: 'sec-urgent' })}
         </div>`
       : dashSection('🔥 급한 업무', '마감 임박·지남 또는 중요도 높음', urgent, '급한 업무가 없어요 👍', null, { full: true, id: 'sec-urgent' })}
     ${upcomingSchedSec()}
     <div class="dash-flow">
-      ${dashSection('📅 예정', '마감 임박순', todo, '예정 업무가 없어요', 10, { id: 'sec-todo', stage: 'todo', hidePill: true })}
-      ${dashSection('▶ 진행 중', '지금 하고 있는 일', doing, '진행 중인 업무가 없어요', 10, { id: 'sec-doing', stage: 'doing', hidePill: true })}
+      ${dashSection('📅 예정', '마감 임박순', todo, '예정 업무가 없어요', null, { id: 'sec-todo', stage: 'todo', hidePill: true })}
+      ${dashSection('▶ 진행 중', '지금 하고 있는 일', doing, '진행 중인 업무가 없어요', null, { id: 'sec-doing', stage: 'doing', hidePill: true })}
       ${doneWeekSection(recentDone, doneWeekOffset, dw.start, dw.end)}
     </div>
     ${recentNotesSec()}
@@ -2296,6 +2317,7 @@ document.addEventListener('click', e => {
     render();
   }
   else if (act === 'dash-big3-go') { state.sel.view = 'tbox'; state.sel.tboxDate = todayStr(); render(); }
+  else if (act === 'dash-week-go') { state.sel.view = 'cal'; state.sel.calYm = todayStr().slice(0, 7); render(); }
   else if (act === 'jr-memo') openJrMemoModal(el.dataset.date);
   else if (act === 'jr-memo-save') {
     const v = document.getElementById('m-jrmemo').value.trim();

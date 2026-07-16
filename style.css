@@ -216,14 +216,14 @@ body.dragging-board .delete-lane{display:flex}
 .cal-day.out{opacity:.38}
 .cal-day.cal-drop{outline:2px dashed var(--accent);outline-offset:-2px;background:var(--accent-soft)}
 .cal-scroll{height:100%;overflow-y:auto;padding:3px 5px 16px}
-/* 공통 슬림 스크롤바: 평소엔 숨고 hover 시 은은하게 나타남 */
-.cal-scroll,#sec-urgent .dash-list{scrollbar-width:thin;scrollbar-color:transparent transparent;transition:scrollbar-color .2s}
-.cal-scroll:hover,#sec-urgent .dash-list:hover{scrollbar-color:var(--border) transparent}
-.cal-scroll::-webkit-scrollbar,#sec-urgent .dash-list::-webkit-scrollbar{width:9px}
-.cal-scroll::-webkit-scrollbar-track,#sec-urgent .dash-list::-webkit-scrollbar-track{background:transparent}
-.cal-scroll::-webkit-scrollbar-thumb,#sec-urgent .dash-list::-webkit-scrollbar-thumb{background:transparent;border-radius:10px;border:3px solid transparent;background-clip:padding-box}
-.cal-scroll:hover::-webkit-scrollbar-thumb,#sec-urgent .dash-list:hover::-webkit-scrollbar-thumb{background:var(--border);background-clip:padding-box}
-.cal-scroll:hover::-webkit-scrollbar-thumb:hover,#sec-urgent .dash-list:hover::-webkit-scrollbar-thumb:hover{background:var(--muted);background-clip:padding-box}
+/* 공통 슬림 스크롤바(.slim-scroll): 평소엔 숨고 hover 시 은은하게 나타남 */
+.slim-scroll{scrollbar-width:thin;scrollbar-color:transparent transparent;transition:scrollbar-color .2s}
+.slim-scroll:hover{scrollbar-color:var(--border) transparent}
+.slim-scroll::-webkit-scrollbar{width:9px}
+.slim-scroll::-webkit-scrollbar-track{background:transparent}
+.slim-scroll::-webkit-scrollbar-thumb{background:transparent;border-radius:10px;border:3px solid transparent;background-clip:padding-box}
+.slim-scroll:hover::-webkit-scrollbar-thumb{background:var(--border);background-clip:padding-box}
+.slim-scroll:hover::-webkit-scrollbar-thumb:hover{background:var(--muted);background-clip:padding-box}
 .cal-day.has-more::after{content:'';position:absolute;left:0;right:0;bottom:0;height:22px;pointer-events:none;background:linear-gradient(transparent,var(--surface))}
 .cal-day:hover.has-more::after{background:linear-gradient(transparent,var(--accent-soft))}
 .cal-day.has-more::before{content:'⌄';position:absolute;bottom:0;left:50%;transform:translateX(-50%);pointer-events:none;z-index:1;font-size:12px;line-height:1.1;color:var(--muted);opacity:.6}
@@ -269,7 +269,10 @@ footer button:hover{border-color:var(--accent);color:var(--text)}
 .snap-row .ghost:hover{border-color:var(--accent);color:var(--text)}
 
 /* dashboard (현황) */
-.dash-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:18px}
+/* 현황: 전 구역 세로 간격 14px 통일 */
+.dash{display:flex;flex-direction:column;gap:14px}
+.dash>*{margin:0!important}
+.dash-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}
 .kpi{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;text-align:center}
 .kpi-val{font-size:26px;font-weight:700;line-height:1.1}
 .kpi-lbl{font-size:12px;color:var(--muted);margin-top:3px}
@@ -277,12 +280,17 @@ footer button:hover{border-color:var(--accent);color:var(--text)}
 .kpi.k-doing .kpi-val{color:var(--accent)}
 .kpi.k-urgent .kpi-val{color:var(--danger-fg)}
 .kpi.k-done .kpi-val{color:var(--ok)}
-.dash-flow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:start;margin-bottom:14px}
+.dash-flow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:stretch}
+/* 나란한 구역: 카드 높이 균일 + 목록만 내부 스크롤 */
+.dash-top .dash-sec,.dash-flow .dash-sec{display:flex;flex-direction:column;min-height:0}
+.dash-top .dash-list{flex:1;min-height:0;overflow-y:auto;max-height:340px;padding-right:4px}
+.dash-flow .dash-list{flex:1;min-height:0;overflow-y:auto;max-height:400px;padding-right:4px}
+#sched-list{max-height:260px;overflow-y:auto;padding-right:4px}
 @media (max-width:820px){.dash-flow{grid-template-columns:1fr}}
 .dash-sec.stage-todo{border-top:3px solid var(--faint)}
 .dash-sec.stage-doing{border-top:3px solid var(--accent)}
 .dash-sec.stage-done{border-top:3px solid var(--ok)}
-.dash-sec{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px}
+.dash-sec{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px}
 .dash-sec-head{display:flex;align-items:baseline;gap:8px;margin-bottom:8px;flex-wrap:wrap}
 .dash-sec-head h2{font-size:15px;margin:0;font-weight:600}
 .dash-sec-head .cnt{background:var(--bg);border:1px solid var(--border);border-radius:999px;padding:0 8px;font-size:12px;font-weight:400;color:var(--muted)}
@@ -305,15 +313,13 @@ footer button:hover{border-color:var(--accent);color:var(--text)}
 .drow-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:11px;color:var(--muted)}
 .drow-proj{font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px}
 .drow-board{font-size:11px;color:var(--muted)}
-.dash-more{font-size:12px;color:var(--faint);padding:4px 8px}
 .reg-date{font-size:12px;color:var(--muted);margin-bottom:10px}
 .kpi{cursor:pointer}
 .kpi:hover{border-color:var(--accent)}
-.dash-sec.full{margin-bottom:14px}
 .dash-sec.flash{outline:2px solid var(--accent);outline-offset:2px}
 .drow.overdue{box-shadow:inset 3px 0 0 var(--danger-fg);background:var(--danger-bg)}
 .drow.overdue:hover{background:var(--danger-bg);filter:brightness(1.05)}
-.dash-top{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start;margin-bottom:14px}
+.dash-top{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:stretch}
 @media (max-width:820px){.dash-top{grid-template-columns:1fr}}
 .gp-list{display:flex;flex-direction:column;gap:2px}
 .gp-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:2px 22px}
@@ -377,8 +383,25 @@ footer button:hover{border-color:var(--accent);color:var(--text)}
 .tb-sched-mark{position:absolute;left:50%;right:1px;top:1px;bottom:1px;display:flex;align-items:center;font-size:9px;font-weight:700;color:var(--warn-fg);background:var(--warn-bg);border-radius:3px;padding:0 3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none;text-decoration:none}
 /* 완료된 Big3의 배정 시간칸: 빗금 + 숫자 취소선 */
 .tb-cell.done-slot{background-image:repeating-linear-gradient(45deg,rgba(0,0,0,.55) 0 3px,rgba(255,255,255,.35) 3px 6px);text-decoration:line-through;text-decoration-thickness:2px}
-.dash-big3{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;margin-bottom:14px;cursor:pointer}
+.dash-big3{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;cursor:pointer}
 .dash-big3:hover{border-color:var(--accent)}
+/* 이번 주 스트립 (월~일 7칸) */
+.dash-week{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}
+.dw-cell{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:8px 6px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;min-height:52px}
+.dw-cell:hover{border-color:var(--accent)}
+.dw-cell.today{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent);background:var(--accent-soft)}
+.dw-cell.past{opacity:.55}
+.dw-day{font-size:11.5px;color:var(--muted)}
+.dw-day b{font-size:13px;color:var(--text);font-weight:700;margin-left:2px}
+.dw-cell.sun .dw-day{color:var(--danger-fg)}
+.dw-marks{display:flex;gap:4px;align-items:center;min-height:17px}
+.dw-badge{background:var(--accent);color:#fff;border-radius:999px;font-size:10px;font-weight:700;padding:0 6px;line-height:16px}
+.dw-sched{font-size:10px;font-weight:700;color:var(--warn-fg);background:var(--warn-bg);border-radius:999px;padding:0 5px;line-height:16px}
+/* 프로젝트 진행률: 다음 마감 D-day 배지 */
+.gp-dday{flex:none;font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:999px;background:var(--bg);border:1px solid var(--border);color:var(--muted);cursor:pointer}
+.gp-dday:hover{border-color:var(--accent)}
+.gp-dday.warn{background:var(--warn-bg);color:var(--warn-fg);border-color:transparent}
+.gp-dday.over{background:var(--danger-bg);color:var(--danger-fg);border-color:transparent}
 .db3-label{font-size:13px;font-weight:700}
 .db3{font-size:12.5px;font-weight:600;padding:4px 12px;border-radius:999px;max-width:230px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .db3.done{opacity:.65;text-decoration:line-through}
@@ -431,8 +454,6 @@ footer button:hover{border-color:var(--accent);color:var(--text)}
 .sched-time{flex:none;font-size:11.5px;color:var(--muted)}
 .sched-pin{flex:none;font-size:11px;opacity:.75}
 .sched-dot{background:transparent!important;font-size:10px;line-height:1;width:auto;height:auto;margin-top:3px}
-/* 급한 업무: '+N건' 대신 스크롤로 전체 확인 (스크롤바는 위 공통 슬림 스타일) */
-#sec-urgent .dash-list{max-height:300px;overflow-y:auto;padding-right:4px}
 .chip.chip-sched{font-weight:700;border:1px solid transparent}
 .chip.chip-sched.over{outline:2px solid var(--danger-fg);outline-offset:-2px}
 .chip.chip-sched.done{opacity:.5;filter:grayscale(.4);text-decoration:line-through}
