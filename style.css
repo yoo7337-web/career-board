@@ -432,9 +432,38 @@ footer button:hover{border-color:var(--accent);color:var(--text)}
 .side-dot{width:9px;height:9px;border-radius:3px;flex:none}
 .side-name{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .side-cnt{font-size:11px;color:var(--faint)}
+/* 사이드바 보드 트리 (선택 프로젝트 아래 아코디언) */
+.side-sub{display:flex;flex-direction:column;gap:1px;margin:2px 0 6px;padding-left:14px;border-left:2px solid var(--border);margin-left:14px}
+.side-sub-item{display:flex;align-items:center;gap:7px;padding:5px 8px;border-radius:7px;cursor:pointer;font-size:12.5px;color:var(--muted)}
+.side-sub-item:hover{background:var(--surface)}
+.side-sub-item.on{font-weight:700;color:var(--text);background:var(--surface)}
+.side-sub-item .side-dot{width:7px;height:7px}
+.side-sub-item .side-dot.plain{background:var(--border)}
 .page-head{display:flex;align-items:center;gap:10px;margin-bottom:8px}
 .page-icon{width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:19px}
 .page-title{font-size:22px;margin:0;font-weight:700}
+.pt-parent{color:var(--muted);font-weight:600}
+.pt-sep{color:var(--faint);font-weight:400;margin:0 2px}
+.board-scoped .note-board{display:none}   /* 보드 뷰에선 아이템의 보드 배지 중복 제거 */
+.primary-pill{background:var(--accent)!important;color:#fff!important;border-color:transparent!important}
+/* 기록 전체화면 에디터 (노션 페이지식) */
+.note-editor{max-width:860px;margin:0 auto;display:flex;flex-direction:column;min-height:calc(100vh - 220px)}
+.ne-top{display:flex;align-items:center;gap:10px;margin-bottom:18px}
+.ne-ctx{font-size:12.5px;color:var(--faint)}
+.ne-spacer{flex:1}
+.ne-save{background:var(--accent);color:#fff;border:0;border-radius:8px;padding:8px 22px;font:inherit;font-weight:600;cursor:pointer}
+.ne-save:hover{filter:brightness(1.08)}
+.ne-del{background:transparent;border:1px solid var(--danger-fg);color:var(--danger-fg);border-radius:8px;padding:7px 14px;font:inherit;cursor:pointer}
+.ne-title{border:0;background:transparent;color:var(--text);font:inherit;font-size:26px;font-weight:700;padding:4px 2px;width:100%;outline:none;border-bottom:2px solid transparent}
+.ne-title:focus{border-bottom-color:var(--accent)}
+.ne-title::placeholder{color:var(--faint)}
+.ne-props{display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin:10px 0 14px;padding-bottom:14px;border-bottom:1px solid var(--border)}
+.ne-prop{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--muted)}
+.ne-prop select,.ne-prop input{border:1px solid var(--border);border-radius:999px;background:var(--surface);color:var(--text);font:inherit;font-size:12.5px;padding:5px 12px}
+.ne-prop input[type=date]{min-height:31px}
+.ne-body{flex:1;min-height:60vh;border:0;background:transparent;color:var(--text);font:inherit;font-size:15px;line-height:1.75;resize:none;outline:none;padding:2px}
+.ne-body::placeholder{color:var(--faint)}
+@media (max-width:760px){.note-editor{min-height:auto}.ne-body{min-height:50vh}}
 .prop-bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
 .prop-chip{font-size:12px;color:var(--muted);background:var(--surface);border:1px solid var(--border);border-radius:999px;padding:4px 12px}
 .prop-chip[data-action]{cursor:pointer}

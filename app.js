@@ -1272,41 +1272,71 @@ function renderNotes() {
   const gid = currentNoteGroup();
   const g = gid ? groupById(gid) : null;
   const gname = g ? g.name : '미분류';
+  const gNotes = (state.notes || []).filter(n => (n.group || '') === gid);
+  const gBoards = state.projects.filter(b => (b.group || '') === gid);
+  let bsel = state.sel.noteBoard || '';
+  if (bsel && bsel !== '__common' && !gBoards.some(b => b.id === bsel)) { bsel = ''; state.sel.noteBoard = ''; }
+  const selBoard = (bsel && bsel !== '__common') ? boardById(bsel) : null;
   const notesOf = xgid => (state.notes || []).filter(n => (n.group || '') === xgid).length;
+  const cntBoard = bid => gNotes.filter(n => (bid === '__common' ? !n.board : n.board === bid)).length;
+  // 사이드바: 프로젝트 목록 + 선택된 프로젝트 아래 보드 트리(아코디언)
+  const subTree = xgid => {
+    if (xgid !== gid) return '';
+    const sub = (label, bid, cnt, color) => `<div class="side-sub-item ${bsel === bid ? 'on' : ''}" data-action="note-board-nav" data-bid="${bid}">
+        <span class="side-dot ${color ? 'c-' + color : 'plain'}"></span><span class="side-name">${label}</span><span class="side-cnt">${cnt || ''}</span></div>`;
+    return `<div class="side-sub">
+      ${sub('전체', '', gNotes.length, null)}
+      ${sub('공통', '__common', cntBoard('__common'), null)}
+      ${gBoards.map(b => sub(esc(b.name), b.id, cntBoard(b.id), b.color)).join('')}
+    </div>`;
+  };
   const sideItems = groups.map(x => `<div class="side-item ${gid === x.id ? 'on c-' + x.color : ''}" data-action="note-group" data-gid="${x.id}">
       <span class="side-dot c-${x.color}"></span><span class="side-name">${esc(x.name)}</span><span class="side-cnt">${notesOf(x.id) || ''}</span>
-    </div>`).join('')
+    </div>${subTree(x.id)}`).join('')
     + `<div class="side-item ${gid === '' ? 'on c-gray' : ''}" data-action="note-group" data-gid="">
-      <span class="side-dot c-gray"></span><span class="side-name">미분류</span><span class="side-cnt">${notesOf('') || ''}</span></div>`;
-  // 속성 바 (B)
-  const gBoards = state.projects.filter(b => (b.group || '') === gid);
-  const bIds = new Set(gBoards.map(b => b.id));
-  const gCards = state.cards.filter(c => c.project && bIds.has(c.project));
-  const doneCnt = gCards.filter(c => c.status === 'done').length;
-  const periods = (g && g.periods && g.periods.length) ? g.periods : null;
-  const periodTxt = periods ? `${fmtDate(periods[0].start)} ~ ${fmtDate(periods[periods.length - 1].end)}${periods.length > 1 ? ` 외 ${periods.length - 1}` : ''}` : '기간 미설정';
-  const gNotes = (state.notes || []).filter(n => (n.group || '') === gid);
-  const lastNote = gNotes.slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''))[0];
-  const propBar = `<div class="prop-bar">
-    <span class="prop-chip" ${g ? `data-action="group-edit" data-id="${g.id}" title="클릭해서 기간 수정"` : ''}>📅 ${periodTxt}</span>
-    <span class="prop-chip">🗂 보드 ${gBoards.length}</span>
-    <span class="prop-chip">✅ 진행 ${doneCnt}/${gCards.length}</span>
-    <span class="prop-chip">🕐 최근 기록 ${lastNote && lastNote.date ? fmtDate(lastNote.date) : '없음'}</span>
-  </div>`;
+      <span class="side-dot c-gray"></span><span class="side-name">미분류</span><span class="side-cnt">${notesOf('') || ''}</span></div>${gid === '' ? subTree('') : ''}`;
+  // 헤더: 보드 선택 시 보드 맥락, 아니면 프로젝트 맥락
+  let pageHead, propBar;
+  if (selBoard) {
+    const bCards = state.cards.filter(c => c.project === selBoard.id);
+    const bDone = bCards.filter(c => c.status === 'done').length;
+    const bPeriod = (selBoard.start && selBoard.end) ? `${fmtDate(selBoard.start)} ~ ${fmtDate(selBoard.end)}` : null;
+    pageHead = `<div class="page-head"><span class="page-icon c-${g ? g.color : 'gray'}">📁</span><h2 class="page-title"><span class="pt-parent">${esc(gname)}</span> <span class="pt-sep">›</span> 🗂 ${esc(selBoard.name)}</h2></div>`;
+    propBar = `<div class="prop-bar">
+      ${bPeriod ? `<span class="prop-chip">📅 ${bPeriod}</span>` : ''}
+      <span class="prop-chip">✅ 진행 ${bDone}/${bCards.length}</span>
+      <span class="prop-chip">📝 기록 ${cntBoard(selBoard.id)}</span>
+    </div>`;
+  } else {
+    const bIds = new Set(gBoards.map(b => b.id));
+    const gCards = state.cards.filter(c => c.project && bIds.has(c.project));
+    const doneCnt = gCards.filter(c => c.status === 'done').length;
+    const periods = (g && g.periods && g.periods.length) ? g.periods : null;
+    const periodTxt = periods ? `${fmtDate(periods[0].start)} ~ ${fmtDate(periods[periods.length - 1].end)}${periods.length > 1 ? ` 외 ${periods.length - 1}` : ''}` : '기간 미설정';
+    const lastNote = gNotes.slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''))[0];
+    const ns = (state.schedules || []).filter(s => (s.group || '') === gid && !s.done).sort((a, b) => (a.date || '').localeCompare(b.date || ''))[0];
+    let nsChip = '';
+    if (ns) {
+      const n = dday(ns.date);
+      nsChip = `<span class="prop-chip sched-chip ${n < 0 ? 'over' : ''}" data-action="sched-edit" data-id="${ns.id}" title="${esc(ns.title)}">📌 ${esc(ns.title)} · ${n < 0 ? -n + '일 지남' : n === 0 ? 'D-day' : 'D-' + n}</span>`;
+    }
+    pageHead = `<div class="page-head"><span class="page-icon c-${g ? g.color : 'gray'}">📁</span><h2 class="page-title">${esc(gname)}</h2></div>`;
+    propBar = `<div class="prop-bar">
+      <span class="prop-chip" ${g ? `data-action="group-edit" data-id="${g.id}" title="클릭해서 기간 수정"` : ''}>📅 ${periodTxt}</span>
+      <span class="prop-chip">🗂 보드 ${gBoards.length}</span>
+      <span class="prop-chip">✅ 진행 ${doneCnt}/${gCards.length}</span>
+      <span class="prop-chip">🕐 최근 기록 ${lastNote && lastNote.date ? fmtDate(lastNote.date) : '없음'}</span>
+      ${nsChip}
+    </div>`;
+  }
   const overview = g ? (g.overview || '') : (state.unGroupOverview || '');
   const tsel = state.sel.noteType || '';
   const typePills = `<button class="fpill ${!tsel ? 'on' : ''}" data-action="note-type" data-t="">전체</button>`
     + Object.entries(NOTE_TYPES).map(([k, v]) => `<button class="fpill ${tsel === k ? 'on c-' + v.color : ''}" data-action="note-type" data-t="${k}">${v.icon} ${v.label}</button>`).join('');
-  const bsel = state.sel.noteBoard || '';
   const notes = gNotes
     .filter(n => !tsel || n.type === tsel)
     .filter(n => !bsel || (bsel === '__common' ? !n.board : n.board === bsel))
     .sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt || '').localeCompare(a.createdAt || ''));
-  const boardFilter = gBoards.length ? `<select id="note-bfilter" data-action-change="note-board">
-      <option value="">🗂 전체 보드</option>
-      <option value="__common" ${bsel === '__common' ? 'selected' : ''}>프로젝트 공통</option>
-      ${gBoards.map(b => `<option value="${b.id}" ${bsel === b.id ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}
-    </select>` : '';
   // 피드: 📌 고정 → 날짜 그룹 (D·F)
   const today = todayStr();
   const pinned = notes.filter(n => n.pinned);
@@ -1320,25 +1350,25 @@ function renderNotes() {
     feed += noteItemHtml(n);
   });
   if (!feed) feed = '<div class="empty">아직 기록이 없어요 — [+ 기록 추가]로 인터뷰·회의·진행상황을 남겨보세요</div>';
+  const overviewHtml = !selBoard && bsel !== '__common' ? `<div class="note-overview callout" data-action="overview-edit" title="클릭해서 수정">
+        <span class="co-icon">💡</span>
+        <div class="co-body">${overview ? `<div class="no-body">${esc(overview)}</div>` : '<div class="no-empty">프로젝트 핵심 현황·컨택포인트·주의사항을 적어두세요 (클릭)</div>'}</div>
+      </div>` : '';
   return `<div class="notes-wrap">
     <aside class="notes-side">
       <div class="side-h">프로젝트</div>
       ${sideItems}
     </aside>
     <div class="notes-page">
-      <div class="page-head"><span class="page-icon c-${g ? g.color : 'gray'}">📁</span><h2 class="page-title">${esc(gname)}</h2></div>
+      ${pageHead}
       ${propBar}
-      <div class="note-overview callout" data-action="overview-edit" title="클릭해서 수정">
-        <span class="co-icon">💡</span>
-        <div class="co-body">${overview ? `<div class="no-body">${esc(overview)}</div>` : '<div class="no-empty">프로젝트 핵심 현황·컨택포인트·주의사항을 적어두세요 (클릭)</div>'}</div>
-      </div>
+      ${overviewHtml}
       <div class="note-toolbar">
         ${typePills}
-        ${boardFilter}
         <input type="search" id="note-q" placeholder="🔍 기록 검색" autocomplete="off">
-        <button class="pill" data-action="note-add">+ 기록 추가</button>
+        <button class="pill primary-pill" data-action="note-add">+ 기록 추가</button>
       </div>
-      <div class="note-list timeline">${feed}</div>
+      <div class="note-list timeline ${selBoard ? 'board-scoped' : ''}">${feed}</div>
     </div>
   </div>`;
 }
@@ -1351,27 +1381,50 @@ function markNoteOverflow() {
 function noteTypeOptions(cur) {
   return Object.entries(NOTE_TYPES).map(([k, v]) => `<option value="${k}" ${cur === k ? 'selected' : ''}>${v.icon} ${v.label}</option>`).join('');
 }
-function openNoteModal(id) {
-  const n = id ? (state.notes || []).find(x => x.id === id) : null;
-  const type = n ? n.type : 'memo';
+/* 기록 전체화면 에디터 (노션 페이지식) */
+let noteEditing = undefined;   // undefined=미편집, null=신규, 문자열=수정할 id (state에 안 넣음 — 동기화·영속 방지)
+let noteDraft = null;          // 원격 재렌더 시 작성 중 내용 보존
+function captureNoteDraft() {
+  const body = document.getElementById('m-nbody');
+  if (noteEditing === undefined || !body || !document.querySelector('.note-editor')) return;
+  noteDraft = {
+    title: (document.getElementById('m-ntitle') || {}).value || '',
+    type: (document.getElementById('m-ntype') || {}).value || 'memo',
+    date: (document.getElementById('m-ndate') || {}).value || '',
+    board: (document.getElementById('m-nboard') || {}).value || '',
+    who: (document.getElementById('m-nwho') || {}).value || '',
+    body: body.value, isNew: body.dataset.new === '1',
+  };
+}
+function renderNoteEditor() {
+  const n = noteEditing ? (state.notes || []).find(x => x.id === noteEditing) : null;
+  const d = noteDraft;
+  const type = d ? d.type : (n ? n.type : 'memo');
   const gid = n ? (n.group || '') : currentNoteGroup();
+  const g = gid ? groupById(gid) : null;
   const gBoards = state.projects.filter(b => (b.group || '') === gid);
-  const boardOpts = `<option value="">— 프로젝트 공통 —</option>` + gBoards.map(b => `<option value="${b.id}" ${n && n.board === b.id ? 'selected' : ''}>${esc(b.name)}</option>`).join('');
-  showModal(`
-    <h3>${n ? '기록 수정' : '기록 추가'}</h3>
-    <div class="two">
-      <label>유형<select id="m-ntype">${noteTypeOptions(type)}</select></label>
-      <label>날짜<input type="date" id="m-ndate" value="${n ? (n.date || '') : todayStr()}"></label>
+  const curBoard = d ? d.board : (n ? (n.board || '') : ((state.sel.noteBoard && state.sel.noteBoard !== '__common') ? state.sel.noteBoard : ''));
+  const boardOpts = `<option value="">— 프로젝트 공통 —</option>` + gBoards.map(b => `<option value="${b.id}" ${curBoard === b.id ? 'selected' : ''}>${esc(b.name)}</option>`).join('');
+  const isNew = !n;
+  const bodyVal = d ? d.body : (n ? (n.body || '') : (NOTE_TEMPLATES[type] || ''));
+  const dataNew = d ? (d.isNew ? 'data-new="1"' : '') : (isNew ? 'data-new="1"' : '');
+  return `<div class="note-editor">
+    <div class="ne-top">
+      <button class="pill" data-action="ne-cancel">← 목록으로</button>
+      <span class="ne-ctx">📁 ${esc(g ? g.name : '미분류')}</span>
+      <span class="ne-spacer"></span>
+      ${n ? `<button class="ne-del" data-action="note-del" data-id="${n.id}">삭제</button>` : ''}
+      <button class="ne-save" data-action="note-save" data-id="${n ? n.id : ''}">저장</button>
     </div>
-    <label>보드 (선택 — 어느 Sub업무 기록인지)<select id="m-nboard">${boardOpts}</select></label>
-    <label>제목<input type="text" id="m-ntitle" value="${n ? esc(n.title) : ''}" placeholder="예: 경리팀장 인터뷰 / 중간감사 진행상황"></label>
-    <label id="m-who-wrap" style="display:${type === 'interview' ? 'block' : 'none'}">대상자 (누구와)<input type="text" id="m-nwho" value="${n ? esc(n.who || '') : ''}" placeholder="예: 경리팀장 김OO"></label>
-    <label>내용<textarea id="m-nbody" rows="7" ${n ? '' : 'data-new="1"'} placeholder="들은 내용, 확인한 사항, 다음 단계 등">${n ? esc(n.body || '') : esc(NOTE_TEMPLATES[type] || '')}</textarea></label>
-    <div class="m-actions">
-      ${n ? `<button class="danger" data-action="note-del" data-id="${n.id}">삭제</button>` : ''}
-      <button class="ghost" data-action="modal-close">취소</button>
-      <button class="primary" data-action="note-save" data-id="${n ? n.id : ''}">저장</button>
-    </div>`);
+    <input type="text" class="ne-title" id="m-ntitle" value="${d ? esc(d.title) : (n ? esc(n.title) : '')}" placeholder="제목">
+    <div class="ne-props">
+      <label class="ne-prop">유형<select id="m-ntype">${noteTypeOptions(type)}</select></label>
+      <label class="ne-prop">날짜<input type="date" id="m-ndate" value="${d ? d.date : (n ? (n.date || '') : todayStr())}"></label>
+      <label class="ne-prop">보드<select id="m-nboard">${boardOpts}</select></label>
+      <label class="ne-prop" id="m-who-wrap" style="display:${type === 'interview' ? '' : 'none'}">대상자<input type="text" id="m-nwho" value="${d ? esc(d.who) : (n ? esc(n.who || '') : '')}" placeholder="경리팀장 김OO"></label>
+    </div>
+    <textarea class="ne-body" id="m-nbody" ${dataNew} placeholder="들은 내용, 확인한 사항, 다음 단계 등을 자유롭게 적어보세요">${esc(bodyVal)}</textarea>
+  </div>`;
 }
 function openNoteTodoModal(noteId) {
   const n = (state.notes || []).find(x => x.id === noteId);
@@ -1986,6 +2039,7 @@ function openDevlogModal(kind, id) {
 function render() {
   let view = state.sel.view || 'board';
   if (view === 'devlog' && !isAdmin()) view = 'board';
+  captureNoteDraft();   // 에디터 작성 중 재렌더(원격 동기화 등) 시 초안 보존
   const vbtn = (k, label) => `<button class="${view === k ? 'on' : ''}" data-action="view" data-view="${k}">${label}</button>`;
   const nav = vbtn('dash', '현황') + vbtn('map', '구조도') + vbtn('board', '보드') + vbtn('tbox', '타임박스') + vbtn('notes', '기록') + vbtn('cal', '달력') + vbtn('journal', '일지') + (isAdmin() ? vbtn('devlog', '개발일지') : '');
   document.getElementById('app').classList.toggle('wide', view === 'map');
@@ -1996,7 +2050,7 @@ function render() {
       <span class="week-count">이번 주 ${weekDone()}개 완료</span>
       <button class="theme-toggle" data-action="theme-toggle" title="${document.documentElement.dataset.theme === 'dark' ? '밝은 테마로 전환' : '어두운 테마로 전환'}">${document.documentElement.dataset.theme === 'dark' ? '☀️' : '🌙'}</button>
     </header>
-    ${view === 'map' ? renderMap() : view === 'cal' ? renderCal() : view === 'devlog' ? renderDevlog() : view === 'dash' ? renderDash() : view === 'notes' ? renderNotes() : view === 'journal' ? renderJournal() : view === 'tbox' ? renderTbox() : renderBoardView()}
+    ${view === 'map' ? renderMap() : view === 'cal' ? renderCal() : view === 'devlog' ? renderDevlog() : view === 'dash' ? renderDash() : view === 'notes' ? (noteEditing !== undefined ? renderNoteEditor() : renderNotes()) : view === 'journal' ? renderJournal() : view === 'tbox' ? renderTbox() : renderBoardView()}
     <footer>
       <button data-action="restore-open">🛟 백업·복원</button>
       <button data-action="export">JSON 내보내기</button>
@@ -2359,8 +2413,10 @@ document.addEventListener('click', e => {
     const open = body.classList.toggle('clamp');   // clamp 제거=펼침
     el.textContent = open ? '더보기 ▾' : '접기 ▴';
   }
-  else if (act === 'note-add') openNoteModal();
-  else if (act === 'note-edit') openNoteModal(el.dataset.id);
+  else if (act === 'note-add') { noteEditing = null; noteDraft = null; render(); const t = document.getElementById('m-ntitle'); if (t) t.focus(); }
+  else if (act === 'note-edit') { noteEditing = el.dataset.id; noteDraft = null; render(); }
+  else if (act === 'ne-cancel') { noteEditing = undefined; noteDraft = null; render(); }
+  else if (act === 'note-board-nav') { state.sel.noteBoard = el.dataset.bid; render(); }
   else if (act === 'note-todo') openNoteTodoModal(el.dataset.id);
   else if (act === 'note-save') {
     const title = document.getElementById('m-ntitle').value.trim();
@@ -2377,10 +2433,12 @@ document.addEventListener('click', e => {
       if (id) { const n = state.notes.find(x => x.id === id); if (n) Object.assign(n, data); }
       else state.notes.push({ id: uid(), group: currentNoteGroup(), createdAt: todayStr(), ...data });
     }
+    noteEditing = undefined; noteDraft = null;
     closeModal(); render();
   }
   else if (act === 'note-del') {
     state.notes = (state.notes || []).filter(x => x.id !== el.dataset.id);
+    noteEditing = undefined; noteDraft = null;
     closeModal(); render();
   }
   else if (act === 'note-todo-save') {
@@ -2913,10 +2971,9 @@ document.addEventListener('change', e => {
     render();
     return;
   }
-  if (e.target.id === 'note-bfilter') { state.sel.noteBoard = e.target.value; render(); return; }
   if (e.target.id === 'm-ntype') {
     const wrap = document.getElementById('m-who-wrap');
-    if (wrap) wrap.style.display = e.target.value === 'interview' ? 'block' : 'none';
+    if (wrap) wrap.style.display = e.target.value === 'interview' ? '' : 'none';
     // 신규 기록: 본문이 비었거나 다른 유형의 템플릿 그대로면 새 유형 템플릿으로 교체 (작성 내용은 보존)
     const body = document.getElementById('m-nbody');
     if (body && body.dataset.new === '1') {
