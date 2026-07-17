@@ -116,7 +116,12 @@ function ensureDevlog() {
 }
 
 /* ---------- backups (separate cloud doc + local, protects against overwrite) ---------- */
-const SNAP_KEY = 'board-v2-snaps', SNAP_MAX = 30, SNAP_LOCAL_MAX = 12, SNAP_MIN_MS = 90000;
+const SNAP_KEY = 'board-v2-snaps', SNAP_MAX = 20, SNAP_LOCAL_MAX = 12, SNAP_MIN_MS = 90000;
+const SNAP_CLOUD_BYTES = 900000, SNAP_LOCAL_BYTES = 4000000, SNAP_MIN_KEEP = 5;   // Firestore 문서 1MiB·localStorage 쿼터 보호
+function trimSnapsBySize(arr, maxBytes) {
+  while (arr.length > SNAP_MIN_KEEP && JSON.stringify(arr).length > maxBytes) arr.shift();
+  return arr;
+}
 let backupSnaps = [], unsubBackup = null, lastSnapHash = '', lastSnapTime = 0;
 function localSnaps() { try { return JSON.parse(localStorage.getItem(SNAP_KEY) || '[]'); } catch (e) { return []; } }
 function stateHash(s) { try { return JSON.stringify([s.projects, s.cards, s.groups, s.notes, s.schedules, s.timebox, s.journal, s.devlog]); } catch (e) { return 't' + Date.now(); } }
@@ -130,9 +135,9 @@ function pushSnapshot(force) {
   if (!force && (h === lastSnapHash || now - lastSnapTime < SNAP_MIN_MS)) return;
   lastSnapHash = h; lastSnapTime = now;
   const snap = { ts: new Date().toISOString(), state: JSON.parse(JSON.stringify(state)) };
-  try { const l = localSnaps(); l.push(snap); localStorage.setItem(SNAP_KEY, JSON.stringify(l.slice(-SNAP_LOCAL_MAX))); } catch (e) { /* quota */ }
+  try { const l = trimSnapsBySize(localSnaps().concat([snap]).slice(-SNAP_LOCAL_MAX), SNAP_LOCAL_BYTES); localStorage.setItem(SNAP_KEY, JSON.stringify(l)); } catch (e) { /* quota */ }
   if (CLOUD && db && authUser) {
-    backupSnaps = backupSnaps.concat([snap]).slice(-SNAP_MAX);
+    backupSnaps = trimSnapsBySize(backupSnaps.concat([snap]).slice(-SNAP_MAX), SNAP_CLOUD_BYTES);
     db.collection('backups').doc(authUser.uid).set({ snaps: backupSnaps }).catch(e => console.warn('backup write failed', e));
   }
 }
@@ -433,6 +438,7 @@ function cardHtml(c) {
 }
 
 const openDoneLanes = new Set();   // 완수 레인 펼침 상태 (세션 한정 — 기본 접힘)
+let pastSchedOpen = false;         // 일정 패널 '지난 일정' 그룹 펼침 (세션 한정)
 function panelHtml(b, depth) {
   const parent = b.parent ? boardById(b.parent) : null;
   const todo = cardsOf(b.id, 'todo');
@@ -506,6 +512,7 @@ function groupById(id) { return (state.groups || []).find(g => g.id === id); }
 /* ---------- 프로젝트 일정(마감) ---------- */
 function schedById(id) { return (state.schedules || []).find(s => s.id === id); }
 function schedulesOf(gid) { return (state.schedules || []).filter(s => (s.group || '') === (gid || '')); }
+function schedIsStale(s) { return !s.done && s.date && dday(s.date) < -7; }   // 7일 이상 지난 일정 — 현황·D-day에서 제외(달력·패널 기록용 유지)
 function schedSort(a, b) {   // 미완료 먼저 → 마감일 오름차순 → 완료는 뒤(최신 완료 위)
   if (!!a.done !== !!b.done) return a.done ? 1 : -1;
   if (a.done) return (b.doneAt || '').localeCompare(a.doneAt || '');
@@ -642,13 +649,16 @@ function renderBoardView() {
     const doneCnt = gCards.filter(c => c.status === 'done').length;
     const periods = (g && g.periods && g.periods.length) ? g.periods : null;
     const periodTxt = periods ? `${fmtDate(periods[0].start)} ~ ${fmtDate(periods[periods.length - 1].end)}${periods.length > 1 ? ` 외 ${periods.length - 1}` : ''}` : '기간 미설정';
-    const scheds = schedulesOf(sel).slice().sort(schedSort);
+    const schedsAll = schedulesOf(sel).slice().sort(schedSort);
+    const scheds = schedsAll.filter(s => !schedIsStale(s));
+    const pastScheds = schedsAll.filter(schedIsStale).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
     const nextSched = scheds.find(s => !s.done);
     const dd = nextSched ? dday(nextSched.date) : 0;
     const schedChip = nextSched ? `<span class="prop-chip sched-chip" data-action="sched-edit" data-id="${nextSched.id}" title="다가오는 일정">📌 ${esc(nextSched.title)} · ${dd < 0 ? -dd + '일 지남' : dd === 0 ? 'D-day' : 'D-' + dd}</span>` : '';
     const schedPanel = `<section class="sched-panel">
         <div class="group-head"><span class="gname">📌 일정 · 마감</span><span class="gcnt">${scheds.length}</span><button class="mini-btn" data-action="sched-add" data-group="${sel}">+ 일정 추가</button></div>
         ${scheds.length ? `<div class="sched-list">${scheds.map(s => schedRow(s, true)).join('')}</div>` : '<div class="empty">보고서 제출·마감 등 이 프로젝트의 일정을 추가하세요</div>'}
+        ${pastScheds.length ? `<button class="mini-btn past-toggle" data-action="sched-past-toggle">지난 일정 ${pastScheds.length} ${pastSchedOpen ? '▾' : '▸'}</button>${pastSchedOpen ? `<div class="sched-list sched-past">${pastScheds.map(s => schedRow(s, true)).join('')}</div>` : ''}` : ''}
       </section>`;
     page = `<div class="page-head"><span class="page-icon c-${g ? g.color : 'gray'}">📁</span><h2 class="page-title">${esc(gname)}</h2>
         ${g ? `<button class="mini-btn" data-action="group-edit" data-id="${g.id}">설정</button>` : ''}
@@ -1140,7 +1150,7 @@ function doneWeekSection(cards, offset, start, end) {
   </section>`;
 }
 function upcomingSchedSec() {
-  const items = (state.schedules || []).filter(s => !s.done).slice()
+  const items = (state.schedules || []).filter(s => !s.done && !schedIsStale(s)).slice()
     .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
   if (!items.length) return '';
   const row = s => {
@@ -1187,7 +1197,7 @@ function renderDash() {
   const recentDone = cards.filter(c => c.status === 'done' && c.doneAt && c.doneAt >= dw.startStr && c.doneAt <= dw.endStr).sort(byProject(doneSort));
   const kpi = (label, val, cls, target) => `<div class="kpi ${cls || ''}" data-action="kpi-go" data-target="${target}"><div class="kpi-val">${val}</div><div class="kpi-lbl">${label}</div></div>`;
   // 프로젝트별 진행률 + 다음 마감 D-day
-  const nextSchedOf = gid => (state.schedules || []).filter(s => (s.group || '') === gid && !s.done)
+  const nextSchedOf = gid => (state.schedules || []).filter(s => (s.group || '') === gid && !s.done && !schedIsStale(s))
     .sort((a, b) => (a.date || '').localeCompare(b.date || ''))[0] || null;
   const gpRows = [];
   const gpRow = (name, color, done, total, ns) => {
@@ -1660,13 +1670,20 @@ function renderTbox() {
 function tbApplyCell(cell) {
   const d = tbData(state.sel.tboxDate || todayStr());
   const k = cell.dataset.slot;
+  // 숫자는 전용 span만 갱신 → 같은 칸의 📌 일정 마크가 페인트 중에도 보존됨
+  const setNum = txt => {
+    let n = cell.querySelector('.tb-cell-num');
+    if (!txt) { if (n) n.remove(); return; }
+    if (!n) { n = document.createElement('span'); n.className = 'tb-cell-num'; cell.prepend(n); }
+    n.textContent = txt;
+  };
   if (tbPaint.erase) {
-    if (d.slots[k] === tbSel) { delete d.slots[k]; cell.style.backgroundColor = ''; cell.style.color = ''; cell.textContent = ''; cell.classList.remove('done-slot'); }
+    if (d.slots[k] === tbSel) { delete d.slots[k]; cell.style.backgroundColor = ''; cell.style.color = ''; setNum(''); cell.classList.remove('done-slot'); }
   } else {
     d.slots[k] = tbSel;
     cell.style.backgroundColor = tbColor(tbSel).bg;
     cell.style.color = tbColor(tbSel).fg;
-    cell.textContent = tbSel + 1;
+    setNum(String(tbSel + 1));
     cell.classList.toggle('done-slot', tbDone(d.big3[tbSel]));
   }
 }
@@ -2456,6 +2473,7 @@ document.addEventListener('click', e => {
   else if (act === 'note-board-nav') { state.sel.noteBoard = el.dataset.bid; render(); }
   else if (act === 'lane-toggle') { const bid = el.dataset.board; openDoneLanes.has(bid) ? openDoneLanes.delete(bid) : openDoneLanes.add(bid); render(); }
   else if (act === 'arch-month') { state.sel.archMonth = el.dataset.m; render(); }
+  else if (act === 'sched-past-toggle') { pastSchedOpen = !pastSchedOpen; render(); }
   else if (act === 'card-fu') {
     const src = state.cards.find(x => x.id === el.dataset.id);
     if (src) {
@@ -2642,7 +2660,7 @@ document.addEventListener('click', e => {
     if (snap && confirm('이 시점 상태로 되돌릴까요?\n(현재 상태도 백업에 남아 다시 되돌릴 수 있어요)')) {
       pushSnapshot(true);                       // 현재 상태 먼저 백업
       state = JSON.parse(JSON.stringify(snap.state));
-      state.sel = state.sel || { view: 'board' };
+      normalizeState();                          // 구버전 스냅샷(누락 필드) 정규화 — 복원 후 크래시 방지
       lastSnapHash = '';                         // 복원 결과도 곧 백업되도록
       closeModal(); render();
     }
@@ -2655,7 +2673,7 @@ document.getElementById('import-file').addEventListener('change', e => {
   f.text().then(txt => {
     const data = JSON.parse(txt);
     if (!data.projects || !data.cards) throw new Error('bad file');
-    if (confirm('현재 보드를 가져온 파일로 완전히 교체할까요?')) { data.sel = data.sel || { view: 'board' }; state = data; render(); }
+    if (confirm('현재 보드를 가져온 파일로 완전히 교체할까요?')) { state = data; normalizeState(); lastSnapHash = ''; render(); }
   }).catch(() => alert('올바른 보드 JSON 파일이 아닙니다.'));
   e.target.value = '';
 });
