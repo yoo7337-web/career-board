@@ -605,6 +605,9 @@ footer button:hover{border-color:var(--accent);color:var(--text)}
 .prio-pick{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap}
 .swatch{border:1px solid var(--border);background:var(--surface);color:var(--muted);border-radius:8px;padding:6px 12px;font:inherit;font-size:12.5px;cursor:pointer}
 .swatch.sel{outline:2px solid var(--accent);outline-offset:1px;font-weight:600}
+.trash-btns{display:flex;gap:6px;align-items:center;flex:none}
+.trash-x{padding:6px 9px!important;color:var(--danger-fg)!important}
+.trash-x:hover{border-color:var(--danger-fg)!important}
 .m-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:6px}
 .m-actions .primary{background:var(--accent);color:#fff;border:0;border-radius:8px;padding:7px 16px;font:inherit;cursor:pointer}
 .m-actions .danger{background:transparent;border:1px solid var(--danger-fg);color:var(--danger-fg);border-radius:8px;padding:7px 14px;font:inherit;cursor:pointer;margin-right:auto}

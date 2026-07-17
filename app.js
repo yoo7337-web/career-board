@@ -204,6 +204,7 @@ function mergeStates(local, cloud) {
   m.groups = mergeById(local.groups, cloud.groups);
   m.notes = mergeById(local.notes, cloud.notes);
   m.schedules = mergeById(local.schedules, cloud.schedules);
+  m.trash = mergeById(local.trash, cloud.trash);
   m.timebox = mergeByDate(local.timebox, cloud.timebox, mergeTimeboxDay);
   m.journal = mergeByDate(local.journal, cloud.journal, (l, c) => Object.assign({}, c, l));   // 날짜별 필드 병합(auto/memo/ai 보존)
   m.settings = Object.assign({}, cloud.settings, local.settings);
@@ -250,6 +251,15 @@ function normalizeState() {
   state.journal = state.journal || {};
   state.settings = state.settings || {};
   state.schedules = state.schedules || [];
+  state.trash = state.trash || [];
+}
+/* ---------- 휴지통: 삭제 내역 보관·복원 ---------- */
+const TRASH_MAX = 50, TRASH_DAYS = 30;
+function toTrash(kind, payload) {
+  state.trash = state.trash || [];
+  state.trash.push(Object.assign({ id: 't-' + uid(), kind, deletedAt: new Date().toISOString() }, payload));
+  const cutoff = new Date(Date.now() - TRASH_DAYS * 864e5).toISOString();
+  state.trash = state.trash.filter(t => t.deletedAt >= cutoff).slice(-TRASH_MAX);
 }
 // 클라우드 상태 적용(모든 수신 공통): 로컬에 미동기화 편집이 있으면 union 병합, 아니면 교체
 function applyCloudState(remote) {
@@ -2107,6 +2117,7 @@ function render() {
     ${view === 'map' ? renderMap() : view === 'cal' ? renderCal() : view === 'devlog' ? renderDevlog() : view === 'dash' ? renderDash() : view === 'notes' ? (noteEditing !== undefined ? renderNoteEditor() : renderNotes()) : view === 'journal' ? renderJournal() : view === 'tbox' ? renderTbox() : renderBoardView()}
     <footer>
       <button data-action="restore-open">🛟 백업·복원</button>
+      <button data-action="trash-open">🗑 휴지통${(state.trash && state.trash.length) ? ' ' + state.trash.length : ''}</button>
       <button data-action="export">JSON 내보내기</button>
       <button data-action="import">가져오기</button>
       <button data-action="ics" title="Google Calendar에서 '설정 > 가져오기'로 등록">.ics 내보내기</button>
@@ -2212,6 +2223,51 @@ function openRestoreModal() {
       <button class="ghost" data-action="export">JSON 파일로</button>
       <button class="primary" data-action="modal-close">닫기</button>
     </div>`);
+}
+function openTrashModal() {
+  const list = (state.trash || []).slice().reverse();   // 최신 먼저
+  const fmt = ts => { try { return new Date(ts).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }); } catch (e) { return ts; } };
+  const KIND = { card: ['🗒', '할 일'], board: ['🗂', '보드'], schedule: ['📌', '일정'], note: ['📝', '기록'] };
+  const label = t => t.kind === 'card' ? t.card.title
+    : t.kind === 'board' ? `${t.board.name}${t.cards && t.cards.length ? ` (+카드 ${t.cards.length})` : ''}`
+    : t.kind === 'schedule' ? t.sched.title : t.note.title;
+  const rows = list.map(t => `<div class="snap-row">
+      <div><div class="snap-ts">${KIND[t.kind][0]} ${esc(label(t))}</div><div class="snap-sum">${KIND[t.kind][1]} · ${fmt(t.deletedAt)} 삭제</div></div>
+      <div class="trash-btns">
+        <button class="ghost" data-action="trash-restore" data-id="${t.id}">복원</button>
+        <button class="ghost trash-x" data-action="trash-purge" data-id="${t.id}" title="완전 삭제">✕</button>
+      </div>
+    </div>`).join('') || '<div class="empty">휴지통이 비어 있어요. 삭제한 할 일·보드·일정·기록이 여기 보관됩니다.</div>';
+  showModal(`
+    <h3>🗑 휴지통</h3>
+    <p class="restore-note">삭제된 항목을 최근 ${TRASH_MAX}개·${TRASH_DAYS}일까지 보관합니다. 복원하면 원래 자리로 돌아가요.</p>
+    <div class="snap-list">${rows}</div>
+    <div class="m-actions">
+      ${list.length ? '<button class="danger" data-action="trash-empty">휴지통 비우기</button>' : ''}
+      <button class="primary" data-action="modal-close">닫기</button>
+    </div>`);
+}
+function restoreFromTrash(t) {
+  if (t.kind === 'card') {
+    const c = t.card;
+    if (c.project && !boardById(c.project)) c.project = null;   // 보드가 사라졌으면 미배정으로
+    state.cards.push(c);
+  } else if (t.kind === 'board') {
+    const b = t.board;
+    if (b.group && !groupById(b.group)) b.group = null;
+    if (b.parent && !boardById(b.parent)) b.parent = null;
+    state.projects.push(b);
+    (t.cards || []).forEach(c => { if (!state.cards.some(x => x.id === c.id)) state.cards.push(c); });
+  } else if (t.kind === 'schedule') {
+    const s = t.sched;
+    if (s.group && !groupById(s.group)) s.group = '';
+    state.schedules.push(s);
+  } else if (t.kind === 'note') {
+    const n = t.note;
+    if (n.group && !groupById(n.group)) n.group = '';
+    if (n.board && !boardById(n.board)) n.board = null;
+    state.notes.push(n);
+  }
 }
 function groupOptions(selId, cur) {
   const opts = ['<option value="">— 미분류 —</option>']
@@ -2391,7 +2447,12 @@ document.addEventListener('click', e => {
     }
     closeModal(); render();
   }
-  else if (act === 'sched-del') { state.schedules = state.schedules.filter(s => s.id !== el.dataset.id); closeModal(); render(); }
+  else if (act === 'sched-del') {
+    const victim = schedById(el.dataset.id);
+    if (victim) toTrash('schedule', { sched: JSON.parse(JSON.stringify(victim)) });
+    state.schedules = state.schedules.filter(s => s.id !== el.dataset.id);
+    closeModal(); render();
+  }
   else if (act === 'tbox-prev') tbShift(-1);
   else if (act === 'tbox-next') tbShift(1);
   else if (act === 'tbox-today') { state.sel.tboxDate = todayStr(); tbSel = null; render(); }
@@ -2501,6 +2562,8 @@ document.addEventListener('click', e => {
     closeModal(); render();
   }
   else if (act === 'note-del') {
+    const victim = (state.notes || []).find(x => x.id === el.dataset.id);
+    if (victim) toTrash('note', { note: JSON.parse(JSON.stringify(victim)) });
     state.notes = (state.notes || []).filter(x => x.id !== el.dataset.id);
     noteEditing = undefined; noteDraft = null;
     closeModal(); render();
@@ -2565,6 +2628,8 @@ document.addEventListener('click', e => {
     closeModal(); render();
   }
   else if (act === 'card-del') {
+    const victim = state.cards.find(x => x.id === el.dataset.id);
+    if (victim) toTrash('card', { card: JSON.parse(JSON.stringify(victim)) });
     purgeTimeboxCards([el.dataset.id]);
     state.cards = state.cards.filter(x => x.id !== el.dataset.id);
     closeModal(); render();
@@ -2586,7 +2651,9 @@ document.addEventListener('click', e => {
   }
   else if (act === 'board-del') {
     const id = el.dataset.id;
-    state.projects.forEach(x => { if (x.parent === id) x.parent = boardById(id).parent || null; });
+    const bd = boardById(id);
+    if (bd) toTrash('board', { board: JSON.parse(JSON.stringify(bd)), cards: JSON.parse(JSON.stringify(state.cards.filter(c => c.project === id))) });
+    state.projects.forEach(x => { if (x.parent === id) x.parent = bd.parent || null; });
     state.projects = state.projects.filter(x => x.id !== id);
     purgeTimeboxCards(state.cards.filter(c => c.project === id).map(c => c.id));   // Big3에서도 제거
     state.cards = state.cards.filter(c => c.project !== id);
@@ -2652,6 +2719,19 @@ document.addEventListener('click', e => {
   }
   else if (act === 'import') document.getElementById('import-file').click();
   else if (act === 'restore-open') openRestoreModal();
+  else if (act === 'trash-open') openTrashModal();
+  else if (act === 'trash-restore') {
+    const t = (state.trash || []).find(x => x.id === el.dataset.id);
+    if (t) { restoreFromTrash(t); state.trash = state.trash.filter(x => x.id !== t.id); }
+    openTrashModal(); render();
+  }
+  else if (act === 'trash-purge') {
+    state.trash = (state.trash || []).filter(x => x.id !== el.dataset.id);
+    openTrashModal(); render();
+  }
+  else if (act === 'trash-empty') {
+    if (confirm('휴지통을 비울까요? 보관된 항목은 더 이상 복원할 수 없습니다.')) { state.trash = []; openTrashModal(); render(); }
+  }
   else if (act === 'backup-now') { pushSnapshot(true); openRestoreModal(); }
   else if (act === 'restore-apply') {
     const ts = el.dataset.ts;
@@ -2837,7 +2917,8 @@ document.addEventListener('drop', e => {
       dragged.parent = null;
     } else if (e.target.closest('.delete-lane')) {
       const cardCnt = state.cards.filter(c => c.project === draggedId).length;
-      if (confirm(`'${dragged.name}' 보드를 삭제할까요?${cardCnt ? `\n(포스트잇 ${cardCnt}개도 함께 삭제)` : ''}`)) {
+      if (confirm(`'${dragged.name}' 보드를 삭제할까요?${cardCnt ? `\n(포스트잇 ${cardCnt}개도 함께 삭제)` : ''}\n삭제해도 휴지통에서 복원할 수 있어요.`)) {
+        toTrash('board', { board: JSON.parse(JSON.stringify(dragged)), cards: JSON.parse(JSON.stringify(state.cards.filter(c => c.project === draggedId))) });
         state.projects.forEach(x => { if (x.parent === draggedId) x.parent = dragged.parent || null; });
         state.projects = state.projects.filter(x => x.id !== draggedId);
         purgeTimeboxCards(state.cards.filter(c => c.project === draggedId).map(c => c.id));   // Big3에서도 제거
