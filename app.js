@@ -1639,11 +1639,15 @@ function renderTbox() {
       diff < 0 ? `<span class="tb-diff under">${diff}h 단축</span>` :
       `<span class="tb-diff even">정확</span>`;
     const done = tbDone(b);
+    const bcard = b.cardId ? state.cards.find(x => x.id === b.cardId) : null;
+    const bboard = bcard && bcard.project ? boardById(bcard.project) : null;
+    const bgroup = bboard && bboard.group ? groupById(bboard.group) : null;
+    const projBadge = bgroup ? `<span class="drow-proj c-${bgroup.color}" title="${esc(bgroup.name)}${bboard ? ' · ' + esc(bboard.name) : ''}">${esc(bgroup.name)}</span>` : '';
     return `<div class="tb-big3-row ${tbSel === i ? 'sel' : ''} ${done ? 'done' : ''}" data-idx="${i}" data-action="tb-select" title="클릭=선택 후 시간 칸 드래그로 배정">
       <span class="tb-grip" draggable="true" data-idx="${i}" title="드래그로 순서 변경">⠿</span>
       <span class="tb-chip" style="background:${c.bg}"></span>
       <input type="checkbox" data-action="tb-check" data-idx="${i}" ${done ? 'checked' : ''} title="완수 처리 (보드에도 반영)">
-      <span class="tb-title">${esc(b.title)}</span>
+      ${projBadge}<span class="tb-title">${esc(b.title)}</span>
       <span class="tb-sum">${sum ? '계획 ' + sum + 'h' : ''}</span>
       <span class="tb-actual-wrap" title="실제 소요 시간 기록">실제 <input type="number" class="tb-actual-input" data-idx="${i}" step="0.5" min="0" placeholder="-" value="${hasActual ? b.actual : ''}">h</span>
       ${diffHtml}
