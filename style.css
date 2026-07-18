@@ -181,6 +181,12 @@ body.dragging-board .delete-lane{display:flex}
 .map-region{position:absolute;border-radius:16px;border:2px dashed rgba(0,0,0,.15);opacity:.55;pointer-events:none}
 .map-region-label{position:absolute;top:8px;left:14px;font-size:12.5px;font-weight:700;opacity:1;pointer-events:auto;cursor:grab;user-select:none;padding:2px 8px;border-radius:8px}
 .map-region-label:hover{outline:2px solid var(--accent);outline-offset:1px}
+.map-region.empty{border-style:dashed;opacity:.7}
+.region-empty-hint{position:absolute;left:16px;top:34px;font-size:11px;color:var(--faint)}
+/* 구조도 추가 모달: 프로젝트/보드 선택 토글 */
+.seg{display:flex;gap:6px;margin-bottom:12px}
+.seg-btn{flex:1;border:1px solid var(--border);background:var(--surface);color:var(--muted);border-radius:8px;padding:9px;font:inherit;font-size:13px;cursor:pointer}
+.seg-btn.sel{border-color:var(--accent);color:var(--accent);background:var(--accent-soft);font-weight:600}
 [data-theme=dark] .map-region{border-color:rgba(255,255,255,.18)}
 .mapnode{position:absolute;width:150px;min-height:44px;border-radius:10px;padding:10px 12px;cursor:grab;
   box-shadow:0 1px 3px rgba(0,0,0,.15);border:1px solid rgba(0,0,0,.06);touch-action:none;user-select:none}

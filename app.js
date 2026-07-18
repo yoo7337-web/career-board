@@ -775,7 +775,11 @@ let pendingMapPos = null; // {x,y,group} for add-board-at-click
 function regionRects() {
   return (state.groups || []).map(g => {
     const ms = state.projects.filter(b => (b.group || null) === g.id);
-    if (!ms.length) return null;
+    if (!ms.length) {   // 빈 프로젝트: 지도에서 만든 경우 저장된 위치에 빈 구역으로 표시
+      if (typeof g.mapX === 'number' && typeof g.mapY === 'number')
+        return { gid: g.id, name: g.name, color: g.color, x: g.mapX, y: g.mapY, w: 220, h: 110, empty: true };
+      return null;
+    }
     const xs = ms.map(b => b.x), ys = ms.map(b => b.y);
     const x = Math.min(...xs) - 18, y = Math.min(...ys) - 36;
     return { gid: g.id, name: g.name, color: g.color, x, y, w: Math.max(...xs) + 150 - x + 18, h: Math.max(...ys) + 44 - y + 18 };
@@ -784,7 +788,7 @@ function regionRects() {
 function renderMap() {
   ensurePositions();
   const regions = regionRects().map(r =>
-    `<div class="map-region c-${r.color}" data-gid="${r.gid}" style="left:${r.x}px;top:${r.y}px;width:${r.w}px;height:${r.h}px"><span class="map-region-label" data-gid="${r.gid}" title="드래그하면 프로젝트 전체 이동">📁 ${esc(r.name)}</span></div>`).join('');
+    `<div class="map-region c-${r.color} ${r.empty ? 'empty' : ''}" data-gid="${r.gid}" style="left:${r.x}px;top:${r.y}px;width:${r.w}px;height:${r.h}px"><span class="map-region-label" data-gid="${r.gid}" title="드래그하면 프로젝트 전체 이동">📁 ${esc(r.name)}</span>${r.empty ? '<span class="region-empty-hint">빈 곳 클릭 → 보드 추가</span>' : ''}</div>`).join('');
   const nodes = state.projects.map(b => {
     const cs = state.cards.filter(c => c.project === b.id);
     const done = cs.filter(c => c.status === 'done').length;
@@ -961,17 +965,27 @@ function initMap() {
     mode = null; id = null; role = null;
   });
 }
+function mapAddHint(type, hit) {
+  if (type === 'project') return '새 프로젝트(분류)를 만듭니다. 이 위치에 빈 구역으로 표시되고, 그 안을 클릭해 보드를 넣을 수 있어요.';
+  return hit ? `'${esc(hit.name)}' 프로젝트 소속 보드로 추가됩니다.` : '어느 프로젝트에도 속하지 않는 보드로 추가됩니다.';
+}
 function openAddBoardAt(x, y) {
   const hit = regionRects().find(r => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h);
-  pendingMapPos = { x: Math.max(0, x - 75), y: Math.max(0, y - 22), group: hit ? hit.gid : null };
+  pendingMapPos = { x: Math.max(0, x - 75), y: Math.max(0, y - 22), rawX: Math.max(0, x), rawY: Math.max(0, y), group: hit ? hit.gid : null };
+  const def = hit ? 'board' : 'project';   // 구역 안=보드, 빈 곳=프로젝트 기본
   showModal(`
-    <h3>여기에 보드 추가${hit ? ` — 📁 ${esc(hit.name)}` : ''}</h3>
-    <label>이름<input type="text" id="m-title" placeholder="예: Issue log"></label>
-    ${hit ? `<p class="restore-note">'${esc(hit.name)}' 프로젝트 구역이라 자동으로 그 소속이 됩니다.</p>` : ''}
+    <h3>구조도에 추가${hit ? ` — 📁 ${esc(hit.name)}` : ''}</h3>
+    <div class="seg" id="m-addtype" data-val="${def}">
+      <button type="button" class="seg-btn ${def === 'project' ? 'sel' : ''}" data-action="mapadd-type" data-t="project">📁 프로젝트</button>
+      <button type="button" class="seg-btn ${def === 'board' ? 'sel' : ''}" data-action="mapadd-type" data-t="board">🗂 보드</button>
+    </div>
+    <label>이름<input type="text" id="m-title" placeholder="이름 입력 후 Enter"></label>
+    <p class="restore-note" id="m-addhint">${mapAddHint(def, hit)}</p>
     <div class="m-actions">
       <button class="ghost" data-action="modal-close">취소</button>
       <button class="primary" data-action="mapadd-save">추가</button>
     </div>`);
+  setTimeout(() => { const i = document.getElementById('m-title'); if (i) i.focus(); }, 30);
 }
 
 /* ---------- calendar ---------- */
@@ -2706,11 +2720,24 @@ document.addEventListener('click', e => {
     }
     closeModal(); render();
   }
+  else if (act === 'mapadd-type') {
+    const box = document.getElementById('m-addtype');
+    box.dataset.val = el.dataset.t;
+    box.querySelectorAll('.seg-btn').forEach(b => b.classList.toggle('sel', b === el));
+    const hint = document.getElementById('m-addhint');
+    if (hint) hint.innerHTML = mapAddHint(el.dataset.t, pendingMapPos && pendingMapPos.group ? groupById(pendingMapPos.group) : null);
+  }
   else if (act === 'mapadd-save') {
     const t = document.getElementById('m-title').value.trim();
+    const box = document.getElementById('m-addtype');
+    const type = box ? box.dataset.val : 'board';
     if (t && pendingMapPos) {
-      const i = state.projects.length;
-      state.projects.push({ id: 'p-' + uid(), name: t, color: RAMP[i % RAMP.length], parent: null, group: pendingMapPos.group || null, x: pendingMapPos.x, y: pendingMapPos.y });
+      if (type === 'project') {
+        state.groups.push({ id: 'g-' + uid(), name: t, color: RAMP[state.groups.length % RAMP.length], periods: [], mapX: pendingMapPos.rawX, mapY: pendingMapPos.rawY });
+      } else {
+        const i = state.projects.length;
+        state.projects.push({ id: 'p-' + uid(), name: t, color: RAMP[i % RAMP.length], parent: null, group: pendingMapPos.group || null, x: pendingMapPos.x, y: pendingMapPos.y });
+      }
     }
     pendingMapPos = null;
     closeModal(); render();
@@ -2796,6 +2823,16 @@ document.getElementById('import-file').addEventListener('change', e => {
   e.target.value = '';
 });
 
+// 모달 키보드: 입력창에서 Enter=저장(기본 버튼), Esc=닫기 (textarea·검색창 제외)
+document.addEventListener('keydown', e => {
+  const ov = document.querySelector('.overlay');
+  if (!ov) return;
+  if (e.key === 'Escape') { e.preventDefault(); closeModal(); return; }
+  if (e.key === 'Enter' && e.target.tagName === 'INPUT' && e.target.type !== 'search') {
+    const primary = ov.querySelector('.m-actions .primary[data-action]');
+    if (primary) { e.preventDefault(); primary.click(); }
+  }
+});
 document.addEventListener('submit', e => {
   if (e.target.closest('.gateform')) { e.preventDefault(); doAuth('login'); return; }
   const form = e.target.closest('.quick');
