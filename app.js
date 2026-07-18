@@ -1161,20 +1161,29 @@ function doneWeekSection(cards, offset, start, end) {
 }
 function upcomingSchedSec() {
   const items = (state.schedules || []).filter(s => !s.done && !schedIsStale(s)).slice()
-    .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+    .sort((a, b) => {                                   // 프로젝트 순 → 그 안에서 마감 임박순
+      const pa = schedProjOrder(a), pb = schedProjOrder(b);
+      if (pa !== pb) return pa - pb;
+      return (a.date || '').localeCompare(b.date || '');
+    });
   if (!items.length) return '';
   const row = s => {
-    const g = s.group ? groupById(s.group) : null;
     const dd = dday(s.date);
     const over = dd < 0 ? ' overdue' : '';
     return `<div class="drow${over}" data-kind="sched" data-id="${s.id}" title="클릭=수정 · 더블클릭=보드로 이동">
       <span class="drow-prio sched-dot">📌</span>
       <div class="drow-body"><div class="drow-l1"><span class="drow-title">${esc(s.title)}</span>${s.time ? `<span class="sched-time">🕐 ${s.time}</span>` : ''}</div>
-        <div class="drow-meta">${g ? `<span class="drow-proj c-${g.color}">${esc(g.name)}</span>` : ''}${dueBadge(s.date)}</div></div>
+        <div class="drow-meta">${dueBadge(s.date)}</div></div>
     </div>`;
   };
-  return `<section class="dash-sec full" id="sec-sched"><div class="dash-sec-head"><h2>📌 다가오는 일정 <span class="cnt">${items.length}</span></h2><span class="dash-sub">프로젝트 마감·제출 · 마감 임박순</span></div>
-    <div class="dash-list slim-scroll" id="sched-list">${items.map(row).join('')}</div>
+  let html = '', last = '__init';
+  items.forEach(s => {
+    const k = s.group || '';
+    if (k !== last) { last = k; html += dashGroupHeader(k); }
+    html += row(s);
+  });
+  return `<section class="dash-sec full" id="sec-sched"><div class="dash-sec-head"><h2>📌 다가오는 일정 <span class="cnt">${items.length}</span></h2><span class="dash-sub">프로젝트별 · 마감 임박순</span></div>
+    <div class="dash-list slim-scroll" id="sched-list">${html}</div>
   </section>`;
 }
 function recentNotesSec() {
