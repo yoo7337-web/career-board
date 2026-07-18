@@ -109,10 +109,39 @@ const DEVLOG_SEED = [
   ['2026-07-07', '외부 배포', 'GitHub Pages 배포 + git 자동 배포 설정'],
   ['2026-07-07', '개발일지 탭', '관리자 전용 개발 이력·향후 계획 관리'],
 ];
-function seedDevlogDone() { return DEVLOG_SEED.map(([date, title, desc]) => ({ id: uid(), date, title, desc })); }
+// 2026-07-07 이후 개발 내역 (기존 개발일지에 1회 백필, 신규 설치는 시드에 포함)
+const DEVLOG_BACKFILL_V = 1;
+const DEVLOG_BACKFILL = [
+  ['2026-07-11', 'Google 로그인 + 구글 캘린더 동기화', '구글 계정 로그인, 마감일·수행기간을 전용 캘린더로 단방향 push'],
+  ['2026-07-11', '자동 백업·복원', '변경 시 스냅샷 적재(클라우드+기기 이중), 시점 복원'],
+  ['2026-07-12', '보드 탭 노션 스타일 개편', '좌측 프로젝트 사이드바 + 프로젝트 페이지(헤더·속성바)'],
+  ['2026-07-12', '기록 탭 (프로젝트별)', '타임라인 피드·유형·핀 고정·본문 템플릿·개요 콜아웃'],
+  ['2026-07-12', '현황(대시보드) 탭', 'KPI·프로젝트 진행률·오늘의 Big3·최근 기록 요약'],
+  ['2026-07-12', '타임박스 탭 (일일 Time Box)', 'Big3 + Brain Dump + 06~24시 시간칸 배정, 실제 소요시간 비교'],
+  ['2026-07-13', '일지 탭 (자동 일일 기록)', '완수·타임박스·기록 기반 자동 요약 + 한 줄 회고 + 선택적 Gemini 윤문'],
+  ['2026-07-13', '타임박스 강화', '5일 계획 창, Big3 순서 드래그·수동 추가, 완수 카드 기준 동기화'],
+  ['2026-07-13', '구조도 2단 개편', '미배정 할 일 드래그 배정, 자동정렬 2D 줄바꿈, 프로젝트 구역 통째 이동'],
+  ['2026-07-14', '멀티기기 데이터 유실 방지', 'union 병합 동기화 + 잠자던 탭 복원 시 재동기화, 백업 판정 강화'],
+  ['2026-07-15', '프로젝트 일정(마감) 기능', '프로젝트별 마감일·시간, 달력·타임박스·현황·D-day 연동'],
+  ['2026-07-15', '현황 탭 전면 정돈', '이번 주 스트립·프로젝트 D-day 배지·구역 높이/스크롤/디자인 통일'],
+  ['2026-07-16', '완수 아카이브', '프로젝트·보드별 완수 내역 관리 + FU 원클릭 생성 + 완수 레인 접기'],
+  ['2026-07-16', '라이트/다크 테마 토글', '헤더 스위치로 전환·기기별 저장'],
+  ['2026-07-17', '안정화 (버그 수정)', '복원 크래시 방지·백업 용량 상한·지난 일정 자동 정리 등'],
+  ['2026-07-18', '휴지통', '삭제한 할 일·보드·일정·기록 보관 후 복원(30일·50개)'],
+];
+function seedDevlogDone() { return DEVLOG_SEED.concat(DEVLOG_BACKFILL).map(([date, title, desc]) => ({ id: uid(), date, title, desc })); }
 function ensureDevlog() {
-  if (isAdmin() && !state.devlog) { state.devlog = { done: seedDevlogDone(), future: [] }; return true; }
+  if (isAdmin() && !state.devlog) { state.devlog = { done: seedDevlogDone(), future: [], backfillV: DEVLOG_BACKFILL_V }; return true; }
   return false;
+}
+function backfillDevlog() {   // 기존 개발일지에 누락된 최신 개발 내역 1회 추가 (중복·재삭제 방지)
+  if (!isAdmin() || !state.devlog) return false;
+  if ((state.devlog.backfillV || 0) >= DEVLOG_BACKFILL_V) return false;
+  state.devlog.done = state.devlog.done || [];
+  const has = (d, t) => state.devlog.done.some(e => e.date === d && e.title === t);
+  DEVLOG_BACKFILL.forEach(([date, title, desc]) => { if (!has(date, title)) state.devlog.done.push({ id: uid(), date, title, desc }); });
+  state.devlog.backfillV = DEVLOG_BACKFILL_V;
+  return true;
 }
 
 /* ---------- backups (separate cloud doc + local, protects against overwrite) ---------- */
@@ -284,7 +313,7 @@ function applyCloudState(remote) {
   render();
   applyingRemote = false;
   boardLoaded = true;
-  if (ensureDevlog()) { save(); render(); }
+  if (ensureDevlog() || backfillDevlog()) { save(); render(); }
   if (journalFreeze()) save();
   pushSnapshot();
 }
