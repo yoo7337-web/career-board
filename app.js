@@ -1360,7 +1360,7 @@ function currentNoteGroup() {
   return gid;
 }
 function noteItemHtml(n) {
-  const searchText = esc((n.title + ' ' + (n.body || '') + ' ' + (n.who || '')).toLowerCase());
+  const searchText = esc((n.title + ' ' + noteBodyPlain(n.body) + ' ' + (n.who || '')).toLowerCase());
   const nt = NOTE_TYPES[n.type] || NOTE_TYPES.memo;
   const nb = n.board ? boardById(n.board) : null;
   return `<div class="note-item" data-action="note-edit" data-id="${n.id}" data-text="${searchText}">
@@ -1374,7 +1374,7 @@ function noteItemHtml(n) {
       <button class="note-pin-btn ${n.pinned ? 'on' : ''}" data-action="note-pin" data-id="${n.id}" title="${n.pinned ? '고정 해제' : '상단에 고정'}">📌</button>
       <button class="mini-btn note-todo-btn" data-action="note-todo" data-id="${n.id}" title="이 기록에서 할 일 만들기">→ To-do</button>
     </div>
-    ${n.body ? `<div class="note-body clamp">${esc(n.body)}</div><button class="note-more" data-action="note-expand" style="display:none">더보기 ▾</button>` : ''}
+    ${n.body ? `<div class="note-body clamp rich">${noteBodyForFeed(n.body)}</div><button class="note-more" data-action="note-expand" style="display:none">더보기 ▾</button>` : ''}
   </div>`;
 }
 function noteDateGroup(dateStr, today) {
@@ -1514,7 +1514,7 @@ function captureNoteDraft() {
     date: (document.getElementById('m-ndate') || {}).value || '',
     board: (document.getElementById('m-nboard') || {}).value || '',
     who: (document.getElementById('m-nwho') || {}).value || '',
-    body: body.value, isNew: body.dataset.new === '1',
+    body: sanitizeHtml(body.innerHTML), isNew: body.dataset.new === '1',
   };
 }
 // 기록 에디터 실시간 저장: 입력할 때마다 state.notes에 반영(+디바운스 클라우드 저장). render() 호출 안 함 → 커서 유지
@@ -1528,7 +1528,7 @@ function liveSaveNote() {
     date: (document.getElementById('m-ndate') || {}).value || todayStr(),
     who: type === 'interview' ? ((document.getElementById('m-nwho') || {}).value.trim() || null) : null,
     board: (document.getElementById('m-nboard') || {}).value || null,
-    body: body.value.trim() || null,
+    body: readNoteBody(),
   };
   if (noteEditing) {                                   // 기존 기록 수정
     const n = (state.notes || []).find(x => x.id === noteEditing);
@@ -1542,6 +1542,48 @@ function liveSaveNote() {
   }
   save();
 }
+/* ---------- 기록 리치 텍스트(노션식 서식) ---------- */
+function noteBodyIsHtml(s) { return typeof s === 'string' && /<(b|strong|i|em|u|s|strike|br|div|p|ul|ol|li|h[1-6]|span|font)[\s>\/]/i.test(s); }
+function sanitizeHtml(html) {   // 위험 요소 제거(개인용 최소 정화) — 서식 태그는 보존
+  const tmp = document.createElement('div');
+  tmp.innerHTML = String(html || '');
+  tmp.querySelectorAll('script,style,iframe,object,embed,link,meta,form,input,button,svg').forEach(el => el.remove());
+  tmp.querySelectorAll('*').forEach(el => {
+    [...el.attributes].forEach(a => {
+      const nm = a.name.toLowerCase();
+      if (nm.startsWith('on')) el.removeAttribute(a.name);
+      else if ((nm === 'href' || nm === 'src') && /^\s*javascript:/i.test(a.value)) el.removeAttribute(a.name);
+    });
+  });
+  return tmp.innerHTML;
+}
+function noteBodyToHtml(body, type) {   // 에디터에 넣을 초기 HTML (기존 평문은 HTML로 변환)
+  if (body === undefined || body === null) body = (NOTE_TEMPLATES[type] || '');
+  if (noteBodyIsHtml(body)) return sanitizeHtml(body);
+  return esc(body).replace(/\n/g, '<br>');   // 평문·템플릿 → 줄바꿈 보존
+}
+function noteBodyForFeed(body) { return noteBodyIsHtml(body) ? sanitizeHtml(body) : esc(body || '').replace(/\n/g, '<br>'); }
+function noteBodyPlain(body) { return noteBodyIsHtml(body) ? String(body).replace(/<[^>]*>/g, ' ') : String(body || ''); }
+function readNoteBody() {   // 에디터 본문 값 읽기 (텍스트 있으면 HTML 저장, 없으면 null)
+  const b = document.getElementById('m-nbody');
+  if (!b) return null;
+  const html = sanitizeHtml(b.innerHTML);
+  return html.replace(/<[^>]*>/g, '').trim() ? html : null;
+}
+function caretOffset(el) {
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) return 0;
+  const r = sel.getRangeAt(0).cloneRange();
+  const pre = document.createRange(); pre.selectNodeContents(el); pre.setEnd(r.endContainer, r.endOffset);
+  return pre.toString().length;
+}
+function setCaretOffset(el, off) {
+  const range = document.createRange(); const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
+  let n, chars = off, done = false;
+  while ((n = walker.nextNode())) { const len = n.textContent.length; if (chars <= len) { range.setStart(n, chars); done = true; break; } chars -= len; }
+  if (!done) { range.selectNodeContents(el); range.collapse(false); } else range.collapse(true);
+  const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
+}
 function renderNoteEditor() {
   const n = noteEditing ? (state.notes || []).find(x => x.id === noteEditing) : null;
   const d = noteDraft;
@@ -1552,8 +1594,21 @@ function renderNoteEditor() {
   const curBoard = d ? d.board : (n ? (n.board || '') : ((state.sel.noteBoard && state.sel.noteBoard !== '__common') ? state.sel.noteBoard : ''));
   const boardOpts = `<option value="">— 프로젝트 공통 —</option>` + gBoards.map(b => `<option value="${b.id}" ${curBoard === b.id ? 'selected' : ''}>${esc(b.name)}</option>`).join('');
   const isNew = !n;
-  const bodyVal = d ? d.body : (n ? (n.body || '') : (NOTE_TEMPLATES[type] || ''));
+  const rawBody = d ? d.body : (n ? n.body : undefined);   // undefined면 템플릿
+  const bodyHtml = noteBodyToHtml(rawBody, type);
   const dataNew = d ? (d.isNew ? 'data-new="1"' : '') : (isNew ? 'data-new="1"' : '');
+  const fmt = (cmd, label, arg, title) => `<button type="button" class="ne-fmt" data-action="ne-fmt" data-cmd="${cmd}"${arg ? ` data-arg="${arg}"` : ''} title="${title}">${label}</button>`;
+  const toolbar = `<div class="ne-toolbar">
+    ${fmt('bold', '<b>B</b>', '', '굵게')}${fmt('italic', '<i>I</i>', '', '기울임')}${fmt('underline', '<u>U</u>', '', '밑줄')}${fmt('strikeThrough', '<s>S</s>', '', '취소선')}
+    <span class="ne-sep"></span>
+    ${fmt('formatBlock', '제목', 'H4', '제목(큰 글씨)')}${fmt('formatBlock', '본문', 'DIV', '본문으로')}
+    <span class="ne-sep"></span>
+    ${fmt('insertUnorderedList', '• 목록', '', '글머리 목록')}${fmt('insertOrderedList', '1. 목록', '', '번호 목록')}
+    <span class="ne-sep"></span>
+    ${fmt('hiliteColor', '🖍', '#ffe58a', '형광펜')}${fmt('foreColor', '<span style="color:#d64545">A</span>', '#d64545', '빨강 글자')}${fmt('foreColor', '<span style="color:#2b7fd0">A</span>', '#2b7fd0', '파랑 글자')}
+    <span class="ne-sep"></span>
+    ${fmt('removeFormat', '✕ 서식', '', '서식 지우기')}
+  </div>`;
   return `<div class="note-editor">
     <div class="ne-top">
       <button class="pill" data-action="ne-cancel">← 목록으로</button>
@@ -1570,7 +1625,8 @@ function renderNoteEditor() {
       <label class="ne-prop">보드<select id="m-nboard">${boardOpts}</select></label>
       <label class="ne-prop" id="m-who-wrap" style="display:${type === 'interview' ? '' : 'none'}">대상자<input type="text" id="m-nwho" value="${d ? esc(d.who) : (n ? esc(n.who || '') : '')}" placeholder="경리팀장 김OO"></label>
     </div>
-    <textarea class="ne-body" id="m-nbody" ${dataNew} placeholder="들은 내용, 확인한 사항, 다음 단계 등을 자유롭게 적어보세요">${esc(bodyVal)}</textarea>
+    ${toolbar}
+    <div class="ne-body rich" id="m-nbody" contenteditable="true" ${dataNew} data-ph="들은 내용, 확인한 사항, 다음 단계 등을 자유롭게 적어보세요">${bodyHtml}</div>
   </div>`;
 }
 function openNoteTodoModal(noteId) {
@@ -2203,7 +2259,8 @@ function render() {
   const ae = document.activeElement;
   if (ae && ae.id && ae.closest && ae.closest('.note-editor')) {
     caret = { id: ae.id };
-    if (typeof ae.selectionStart === 'number') { caret.start = ae.selectionStart; caret.end = ae.selectionEnd; }
+    if (ae.isContentEditable) { caret.ce = true; caret.off = caretOffset(ae); }
+    else if (typeof ae.selectionStart === 'number') { caret.start = ae.selectionStart; caret.end = ae.selectionEnd; }
   }
   const vbtn = (k, label) => `<button class="${view === k ? 'on' : ''}" data-action="view" data-view="${k}">${label}</button>`;
   const nav = vbtn('dash', '현황') + vbtn('map', '구조도') + vbtn('board', '보드') + vbtn('tbox', '타임박스') + vbtn('notes', '기록') + vbtn('cal', '달력') + vbtn('journal', '일지') + (isAdmin() ? vbtn('devlog', '개발일지') : '');
@@ -2227,9 +2284,13 @@ function render() {
       ${CLOUD && authUser ? `<span class="sync-badge" title="${esc(authUser.email || '')}">☁ 동기화 중</span><button data-action="logout">로그아웃</button>` : ''}
     </footer>`;
   save();
-  if (caret) {   // 커서 복원
+  if (caret) {   // 커서 복원 (원격 재렌더로도 커서 유지)
     const el = document.getElementById(caret.id);
-    if (el) { el.focus(); if (typeof caret.start === 'number') { try { el.setSelectionRange(caret.start, caret.end); } catch (e) { } } }
+    if (el) {
+      el.focus();
+      if (caret.ce) { try { setCaretOffset(el, caret.off); } catch (e) { } }
+      else if (typeof caret.start === 'number') { try { el.setSelectionRange(caret.start, caret.end); } catch (e) { } }
+    }
   }
   if (view === 'map') initMap();
   if (view === 'cal') markCalOverflow();
@@ -2648,6 +2709,15 @@ document.addEventListener('click', e => {
     }
   }
   else if (act === 'note-todo') openNoteTodoModal(el.dataset.id);
+  else if (act === 'ne-fmt') {   // 리치 서식 적용 (선택 영역에)
+    const body = document.getElementById('m-nbody');
+    if (body) {
+      body.focus();
+      try { document.execCommand('styleWithCSS', false, true); } catch (e) { }
+      try { document.execCommand(el.dataset.cmd, false, el.dataset.arg || undefined); } catch (e) { }
+      liveSaveNote();
+    }
+  }
   else if (act === 'note-save') {   // '완료' — 실시간 저장돼 있으므로 반영 후 목록으로
     liveSaveNote();
     noteEditing = undefined; noteDraft = null;
@@ -3201,6 +3271,10 @@ function showNoteBubble(target, text) {
   noteBubbleEl.style.setProperty('--tail-x', (r.left + r.width / 2 - left) + 'px');
 }
 function hideNoteBubble() { if (noteBubbleEl) noteBubbleEl.style.display = 'none'; }
+// 서식 버튼 클릭 시 에디터의 선택 영역이 풀리지 않게(포커스 이동 방지)
+document.addEventListener('mousedown', e => {
+  if (e.target.closest && e.target.closest('.ne-fmt')) e.preventDefault();
+});
 document.addEventListener('mouseover', e => {
   const n = e.target.closest && e.target.closest('.card-note');
   if (n && n.dataset.note) showNoteBubble(n, n.dataset.note);
@@ -3257,10 +3331,10 @@ document.addEventListener('change', e => {
     if (wrap) wrap.style.display = e.target.value === 'interview' ? '' : 'none';
     // 신규 기록: 본문이 비었거나 다른 유형의 템플릿 그대로면 새 유형 템플릿으로 교체 (작성 내용은 보존)
     const body = document.getElementById('m-nbody');
-    if (body && body.dataset.new === '1') {
-      const cur = body.value.trim();
+    if (body && body.isContentEditable && body.dataset.new === '1') {
+      const cur = (body.innerText || '').trim();
       const tpls = Object.values(NOTE_TEMPLATES).map(t => t.trim()).filter(Boolean);
-      if (!cur || tpls.includes(cur)) body.value = NOTE_TEMPLATES[e.target.value] || '';
+      if (!cur || tpls.includes(cur)) body.innerHTML = noteBodyToHtml(undefined, e.target.value);
     }
   }
   if (e.target.closest && e.target.closest('.note-editor')) liveSaveNote();   // 유형·날짜·보드 변경도 실시간 저장
