@@ -477,6 +477,7 @@ function cardHtml(c) {
 }
 
 const openDoneLanes = new Set();   // 완수 레인 펼침 상태 (세션 한정 — 기본 접힘)
+const openSideGroups = new Set();  // 보드 탭 사이드바에서 보드 목록 펼친 프로젝트 (세션 한정)
 let pastSchedOpen = false;         // 일정 패널 '지난 일정' 그룹 펼침 (세션 한정)
 function panelHtml(b, depth) {
   const parent = b.parent ? boardById(b.parent) : null;
@@ -644,11 +645,22 @@ function renderBoardView() {
   if (sel === undefined || (sel !== '__all' && sel !== '' && !groupById(sel))) sel = '__all';
   state.sel.boardGroup = sel;
   const bCount = gid => state.projects.filter(b => (b.group || '') === gid).length;
+  // 프로젝트 행 + (펼침 시) 그 소속 보드 하위 목록. 선택된 프로젝트는 자동 펼침.
+  const sideGroupRow = (gid, name, color, dot) => {
+    const boards = orderedBoardsIn(gid || null);
+    const expanded = openSideGroups.has(gid) || sel === gid;
+    const caret = boards.length ? `<button class="side-caret" data-action="side-toggle" data-gid="${gid}" title="보드 ${expanded ? '접기' : '펼치기'}">${expanded ? '▾' : '▸'}</button>` : '<span class="side-caret sp"></span>';
+    let html = `<div class="side-item ${sel === gid ? 'on c-' + color : ''}" data-action="board-group" data-gid="${gid}">${caret}<span class="side-dot c-${dot || color}"></span><span class="side-name">${esc(name)}</span><span class="side-cnt">${boards.length || ''}</span></div>`;
+    if (expanded && boards.length) {
+      html += `<div class="side-sub">` + boards.map(({ board, depth }) => `<div class="side-sub-item ${focusBoard === board.id ? 'on' : ''}" data-action="side-board" data-bid="${board.id}" style="padding-left:${8 + depth * 13}px" title="이 보드로 이동"><span class="side-dot c-${board.color}"></span><span class="side-name">${esc(board.name)}</span></div>`).join('') + `</div>`;
+    }
+    return html;
+  };
   const side = `<aside class="notes-side">
     <div class="side-h">프로젝트</div>
-    <div class="side-item ${sel === '__all' ? 'on c-gray' : ''}" data-action="board-group" data-gid="__all"><span class="side-dot c-gray"></span><span class="side-name">전체</span><span class="side-cnt">${state.projects.length || ''}</span></div>
-    ${groups.map(g => `<div class="side-item ${sel === g.id ? 'on c-' + g.color : ''}" data-action="board-group" data-gid="${g.id}"><span class="side-dot c-${g.color}"></span><span class="side-name">${esc(g.name)}</span><span class="side-cnt">${bCount(g.id) || ''}</span></div>`).join('')}
-    <div class="side-item ${sel === '' ? 'on c-gray' : ''}" data-action="board-group" data-gid=""><span class="side-dot c-gray"></span><span class="side-name">미분류</span><span class="side-cnt">${bCount('') || ''}</span></div>
+    <div class="side-item ${sel === '__all' ? 'on c-gray' : ''}" data-action="board-group" data-gid="__all"><span class="side-caret sp"></span><span class="side-dot c-gray"></span><span class="side-name">전체</span><span class="side-cnt">${state.projects.length || ''}</span></div>
+    ${groups.map(g => sideGroupRow(g.id, g.name, g.color, g.color)).join('')}
+    ${sideGroupRow('', '미분류', 'gray', 'gray')}
     <div class="side-actions">
       <button class="pill" data-action="group-add">📁 + 프로젝트</button>
       <button class="pill" data-action="proj-add" ${sel !== '__all' && sel !== '' ? `data-group="${sel}"` : ''}>+ 보드</button>
@@ -1505,6 +1517,31 @@ function captureNoteDraft() {
     body: body.value, isNew: body.dataset.new === '1',
   };
 }
+// 기록 에디터 실시간 저장: 입력할 때마다 state.notes에 반영(+디바운스 클라우드 저장). render() 호출 안 함 → 커서 유지
+function liveSaveNote() {
+  const body = document.getElementById('m-nbody');
+  if (noteEditing === undefined || !body) return;
+  const type = (document.getElementById('m-ntype') || {}).value || 'memo';
+  const data = {
+    type,
+    title: (document.getElementById('m-ntitle') || {}).value.trim(),
+    date: (document.getElementById('m-ndate') || {}).value || todayStr(),
+    who: type === 'interview' ? ((document.getElementById('m-nwho') || {}).value.trim() || null) : null,
+    board: (document.getElementById('m-nboard') || {}).value || null,
+    body: body.value.trim() || null,
+  };
+  if (noteEditing) {                                   // 기존 기록 수정
+    const n = (state.notes || []).find(x => x.id === noteEditing);
+    if (n) Object.assign(n, data);
+  } else {                                             // 신규: 제목·본문 중 하나라도 있으면 생성
+    if (!data.title && !data.body) return;
+    const id = uid();
+    (state.notes = state.notes || []).push(Object.assign({ id, group: currentNoteGroup(), createdAt: todayStr() }, data));
+    noteEditing = id;
+    body.removeAttribute('data-new');                  // 이후 유형 변경 시 템플릿 자동교체 방지
+  }
+  save();
+}
 function renderNoteEditor() {
   const n = noteEditing ? (state.notes || []).find(x => x.id === noteEditing) : null;
   const d = noteDraft;
@@ -1521,9 +1558,10 @@ function renderNoteEditor() {
     <div class="ne-top">
       <button class="pill" data-action="ne-cancel">← 목록으로</button>
       <span class="ne-ctx">📁 ${esc(g ? g.name : '미분류')}</span>
+      <span class="ne-autosave">✓ 자동 저장됨</span>
       <span class="ne-spacer"></span>
       ${n ? `<button class="ne-del" data-action="note-del" data-id="${n.id}">삭제</button>` : ''}
-      <button class="ne-save" data-action="note-save" data-id="${n ? n.id : ''}">저장</button>
+      <button class="ne-save" data-action="note-save" data-id="${n ? n.id : ''}">완료</button>
     </div>
     <input type="text" class="ne-title" id="m-ntitle" value="${d ? esc(d.title) : (n ? esc(n.title) : '')}" placeholder="제목">
     <div class="ne-props">
@@ -2160,6 +2198,13 @@ function render() {
   let view = state.sel.view || 'board';
   if (view === 'devlog' && !isAdmin()) view = 'board';
   captureNoteDraft();   // 에디터 작성 중 재렌더(원격 동기화 등) 시 초안 보존
+  // 편집 중 포커스·커서 위치 기억 → 재렌더(원격 동기화 등)로 커서가 사라지지 않게 복원
+  let caret = null;
+  const ae = document.activeElement;
+  if (ae && ae.id && ae.closest && ae.closest('.note-editor')) {
+    caret = { id: ae.id };
+    if (typeof ae.selectionStart === 'number') { caret.start = ae.selectionStart; caret.end = ae.selectionEnd; }
+  }
   const vbtn = (k, label) => `<button class="${view === k ? 'on' : ''}" data-action="view" data-view="${k}">${label}</button>`;
   const nav = vbtn('dash', '현황') + vbtn('map', '구조도') + vbtn('board', '보드') + vbtn('tbox', '타임박스') + vbtn('notes', '기록') + vbtn('cal', '달력') + vbtn('journal', '일지') + (isAdmin() ? vbtn('devlog', '개발일지') : '');
   document.getElementById('app').classList.toggle('wide', view === 'map');
@@ -2182,6 +2227,10 @@ function render() {
       ${CLOUD && authUser ? `<span class="sync-badge" title="${esc(authUser.email || '')}">☁ 동기화 중</span><button data-action="logout">로그아웃</button>` : ''}
     </footer>`;
   save();
+  if (caret) {   // 커서 복원
+    const el = document.getElementById(caret.id);
+    if (el) { el.focus(); if (typeof caret.start === 'number') { try { el.setSelectionRange(caret.start, caret.end); } catch (e) { } } }
+  }
   if (view === 'map') initMap();
   if (view === 'cal') markCalOverflow();
   if (view === 'notes') markNoteOverflow();
@@ -2599,21 +2648,8 @@ document.addEventListener('click', e => {
     }
   }
   else if (act === 'note-todo') openNoteTodoModal(el.dataset.id);
-  else if (act === 'note-save') {
-    const title = document.getElementById('m-ntitle').value.trim();
-    if (title) {
-      const type = document.getElementById('m-ntype').value;
-      const data = {
-        type, title,
-        date: document.getElementById('m-ndate').value || todayStr(),
-        who: type === 'interview' ? (document.getElementById('m-nwho').value.trim() || null) : null,
-        board: (document.getElementById('m-nboard') && document.getElementById('m-nboard').value) || null,
-        body: document.getElementById('m-nbody').value.trim() || null,
-      };
-      const id = el.dataset.id;
-      if (id) { const n = state.notes.find(x => x.id === id); if (n) Object.assign(n, data); }
-      else state.notes.push({ id: uid(), group: currentNoteGroup(), createdAt: todayStr(), ...data });
-    }
+  else if (act === 'note-save') {   // '완료' — 실시간 저장돼 있으므로 반영 후 목록으로
+    liveSaveNote();
     noteEditing = undefined; noteDraft = null;
     closeModal(); render();
   }
@@ -2651,6 +2687,11 @@ document.addEventListener('click', e => {
     }
   }
   else if (act === 'board-group') { state.sel.boardGroup = el.dataset.gid; render(); }
+  else if (act === 'side-toggle') { const gid = el.dataset.gid; openSideGroups.has(gid) ? openSideGroups.delete(gid) : openSideGroups.add(gid); render(); }
+  else if (act === 'side-board') {
+    const b = boardById(el.dataset.bid);
+    if (b) { state.sel.boardGroup = b.group || ''; focusBoard = b.id; render(); }
+  }
   else if (act === 'cal-filter') {
     const gid = el.dataset.gid;
     if (gid === '__all') state.sel.calFilter = [];
@@ -3068,20 +3109,28 @@ async function gapi(path, method, body, token) {
   if (!res.ok) throw new Error('구글 API 오류 ' + res.status);
   return res.status === 204 ? {} : res.json();
 }
+// 프로젝트(그룹) 색 → 구글 캘린더 colorId (1~11). 프로젝트마다 다른 색으로 구분되도록.
+const GCAL_COLOR = { purple: '3', teal: '7', coral: '6', pink: '4', gray: '8', blue: '9', green: '10', amber: '5', red: '11' };
+function gcalColorOf(gid) { const g = gid ? groupById(gid) : null; return g ? (GCAL_COLOR[g.color] || '8') : '8'; }
 function gcalDesiredItems() {
-  const items = {};   // key -> {title, start, end(exclusive)}
+  const items = {};   // key -> {title, start, end(exclusive), color(colorId)}
   state.cards.filter(c => c.status !== 'done' && c.due && c.project).forEach(c => {
     const b = boardById(c.project);
-    items['c:' + c.id] = { title: `[${b ? b.name : ''}] ${c.title}`, start: c.due, end: nextDay(c.due) };
+    items['c:' + c.id] = { title: `[${b ? b.name : ''}] ${c.title}`, start: c.due, end: nextDay(c.due), color: gcalColorOf(b ? b.group : null) };
   });
   state.cards.filter(c => c.status !== 'done' && c.due && !c.project).forEach(c => {
-    items['c:' + c.id] = { title: `[미배정] ${c.title}`, start: c.due, end: nextDay(c.due) };
+    items['c:' + c.id] = { title: `[미배정] ${c.title}`, start: c.due, end: nextDay(c.due), color: '8' };
   });
   (state.groups || []).forEach(g => (g.periods || []).forEach((p, i) => {
-    if (p.start && p.end && p.start <= p.end) items[`g:${g.id}:${i}`] = { title: `📁 ${g.name}`, start: p.start, end: nextDay(p.end) };
+    if (p.start && p.end && p.start <= p.end) items[`g:${g.id}:${i}`] = { title: `📁 ${g.name}`, start: p.start, end: nextDay(p.end), color: gcalColorOf(g.id) };
   }));
   state.projects.filter(b => b.start && b.end && b.start <= b.end).forEach(b => {
-    items['b:' + b.id] = { title: `[기간] ${b.name}`, start: b.start, end: nextDay(b.end) };
+    items['b:' + b.id] = { title: `[기간] ${b.name}`, start: b.start, end: nextDay(b.end), color: gcalColorOf(b.group) };
+  });
+  // 프로젝트 일정(마감)도 프로젝트 색으로 반영
+  (state.schedules || []).filter(s => s.date).forEach(s => {
+    const g = s.group ? groupById(s.group) : null;
+    items['s:' + s.id] = { title: `📌 ${g ? '[' + g.name + '] ' : ''}${s.title}${s.time ? ' ' + s.time : ''}`, start: s.date, end: nextDay(s.date), color: gcalColorOf(s.group) };
   });
   return items;
 }
@@ -3106,9 +3155,9 @@ async function syncGCal() {
     const map = state.gcal.map = state.gcal.map || {};
     let ins = 0, upd = 0, del = 0, fail = 0, skip = 0;
     for (const [key, it] of Object.entries(desired)) {
-      const h = gcalHash(it.title + '|' + it.start + '|' + it.end);
+      const h = gcalHash(it.title + '|' + it.start + '|' + it.end + '|' + (it.color || ''));
       const cur = map[key];
-      const payload = { summary: it.title, start: { date: it.start }, end: { date: it.end } };
+      const payload = { summary: it.title, start: { date: it.start }, end: { date: it.end }, colorId: it.color || '8' };
       try {
         if (!cur) {
           const ev = await gapi(calPath, 'POST', payload, token);
@@ -3176,6 +3225,7 @@ document.addEventListener('input', e => {
     });
     return;
   }
+  if (e.target.closest && e.target.closest('.note-editor')) { liveSaveNote(); return; }   // 기록 실시간 저장
   const s = e.target.closest && e.target.closest('.p-start');
   if (!s) return;
   const end = s.closest('.period-row').querySelector('.p-end');
@@ -3213,6 +3263,7 @@ document.addEventListener('change', e => {
       if (!cur || tpls.includes(cur)) body.value = NOTE_TEMPLATES[e.target.value] || '';
     }
   }
+  if (e.target.closest && e.target.closest('.note-editor')) liveSaveNote();   // 유형·날짜·보드 변경도 실시간 저장
 });
 
 /* ---------- bootstrap ---------- */

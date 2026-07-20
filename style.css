@@ -433,6 +433,9 @@ footer button:hover{border-color:var(--accent);color:var(--text)}
 .notes-side{position:sticky;top:14px;display:flex;flex-direction:column;gap:2px}
 .side-h{font-size:11.5px;font-weight:700;color:var(--faint);letter-spacing:.04em;padding:0 10px 6px}
 .side-item{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;cursor:pointer;font-size:13.5px;color:var(--muted)}
+.side-caret{border:0;background:transparent;color:var(--faint);font-size:10px;cursor:pointer;padding:0;width:12px;flex:none;line-height:1}
+.side-caret.sp{visibility:hidden}
+.side-caret:hover{color:var(--accent)}
 .side-item:hover{background:var(--surface)}
 .side-item.on{font-weight:700;color:inherit}
 .side-dot{width:9px;height:9px;border-radius:3px;flex:none}
@@ -456,6 +459,7 @@ footer button:hover{border-color:var(--accent);color:var(--text)}
 .note-editor{max-width:860px;margin:0 auto;display:flex;flex-direction:column;min-height:calc(100vh - 220px)}
 .ne-top{display:flex;align-items:center;gap:10px;margin-bottom:18px}
 .ne-ctx{font-size:12.5px;color:var(--faint)}
+.ne-autosave{font-size:11.5px;color:var(--ok)}
 .ne-spacer{flex:1}
 .ne-save{background:var(--accent);color:#fff;border:0;border-radius:8px;padding:8px 22px;font:inherit;font-weight:600;cursor:pointer}
 .ne-save:hover{filter:brightness(1.08)}
