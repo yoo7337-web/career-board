@@ -56,7 +56,7 @@ def notion(method, path, **kw):
     r = session.request(
         method, API + path,
         headers={
-            "Authorization": "Bearer " + os.environ["NOTION_TOKEN"],
+            "Authorization": "Bearer " + (os.environ.get("NOTION_TOKEN") or "").strip(),
             "Notion-Version": NOTION_VERSION,
             "Content-Type": "application/json",
         },
@@ -102,7 +102,7 @@ def ensure_data_source(integ):
             return dsid, None
         except RuntimeError as e:
             print("저장된 data source를 못 찾음 → 새로 생성합니다:", e, file=sys.stderr)
-    parent = os.environ.get("NOTION_PARENT_PAGE_ID", "").strip()
+    parent = (os.environ.get("NOTION_PARENT_PAGE_ID") or "").strip().strip('"')
     if not parent:
         sys.exit("NOTION_PARENT_PAGE_ID 가 없습니다. DB를 만들 부모 페이지를 통합에 공유하고 id를 넣어주세요.")
     db = notion("POST", "/databases", json={
@@ -129,11 +129,15 @@ def clear_children(page_id):
 
 
 def main():
+    missing = [k for k in ("FIREBASE_SA", "NOTION_TOKEN") if not (os.environ.get(k) or "").strip()]
+    if missing:
+        sys.exit("필수 시크릿이 비어 있습니다: " + ", ".join(missing) + " (repo Settings → Secrets and variables → Actions 에 등록)")
     cred = credentials.Certificate(json.loads(os.environ["FIREBASE_SA"]))
     firebase_admin.initialize_app(cred)
     db = firestore.client()
 
-    email = os.environ.get("BOARD_EMAIL", "yoo7337@gmail.com")
+    # 미등록 시크릿은 '없음'이 아니라 빈 문자열로 들어오므로 or 로 기본값 처리
+    email = (os.environ.get("BOARD_EMAIL") or "yoo7337@gmail.com").strip()
     uid = fb_auth.get_user_by_email(email).uid
 
     snap = db.collection("boards").document(uid).get()
