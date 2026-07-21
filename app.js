@@ -1021,7 +1021,9 @@ function schedChipHtml(s) {
   return `<span class="chip chip-sched c-${g ? g.color : 'gray'} ${s.done ? 'done' : ''} ${over ? 'over' : ''}" data-action="sched-edit" data-id="${s.id}" title="${esc(title)}">${g ? `<span class="chip-proj-top">📁 ${esc(g.name)}</span>` : ''}<span class="chip-task">📌 ${s.time ? s.time + ' ' : ''}${esc(s.title)}</span></span>`;
 }
 function calFilterActive() { return Array.isArray(state.sel.calFilter) && state.sel.calFilter.length > 0; }
+function calShowType(kind) { const t = state.sel.calType || 'all'; return t === 'all' || t === kind; }   // kind: 'todo' | 'sched'
 function calCardVisible(c) {
+  if (!calShowType('todo')) return false;
   if (!calFilterActive()) return true;
   const b = boardById(c.project);
   return state.sel.calFilter.includes(b ? (b.group || '') : '');
@@ -1032,10 +1034,15 @@ function calPeriodVisible(gid) {
 }
 function calFilterBar() {
   const groups = state.groups || [];
-  if (!groups.length) return '';
+  const t = state.sel.calType || 'all';
+  const tpill = (v, label, title) => `<button class="fpill ${t === v ? 'on' : ''}" data-action="cal-type" data-t="${v}" title="${title}">${label}</button>`;
+  const typeRow = `<div class="cal-filter"><span class="fl-label">표시</span>
+    ${tpill('all', '전체', '일정 · 할 일 모두 표시')}${tpill('sched', '📌 일정', '프로젝트 일정·마감과 수행기간만')}${tpill('todo', '✅ 할 일', 'To-do 카드만')}
+  </div>`;
+  if (!groups.length) return typeRow;
   const sel = state.sel.calFilter, active = calFilterActive();
   const pill = (gid, name, color) => `<button class="fpill ${active && sel.includes(gid) ? 'on c-' + color : ''}" data-action="cal-filter" data-gid="${gid}">${esc(name)}</button>`;
-  return `<div class="cal-filter"><span class="fl-label">프로젝트</span>
+  return typeRow + `<div class="cal-filter"><span class="fl-label">프로젝트</span>
     <button class="fpill ${!active ? 'on' : ''}" data-action="cal-filter" data-gid="__all">전체</button>
     ${groups.map(g => pill(g.id, '📁 ' + g.name, g.color)).join('')}
     ${pill('', '미분류', 'gray')}
@@ -1056,14 +1063,14 @@ function renderCal() {
   });
   const schedByDate = {};
   (state.schedules || []).forEach(s => {
-    if (!s.date || !calPeriodVisible(s.group || '')) return;
+    if (!s.date || !calShowType('sched') || !calPeriodVisible(s.group || '')) return;
     (schedByDate[s.date] = schedByDate[s.date] || []).push(s);
   });
   const periodItems = [];
-  state.projects.filter(b => b.start && b.end && b.start <= b.end).forEach(b => {
+  if (calShowType('sched')) state.projects.filter(b => b.start && b.end && b.start <= b.end).forEach(b => {
     if (calPeriodVisible(b.group || '')) periodItems.push({ name: b.name, color: b.color, start: b.start, end: b.end, kind: 'board', id: b.id });
   });
-  (state.groups || []).forEach(g => (g.periods || []).forEach(p => {
+  if (calShowType('sched')) (state.groups || []).forEach(g => (g.periods || []).forEach(p => {
     if (p.start && p.end && p.start <= p.end && calPeriodVisible(g.id)) periodItems.push({ name: '📁 ' + g.name, color: g.color, start: p.start, end: p.end, kind: 'group', id: g.id });
   }));
   let weeksHtml = '';
@@ -2761,6 +2768,10 @@ document.addEventListener('click', e => {
   else if (act === 'side-board') {
     const b = boardById(el.dataset.bid);
     if (b) { state.sel.boardGroup = b.group || ''; focusBoard = b.id; render(); }
+  }
+  else if (act === 'cal-type') {
+    state.sel.calType = el.dataset.t || 'all';
+    render();
   }
   else if (act === 'cal-filter') {
     const gid = el.dataset.gid;
