@@ -177,8 +177,11 @@ function subscribeBackups(uid) {
   }, e => console.warn('backup sub failed', e));
 }
 
+// 이 탭이 직접 올린 write의 savedAt 목록 — 서버 에코가 되돌아왔을 때 "내가 쓴 옛 상태"로 최신 로컬을 덮는 사고 방지
+const ownWrites = new Set();
 function doCloudWrite() {
   if (!(CLOUD && db && authUser)) return;
+  if (state.savedAt) { ownWrites.add(state.savedAt); if (ownWrites.size > 50) ownWrites.delete(ownWrites.values().next().value); }
   db.collection('boards').doc(authUser.uid)
     .set({ state, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
     .catch(e => console.warn('sync write failed', e));
@@ -293,11 +296,15 @@ function toTrash(kind, payload) {
 // 클라우드 상태 적용(모든 수신 공통): 로컬에 미동기화 편집이 있으면 union 병합, 아니면 교체
 function applyCloudState(remote) {
   if (remote.savedAt && state.savedAt === remote.savedAt) { boardLoaded = true; return; }   // 동일 상태 에코 → 재렌더 불필요
+  // 내가 올린 write가 뒤늦게 에코로 돌아온 경우: 그 사이 로컬에서 더 편집했다면 롤백이 되므로 무시
+  if (remote.savedAt && ownWrites.has(remote.savedAt) && (state.savedAt || 0) > remote.savedAt) { boardLoaded = true; return; }
+  const keepSel = state.sel;   // 화면 선택(탭·필터·달력 월)은 기기별 UI 상태 — 클라우드가 덮어쓰지 않음
   let cached = null;
   try { cached = JSON.parse(localStorage.getItem(LS_KEY) || 'null'); } catch (e) { cached = null; }
   if (cached && cached.groups && localCacheNewer(cached, remote)) {
     console.warn('로컬이 클라우드보다 최신 → 병합(union) 후 재동기화 (양쪽 데이터 보존)');
     state = mergeStates(cached, remote);
+    if (keepSel) state.sel = keepSel;
     normalizeState();
     localStorage.setItem(LS_KEY, JSON.stringify(state));
     render();
@@ -308,6 +315,7 @@ function applyCloudState(remote) {
   }
   applyingRemote = true;
   state = remote;
+  if (keepSel) state.sel = keepSel;
   normalizeState();
   localStorage.setItem(LS_KEY, JSON.stringify(state));
   render();
@@ -1037,7 +1045,7 @@ function calFilterBar() {
   const t = state.sel.calType || 'all';
   const tpill = (v, label, title) => `<button class="fpill ${t === v ? 'on' : ''}" data-action="cal-type" data-t="${v}" title="${title}">${label}</button>`;
   const typeRow = `<div class="cal-filter"><span class="fl-label">표시</span>
-    ${tpill('all', '전체', '일정 · 할 일 모두 표시')}${tpill('sched', '📌 일정', '프로젝트 일정·마감과 수행기간만')}${tpill('todo', '✅ 할 일', 'To-do 카드만')}
+    ${tpill('all', '전체', '일정 · 할 일 모두 표시')}${tpill('sched', '📌 일정', '프로젝트 일정·마감만')}${tpill('todo', '✅ 할 일', 'To-do 카드만')}<span class="fl-note">프로젝트 수행기간 막대는 항상 표시</span>
   </div>`;
   if (!groups.length) return typeRow;
   const sel = state.sel.calFilter, active = calFilterActive();
@@ -1067,10 +1075,10 @@ function renderCal() {
     (schedByDate[s.date] = schedByDate[s.date] || []).push(s);
   });
   const periodItems = [];
-  if (calShowType('sched')) state.projects.filter(b => b.start && b.end && b.start <= b.end).forEach(b => {
+  state.projects.filter(b => b.start && b.end && b.start <= b.end).forEach(b => {   // 프로젝트 수행기간 막대는 타입 필터와 무관하게 항상 표시
     if (calPeriodVisible(b.group || '')) periodItems.push({ name: b.name, color: b.color, start: b.start, end: b.end, kind: 'board', id: b.id });
   });
-  if (calShowType('sched')) (state.groups || []).forEach(g => (g.periods || []).forEach(p => {
+  (state.groups || []).forEach(g => (g.periods || []).forEach(p => {
     if (p.start && p.end && p.start <= p.end && calPeriodVisible(g.id)) periodItems.push({ name: '📁 ' + g.name, color: g.color, start: p.start, end: p.end, kind: 'group', id: g.id });
   }));
   let weeksHtml = '';
