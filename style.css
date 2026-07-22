@@ -568,6 +568,13 @@ footer button:hover{border-color:var(--accent);color:var(--text)}
 .note-list.timeline{position:relative;padding-left:18px}
 .note-list.timeline::before{content:'';position:absolute;left:5px;top:8px;bottom:8px;width:2px;background:var(--border);border-radius:1px}
 .note-group-h{font-size:12px;font-weight:700;color:var(--faint);margin:14px 0 6px;letter-spacing:.03em}
+/* '전체' 보기: 프로젝트별 묶음 머리글 */
+.note-group-h.proj{display:flex;align-items:center;gap:7px;font-size:13px;color:var(--text);
+  margin:20px 0 8px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+.note-group-h.proj:first-child{margin-top:2px}
+.note-group-h.proj .ngh-dot{width:9px;height:9px;border-radius:3px;flex:0 0 auto}   /* 사이드바 .side-dot와 같은 모양 */
+.note-group-h.proj .ngh-cnt{font-weight:400;font-size:11.5px;color:var(--muted);
+  background:var(--bg);border:1px solid var(--border);border-radius:999px;padding:0 8px}
 .note-item{position:relative}
 .tl-dot{position:absolute;left:-18px;top:16px;width:10px;height:10px;border-radius:50%;border:2px solid var(--bg)}
 .note-pin-btn{border:0;background:transparent;cursor:pointer;font-size:12px;opacity:.35;padding:2px 4px}
