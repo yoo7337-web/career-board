@@ -211,6 +211,35 @@ body.dragging-board .delete-lane{display:flex}
 .mapnode:hover .mp,.map.linking .mp{opacity:1}
 .mp-top{top:-8px}
 .mp-bot{bottom:-8px}
+/* 구조도 노드 hover 말풍선 (body 직속 fixed — .map의 overflow:auto에 잘리지 않게) */
+.map-pop{position:fixed;z-index:60;width:260px;max-height:60vh;overflow-y:auto;display:none;
+  background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:11px 13px;
+  box-shadow:0 8px 24px rgba(0,0,0,.22);pointer-events:none;font-size:12.5px}
+.map-pop.on{display:block}
+.map-pop::before{content:'';position:absolute;top:50%;margin-top:-6px;width:0;height:0;
+  border:6px solid transparent}
+.map-pop[data-side=left]::before{left:-12px;border-right-color:var(--border)}
+.map-pop[data-side=right]::before{right:-12px;border-left-color:var(--border)}
+.map-pop[data-side=none]::before{display:none}
+.mpop-head{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px;padding-bottom:7px;border-bottom:1px solid var(--border)}
+.mpop-proj{font-size:11px;padding:1px 7px;border-radius:999px;color:#fff}
+.mpop-name{font-weight:700;font-size:13px}
+.mpop-sec{margin-bottom:8px}
+.mpop-sec:last-child{margin-bottom:0}
+.mpop-h{font-size:11.5px;font-weight:700;color:var(--muted);margin-bottom:4px}
+.mpop-sec.doing .mpop-h{color:var(--accent)}
+.mpop-sec.done .mpop-h{color:var(--ok)}
+.mpop-n{font-weight:400;opacity:.75}
+.mpop-sec ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:3px}
+.mpop-sec li{display:flex;align-items:baseline;gap:6px;line-height:1.35}
+.mpop-sec li::before{content:'·';color:var(--muted);flex:0 0 auto}
+.mpop-sec.done .mpop-t{text-decoration:line-through;opacity:.65}
+.mpop-t{flex:1;min-width:0;word-break:break-word}
+.mpop-d{flex:0 0 auto;font-size:11px;color:var(--muted)}
+.mpop-more{font-size:11.5px;color:var(--muted);opacity:.8}
+.mpop-more::before{content:''!important}
+.mpop-empty{color:var(--muted);font-size:12px}
+.mpop-foot{margin-top:8px;padding-top:7px;border-top:1px solid var(--border);font-size:11.5px;color:var(--muted)}
 .board-panel.flash{outline:2px solid var(--accent);outline-offset:2px}
 
 /* calendar */

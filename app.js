@@ -818,7 +818,7 @@ function renderMap() {
     const prog = cs.length ? `<div class="node-prog"><div class="node-prog-fill" style="width:${Math.round(done / cs.length * 100)}%"></div></div>` : '';
     const stat = cs.length ? ` — 완수 ${done}/${cs.length}${doing ? ` · 진행중 ${doing}` : ''}` : '';
     return `
-    <div class="mapnode c-${b.color}" data-id="${b.id}" style="left:${b.x}px;top:${b.y}px" title="${esc(b.name)}${stat}">
+    <div class="mapnode c-${b.color}" data-id="${b.id}" style="left:${b.x}px;top:${b.y}px" data-stat="${esc(b.name)}${stat}">
       <div class="mp mp-top" data-id="${b.id}" data-role="top" title="상위 연결점 — 여기서 부모 보드로 끌기"></div>
       ${badge}<div class="mapnode-name">${esc(b.name)}</div>${prog}
       <div class="mp mp-bot" data-id="${b.id}" data-role="bot" title="하위 연결점 — 여기서 자식 보드로 끌기"></div>
@@ -846,6 +846,50 @@ function renderMap() {
       <form class="quick" data-project="__inbox"><input name="t" placeholder="+ 할 일 추가하고 Enter" autocomplete="off"></form>
     </aside>
   </div>`;
+}
+// 구조도 노드 hover 말풍선: 그 보드의 진행 중·완수 항목을 실제 제목으로 보여줌
+const MAP_POP_MAX = 6;   // 구역별 최대 표시 건수 (넘치면 '+N건 더')
+function mapPopHtml(bid) {
+  const b = boardById(bid);
+  if (!b) return '';
+  const g = b.group ? groupById(b.group) : null;
+  const cs = state.cards.filter(c => c.project === bid);
+  const doing = cs.filter(c => c.status === 'doing');
+  const done = cs.filter(c => c.status === 'done')
+    .sort((a, b2) => (b2.doneAt || '').localeCompare(a.doneAt || ''));
+  const todo = cs.filter(c => c.status !== 'doing' && c.status !== 'done');
+  const sec = (cls, icon, label, items, meta) => {
+    if (!items.length) return '';
+    const rows = items.slice(0, MAP_POP_MAX).map(c =>
+      `<li><span class="mpop-t">${esc(c.title)}</span>${meta(c)}</li>`).join('');
+    const more = items.length > MAP_POP_MAX ? `<li class="mpop-more">+${items.length - MAP_POP_MAX}건 더</li>` : '';
+    return `<div class="mpop-sec ${cls}"><div class="mpop-h">${icon} ${label} <span class="mpop-n">${items.length}</span></div><ul>${rows}${more}</ul></div>`;
+  };
+  const body =
+    sec('doing', '▶', '진행 중', doing, c => c.due ? `<span class="mpop-d">${fmtDate(c.due)}</span>` : '') +
+    sec('done', '✓', '완수', done, c => c.doneAt ? `<span class="mpop-d">${fmtDate(c.doneAt)}</span>` : '');
+  const foot = todo.length ? `<div class="mpop-foot">📅 예정 ${todo.length}건</div>` : '';
+  return `<div class="mpop-head">${g ? `<span class="mpop-proj c-${g.color}">${esc(g.name)}</span>` : ''}<span class="mpop-name">${esc(b.name)}</span></div>
+    ${body || '<div class="mpop-empty">진행 중·완수한 할 일이 아직 없어요</div>'}${foot}`;
+}
+function mapPopEl() {
+  let el = document.getElementById('map-pop');
+  if (!el) { el = document.createElement('div'); el.id = 'map-pop'; el.className = 'map-pop'; document.body.appendChild(el); }
+  return el;
+}
+function hideMapPop() { const el = document.getElementById('map-pop'); if (el) el.classList.remove('on'); }
+function showMapPop(node) {
+  const el = mapPopEl();
+  el.innerHTML = mapPopHtml(node.dataset.id);
+  el.classList.add('on');
+  const r = node.getBoundingClientRect(), pr = el.getBoundingClientRect(), GAP = 10;
+  let left = r.right + GAP, side = 'left';           // 기본은 노드 오른쪽(말풍선 꼬리는 왼쪽)
+  if (left + pr.width > innerWidth - 8) { left = r.left - GAP - pr.width; side = 'right'; }
+  if (left < 8) { left = Math.min(Math.max(8, r.left), innerWidth - pr.width - 8); side = 'none'; }
+  let top = r.top + r.height / 2 - pr.height / 2;
+  top = Math.max(8, Math.min(top, innerHeight - pr.height - 8));
+  el.style.left = left + 'px'; el.style.top = top + 'px';
+  el.dataset.side = side;
 }
 function drawLines(temp) {
   const map = document.getElementById('map');
@@ -880,7 +924,24 @@ function initMap() {
   let clickTimer = null, lastId = null, lastTime = 0, cutId = null;
   let regionGid = null, regionStart = null;   // 구역 드래그: gid + 멤버 시작좌표
 
+  // hover 말풍선 — 드래그·연결·스크롤 중에는 방해되지 않게 숨김
+  let popTimer = null;
+  const popCancel = () => { clearTimeout(popTimer); popTimer = null; hideMapPop(); };
+  map.addEventListener('mouseover', e => {
+    const node = e.target.closest('.mapnode');
+    if (!node || mode) return;
+    clearTimeout(popTimer);
+    popTimer = setTimeout(() => { if (!mode) showMapPop(node); }, 180);   // 지나가다 스치는 건 무시
+  });
+  map.addEventListener('mouseout', e => {
+    const node = e.target.closest('.mapnode');
+    if (node && !node.contains(e.relatedTarget)) popCancel();
+  });
+  map.addEventListener('scroll', popCancel, { passive: true });
+  map.addEventListener('mouseleave', popCancel);
+
   map.addEventListener('pointerdown', e => {
+    popCancel();
     const cut = e.target.closest('.mapcut');
     if (cut) { mode = 'cut'; cutId = cut.dataset.child; e.preventDefault(); return; }
     const cp = e.target.closest('.mp');
@@ -2233,6 +2294,7 @@ function render() {
   let view = state.sel.view || 'board';
   if (view === 'devlog' && !isAdmin()) view = 'board';
   captureNoteDraft();   // 에디터 작성 중 재렌더(원격 동기화 등) 시 초안 보존
+  hideMapPop();         // 구조도 말풍선은 body에 붙어 있어 재렌더로 자동 제거되지 않음
   // 편집 중 포커스·커서 위치 기억 → 재렌더(원격 동기화 등)로 커서가 사라지지 않게 복원
   let caret = null;
   const ae = document.activeElement;
