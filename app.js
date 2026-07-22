@@ -1114,7 +1114,8 @@ function renderCal() {
       <div class="cal-days">${cells}</div>
     </div>`;
   }
-  return `<div class="cal-head">
+  return `${dashSeg('cal')}
+    <div class="cal-head">
       <span class="cal-title">${y}년 ${m}월</span>
       <button class="pill" data-action="cal-prev">◀</button>
       <button class="pill" data-action="cal-today">오늘</button>
@@ -1274,6 +1275,13 @@ function recentNotesSec() {
     <div class="dash-list">${notes.length ? notes.map(row).join('') : '<div class="empty">기록 탭에서 인터뷰·진행상황을 남겨보세요</div>'}</div>
   </section>`;
 }
+// 탭 안에서 두 화면을 오가는 세그먼트 (헤더 탭 수를 줄이려고 도입 — data-action='view'를 그대로 재사용)
+function pageSeg(cur, items) {
+  return `<div class="seg page-seg">${items.map(([v, label]) =>
+    `<button type="button" class="seg-btn ${cur === v ? 'sel' : ''}" data-action="view" data-view="${v}">${label}</button>`).join('')}</div>`;
+}
+function dashSeg(cur) { return pageSeg(cur, [['dash', '📊 현황'], ['cal', '📅 달력']]); }
+function journalSeg(cur) { return isAdmin() ? pageSeg(cur, [['journal', '📔 일지'], ['devlog', '🛠 개발일지']]) : ''; }
 function renderDash() {
   const today = todayStr();
   const cards = state.cards;
@@ -1338,6 +1346,7 @@ function renderDash() {
       : '<span class="db3 empty">타임박스에서 오늘의 Big 3를 정해보세요 →</span>'}
   </div>`;
   return `<div class="dash">
+    ${dashSeg('dash')}
     ${big3Strip}
     ${weekStrip}
     <div class="dash-kpis">
@@ -2195,6 +2204,7 @@ function renderJournal() {
   const moreBtn = pastDates.length > limit ? `<button class="pill jr-more" data-action="jr-more">+ 이전 일지 더 보기 (${pastDates.length - limit}일)</button>` : '';
   const keyBtn = `<button class="jr-mini jr-key-btn" data-action="jr-key">🔑 AI 키 ${geminiKey() ? '✓' : '설정'}</button>`;
   return `<div class="journal">
+    ${journalSeg('journal')}
     <div class="jr-intro">📔 완수한 To-do·타임박스·기록을 토대로 하루가 자동 정리됩니다. 지난 날짜는 확정 저장되어 원본을 지워도 남아요.${keyBtn}</div>
     ${feed}${moreBtn}
   </div>`;
@@ -2237,6 +2247,7 @@ function renderDevlog() {
       <div class="dl-body"><div class="dl-title">${esc(e.title)}</div>${e.desc ? `<div class="dl-desc">${esc(e.desc)}</div>` : ''}</div>
     </li>`;
   return `<div class="devlog">
+    ${journalSeg('devlog')}
     <p class="dl-note"><i class="lock">🔒</i> 관리자(${ADMIN_EMAIL}) 전용 — 다른 사용자에게는 이 탭이 보이지 않습니다.</p>
     <section>
       <div class="dl-head"><h2>완료된 개발 <span class="cnt">${done.length}</span></h2><button class="pill" data-action="dl-add-done">+ 이력 추가</button></div>
@@ -2277,8 +2288,11 @@ function render() {
     if (ae.isContentEditable) { caret.ce = true; caret.off = caretOffset(ae); }
     else if (typeof ae.selectionStart === 'number') { caret.start = ae.selectionStart; caret.end = ae.selectionEnd; }
   }
-  const vbtn = (k, label) => `<button class="${view === k ? 'on' : ''}" data-action="view" data-view="${k}">${label}</button>`;
-  const nav = vbtn('dash', '현황') + vbtn('map', '구조도') + vbtn('board', '보드') + vbtn('tbox', '타임박스') + vbtn('notes', '기록') + vbtn('cal', '달력') + vbtn('journal', '일지') + (isAdmin() ? vbtn('devlog', '개발일지') : '');
+  // 달력은 현황 탭 안 세그먼트, 개발일지는 일지 탭 안 세그먼트 → 헤더 버튼은 6개(파악│진행│일지)
+  const navOwner = { cal: 'dash', devlog: 'journal' };
+  const vbtn = (k, label) => `<button class="${(navOwner[view] || view) === k ? 'on' : ''}" data-action="view" data-view="${k}">${label}</button>`;
+  const vsep = '<span class="vsep"></span>';
+  const nav = vbtn('dash', '현황') + vbtn('map', '구조도') + vsep + vbtn('board', '보드') + vbtn('tbox', '타임박스') + vbtn('notes', '기록') + vsep + vbtn('journal', '일지');
   document.getElementById('app').classList.toggle('wide', view === 'map');
   document.getElementById('app').innerHTML = `
     <header>
