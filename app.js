@@ -1230,57 +1230,12 @@ function doneWeekSection(cards, offset, start, end) {
     <div class="dash-list slim-scroll">${body}</div>
   </section>`;
 }
-function upcomingSchedSec() {
-  const items = (state.schedules || []).filter(s => !s.done && !schedIsStale(s)).slice()
-    .sort((a, b) => {                                   // 프로젝트 순 → 그 안에서 마감 임박순
-      const pa = schedProjOrder(a), pb = schedProjOrder(b);
-      if (pa !== pb) return pa - pb;
-      return (a.date || '').localeCompare(b.date || '');
-    });
-  if (!items.length) return '';
-  const row = s => {
-    const dd = dday(s.date);
-    const over = dd < 0 ? ' overdue' : '';
-    return `<div class="drow${over}" data-kind="sched" data-id="${s.id}" title="클릭=수정 · 더블클릭=보드로 이동">
-      <span class="drow-prio sched-dot">📌</span>
-      <div class="drow-body"><div class="drow-l1"><span class="drow-title">${esc(s.title)}</span>${s.time ? `<span class="sched-time">🕐 ${s.time}</span>` : ''}</div>
-        <div class="drow-meta">${dueBadge(s.date)}</div></div>
-    </div>`;
-  };
-  let html = '', last = '__init';
-  items.forEach(s => {
-    const k = s.group || '';
-    if (k !== last) { last = k; html += dashGroupHeader(k); }
-    html += row(s);
-  });
-  return `<section class="dash-sec full" id="sec-sched"><div class="dash-sec-head"><h2>📌 다가오는 일정 <span class="cnt">${items.length}</span></h2><span class="dash-sub">프로젝트별 · 마감 임박순</span></div>
-    <div class="dash-list slim-scroll" id="sched-list">${html}</div>
-  </section>`;
-}
-function recentNotesSec() {
-  const notes = (state.notes || []).slice()
-    .sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt || '').localeCompare(a.createdAt || ''))
-    .slice(0, 3);
-  const row = n => {
-    const g = n.group ? groupById(n.group) : null;
-    return `<div class="drow" data-action="dash-note-go" data-id="${n.id}">
-      <span class="drow-prio sched-dot">📝</span>
-      <div class="drow-body">
-        <div class="drow-l1">${noteTypeBadge(n.type)}<span class="drow-title">${esc(n.title)}</span></div>
-        <div class="drow-meta">${g ? `<span class="drow-proj c-${g.color}">${esc(g.name)}</span>` : ''}<span class="tag">${n.date ? fmtDate(n.date) : ''}</span></div>
-      </div>
-    </div>`;
-  };
-  return `<section class="dash-sec full"><div class="dash-sec-head"><h2>📝 최근 기록 <span class="cnt">${notes.length}</span></h2><span class="dash-sub">기록 탭 최신 3건</span></div>
-    <div class="dash-list">${notes.length ? notes.map(row).join('') : '<div class="empty">기록 탭에서 인터뷰·진행상황을 남겨보세요</div>'}</div>
-  </section>`;
-}
 // 탭 안에서 두 화면을 오가는 세그먼트 (헤더 탭 수를 줄이려고 도입 — data-action='view'를 그대로 재사용)
 function pageSeg(cur, items) {
   return `<div class="seg page-seg">${items.map(([v, label]) =>
     `<button type="button" class="seg-btn ${cur === v ? 'sel' : ''}" data-action="view" data-view="${v}">${label}</button>`).join('')}</div>`;
 }
-function dashSeg(cur) { return pageSeg(cur, [['dash', '📊 현황'], ['cal', '📅 달력']]); }
+function dashSeg(cur) { return pageSeg(cur, [['dash', '📊 대시보드'], ['cal', '📅 달력']]); }
 function journalSeg(cur) { return isAdmin() ? pageSeg(cur, [['journal', '📔 일지'], ['devlog', '🛠 개발일지']]) : ''; }
 function renderDash() {
   const today = todayStr();
@@ -1361,13 +1316,11 @@ function renderDash() {
           ${dashSection('🔥 급한 업무', '마감 임박·지남 또는 중요도 높음', urgent, '급한 업무가 없어요 👍', null, { id: 'sec-urgent' })}
         </div>`
       : dashSection('🔥 급한 업무', '마감 임박·지남 또는 중요도 높음', urgent, '급한 업무가 없어요 👍', null, { full: true, id: 'sec-urgent' })}
-    ${upcomingSchedSec()}
     <div class="dash-flow">
       ${dashSection('📅 예정', '마감 임박순', todo, '예정 업무가 없어요', null, { id: 'sec-todo', stage: 'todo', hidePill: true })}
       ${dashSection('▶ 진행 중', '지금 하고 있는 일', doing, '진행 중인 업무가 없어요', null, { id: 'sec-doing', stage: 'doing', hidePill: true })}
       ${doneWeekSection(recentDone, doneWeekOffset, dw.start, dw.end)}
     </div>
-    ${recentNotesSec()}
   </div>`;
 }
 
@@ -2292,7 +2245,7 @@ function render() {
   const navOwner = { cal: 'dash', devlog: 'journal' };
   const vbtn = (k, label) => `<button class="${(navOwner[view] || view) === k ? 'on' : ''}" data-action="view" data-view="${k}">${label}</button>`;
   const vsep = '<span class="vsep"></span>';
-  const nav = vbtn('dash', '현황') + vbtn('map', '구조도') + vsep + vbtn('board', '보드') + vbtn('tbox', '타임박스') + vbtn('notes', '기록') + vsep + vbtn('journal', '일지');
+  const nav = vbtn('dash', '대시보드') + vbtn('map', '구조도') + vsep + vbtn('board', '보드') + vbtn('tbox', '타임박스') + vbtn('notes', '기록') + vsep + vbtn('journal', '일지');
   document.getElementById('app').classList.toggle('wide', view === 'map');
   document.getElementById('app').innerHTML = `
     <header>
@@ -2775,15 +2728,6 @@ document.addEventListener('click', e => {
     const g = gid ? groupById(gid) : null;
     if (g) g.overview = v || null; else state.unGroupOverview = v || null;
     closeModal(); render();
-  }
-  else if (act === 'dash-note-go') {
-    const n = (state.notes || []).find(x => x.id === el.dataset.id);
-    if (n) {
-      state.sel.view = 'notes'; state.sel.noteGroup = n.group || ''; state.sel.noteType = '';
-      render();
-      const item = document.querySelector(`.note-item[data-id="${n.id}"]`);
-      if (item) { item.scrollIntoView({ behavior: 'smooth', block: 'center' }); item.classList.add('flash'); setTimeout(() => item.classList.remove('flash'), 1500); }
-    }
   }
   else if (act === 'board-group') { state.sel.boardGroup = el.dataset.gid; render(); }
   else if (act === 'side-toggle') { const gid = el.dataset.gid; openSideGroups.has(gid) ? openSideGroups.delete(gid) : openSideGroups.add(gid); render(); }
