@@ -1296,7 +1296,7 @@ function pageSeg(cur, items) {
   return `<div class="seg page-seg">${items.map(([v, label]) =>
     `<button type="button" class="seg-btn ${cur === v ? 'sel' : ''}" data-action="view" data-view="${v}">${label}</button>`).join('')}</div>`;
 }
-function dashSeg(cur) { return pageSeg(cur, [['dash', '📊 대시보드'], ['cal', '📅 달력']]); }
+function dashSeg(cur) { return pageSeg(cur, [['dash', '📊 현황'], ['cal', '📅 달력']]); }
 function journalSeg(cur) { return isAdmin() ? pageSeg(cur, [['journal', '📔 일지'], ['devlog', '🛠 개발일지']]) : ''; }
 function renderDash() {
   const today = todayStr();
