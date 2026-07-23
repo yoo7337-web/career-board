@@ -656,7 +656,7 @@ function renderBoardView() {
   // 프로젝트 행 + (펼침 시) 그 소속 보드 하위 목록. 선택된 프로젝트는 자동 펼침.
   const sideGroupRow = (gid, name, color, dot) => {
     const boards = orderedBoardsIn(gid || null);
-    const expanded = openSideGroups.has(gid) || sel === gid;
+    const expanded = openSideGroups.has(gid);   // 펼침은 오직 openSideGroups로 — 선택과 무관하게 독립 토글·누적
     const caret = boards.length ? `<button class="side-caret" data-action="side-toggle" data-gid="${gid}" title="보드 ${expanded ? '접기' : '펼치기'}">${expanded ? '▾' : '▸'}</button>` : '<span class="side-caret sp"></span>';
     let html = `<div class="side-item ${sel === gid ? 'on c-' + color : ''}" data-action="board-group" data-gid="${gid}">${caret}<span class="side-dot c-${dot || color}"></span><span class="side-name">${esc(name)}</span><span class="side-cnt">${boards.length || ''}</span></div>`;
     if (expanded && boards.length) {
@@ -1447,23 +1447,28 @@ function renderNotes() {
   const notesOf = xgid => (state.notes || []).filter(n => (n.group || '') === xgid).length;
   const cntBoard = bid => gNotes.filter(n => (bid === '__common' ? !n.board : n.board === bid)).length;
   // 사이드바: 프로젝트 목록 + 선택된 프로젝트 아래 보드 트리(아코디언)
+  // 펼침은 openSideGroups로만 판단 → 프로젝트별 독립 토글·누적(보드 탭과 동일, Set 공유)
   const subTree = xgid => {
-    if (xgid !== gid) return '';
-    const sub = (label, bid, cnt, color) => `<div class="side-sub-item ${bsel === bid ? 'on' : ''}" data-action="note-board-nav" data-bid="${bid}">
+    if (!openSideGroups.has(xgid)) return '';
+    const xNotes = allNotes.filter(n => (n.group || '') === xgid);
+    const xBoards = state.projects.filter(b => (b.group || '') === xgid);
+    const cntB = bid => xNotes.filter(n => (bid === '__common' ? !n.board : n.board === bid)).length;
+    const sub = (label, bid, cnt, color) => `<div class="side-sub-item ${(gid === xgid && bsel === bid) ? 'on' : ''}" data-action="note-board-nav" data-gid="${xgid}" data-bid="${bid}">
         <span class="side-dot ${color ? 'c-' + color : 'plain'}"></span><span class="side-name">${label}</span><span class="side-cnt">${cnt || ''}</span></div>`;
     return `<div class="side-sub">
-      ${sub('전체', '', gNotes.length, null)}
-      ${sub('공통', '__common', cntBoard('__common'), null)}
-      ${gBoards.map(b => sub(esc(b.name), b.id, cntBoard(b.id), b.color)).join('')}
+      ${sub('전체', '', xNotes.length, null)}
+      ${sub('공통', '__common', cntB('__common'), null)}
+      ${xBoards.map(b => sub(esc(b.name), b.id, cntB(b.id), b.color)).join('')}
     </div>`;
   };
-  const sideItems = `<div class="side-item ${isAll ? 'on c-gray' : ''}" data-action="note-group" data-gid="__all">
-      <span class="side-dot c-gray"></span><span class="side-name">전체</span><span class="side-cnt">${allNotes.length || ''}</span></div>`
-    + groups.map(x => `<div class="side-item ${gid === x.id ? 'on c-' + x.color : ''}" data-action="note-group" data-gid="${x.id}">
-      <span class="side-dot c-${x.color}"></span><span class="side-name">${esc(x.name)}</span><span class="side-cnt">${notesOf(x.id) || ''}</span>
-    </div>${subTree(x.id)}`).join('')
-    + `<div class="side-item ${gid === '' ? 'on c-gray' : ''}" data-action="note-group" data-gid="">
-      <span class="side-dot c-gray"></span><span class="side-name">미분류</span><span class="side-cnt">${notesOf('') || ''}</span></div>${gid === '' ? subTree('') : ''}`;
+  const noteRow = (xgid, name, color) => {
+    const expanded = openSideGroups.has(xgid);
+    const caret = `<button class="side-caret" data-action="side-toggle" data-gid="${xgid}" title="보드 ${expanded ? '접기' : '펼치기'}">${expanded ? '▾' : '▸'}</button>`;
+    return `<div class="side-item ${gid === xgid ? 'on c-' + color : ''}" data-action="note-group" data-gid="${xgid}">${caret}<span class="side-dot c-${color}"></span><span class="side-name">${esc(name)}</span><span class="side-cnt">${notesOf(xgid) || ''}</span></div>${subTree(xgid)}`;
+  };
+  const sideItems = `<div class="side-item ${isAll ? 'on c-gray' : ''}" data-action="note-group" data-gid="__all"><span class="side-caret sp"></span><span class="side-dot c-gray"></span><span class="side-name">전체</span><span class="side-cnt">${allNotes.length || ''}</span></div>`
+    + groups.map(x => noteRow(x.id, x.name, x.color)).join('')
+    + noteRow('', '미분류', 'gray');
   // 헤더: 보드 선택 시 보드 맥락, 아니면 프로젝트 맥락
   let pageHead, propBar;
   if (isAll) {
@@ -2764,7 +2769,12 @@ document.addEventListener('click', e => {
     if (e) { delete e.ai; if (!e.memo && !e.auto) delete state.journal[d]; }
     render();
   }
-  else if (act === 'note-group') { state.sel.noteGroup = el.dataset.gid; state.sel.noteBoard = ''; render(); }
+  else if (act === 'note-group') {
+    const gid = el.dataset.gid;
+    state.sel.noteGroup = gid; state.sel.noteBoard = '';
+    if (gid !== '__all') openSideGroups.has(gid) ? openSideGroups.delete(gid) : openSideGroups.add(gid);   // 선택 + 보드 펼침 토글(누적)
+    render();
+  }
   else if (act === 'note-type') { state.sel.noteType = el.dataset.t; render(); }
   else if (act === 'note-pin') {
     const n = (state.notes || []).find(x => x.id === el.dataset.id);
@@ -2778,7 +2788,10 @@ document.addEventListener('click', e => {
   else if (act === 'note-add') { noteEditing = null; noteDraft = null; render(); const t = document.getElementById('m-ntitle'); if (t) t.focus(); }
   else if (act === 'note-edit') { noteEditing = el.dataset.id; noteDraft = null; render(); }
   else if (act === 'ne-cancel') { noteEditing = undefined; noteDraft = null; render(); }
-  else if (act === 'note-board-nav') { state.sel.noteBoard = el.dataset.bid; render(); }
+  else if (act === 'note-board-nav') {
+    if (el.dataset.gid !== undefined) state.sel.noteGroup = el.dataset.gid;   // 다른(펼쳐둔) 프로젝트의 보드를 눌러도 그 프로젝트로 전환
+    state.sel.noteBoard = el.dataset.bid; render();
+  }
   else if (act === 'lane-toggle') { const bid = el.dataset.board; openDoneLanes.has(bid) ? openDoneLanes.delete(bid) : openDoneLanes.add(bid); render(); }
   else if (act === 'arch-month') { state.sel.archMonth = el.dataset.m; render(); }
   else if (act === 'sched-past-toggle') { pastSchedOpen = !pastSchedOpen; render(); }
@@ -2828,7 +2841,12 @@ document.addEventListener('click', e => {
     if (g) g.overview = v || null; else state.unGroupOverview = v || null;
     closeModal(); render();
   }
-  else if (act === 'board-group') { state.sel.boardGroup = el.dataset.gid; render(); }
+  else if (act === 'board-group') {
+    const gid = el.dataset.gid;
+    state.sel.boardGroup = gid;
+    if (gid !== '__all') openSideGroups.has(gid) ? openSideGroups.delete(gid) : openSideGroups.add(gid);   // 프로젝트 클릭 = 선택 + 보드 펼침 토글(누적)
+    render();
+  }
   else if (act === 'side-toggle') { const gid = el.dataset.gid; openSideGroups.has(gid) ? openSideGroups.delete(gid) : openSideGroups.add(gid); render(); }
   else if (act === 'side-board') {
     const b = boardById(el.dataset.bid);
