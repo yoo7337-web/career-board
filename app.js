@@ -653,20 +653,24 @@ function renderBoardView() {
   if (sel === undefined || (sel !== '__all' && sel !== '' && !groupById(sel))) sel = '__all';
   state.sel.boardGroup = sel;
   const bCount = gid => state.projects.filter(b => (b.group || '') === gid).length;
+  // 사이드바 숫자 = 미완료 To-do 수 (보드 개수 대신)
+  const openTodos = bid => state.cards.filter(c => c.project === bid && c.status !== 'done').length;
+  const openTodosGroup = gid => state.projects.filter(b => (b.group || '') === gid).reduce((s, b) => s + openTodos(b.id), 0);
+  const openTodosAll = state.cards.filter(c => c.project && c.status !== 'done').length;
   // 프로젝트 행 + (펼침 시) 그 소속 보드 하위 목록. 선택된 프로젝트는 자동 펼침.
   const sideGroupRow = (gid, name, color, dot) => {
     const boards = orderedBoardsIn(gid || null);
     const expanded = openSideGroups.has(gid);   // 펼침은 오직 openSideGroups로 — 선택과 무관하게 독립 토글·누적
     const caret = boards.length ? `<button class="side-caret" data-action="side-toggle" data-gid="${gid}" title="보드 ${expanded ? '접기' : '펼치기'}">${expanded ? '▾' : '▸'}</button>` : '<span class="side-caret sp"></span>';
-    let html = `<div class="side-item ${sel === gid ? 'on c-' + color : ''}" data-action="board-group" data-gid="${gid}">${caret}<span class="side-dot c-${dot || color}"></span><span class="side-name">${esc(name)}</span><span class="side-cnt">${boards.length || ''}</span></div>`;
+    let html = `<div class="side-item ${sel === gid ? 'on c-' + color : ''}" data-action="board-group" data-gid="${gid}">${caret}<span class="side-dot c-${dot || color}"></span><span class="side-name">${esc(name)}</span><span class="side-cnt" title="미완료 To-do">${openTodosGroup(gid) || ''}</span></div>`;
     if (expanded && boards.length) {
-      html += `<div class="side-sub">` + boards.map(({ board, depth }) => `<div class="side-sub-item ${focusBoard === board.id ? 'on' : ''}" data-action="side-board" data-bid="${board.id}" style="padding-left:${8 + depth * 13}px" title="이 보드로 이동"><span class="side-dot c-${board.color}"></span><span class="side-name">${esc(board.name)}</span></div>`).join('') + `</div>`;
+      html += `<div class="side-sub">` + boards.map(({ board, depth }) => `<div class="side-sub-item ${focusBoard === board.id ? 'on' : ''}" data-action="side-board" data-bid="${board.id}" style="padding-left:${8 + depth * 13}px" title="이 보드로 이동"><span class="side-dot c-${board.color}"></span><span class="side-name">${esc(board.name)}</span><span class="side-cnt" title="미완료 To-do">${openTodos(board.id) || ''}</span></div>`).join('') + `</div>`;
     }
     return html;
   };
   const side = `<aside class="notes-side">
     <div class="side-h">프로젝트</div>
-    <div class="side-item ${sel === '__all' ? 'on c-gray' : ''}" data-action="board-group" data-gid="__all"><span class="side-caret sp"></span><span class="side-dot c-gray"></span><span class="side-name">전체</span><span class="side-cnt">${state.projects.length || ''}</span></div>
+    <div class="side-item ${sel === '__all' ? 'on c-gray' : ''}" data-action="board-group" data-gid="__all"><span class="side-caret sp"></span><span class="side-dot c-gray"></span><span class="side-name">전체</span><span class="side-cnt" title="미완료 To-do">${openTodosAll || ''}</span></div>
     ${groups.map(g => sideGroupRow(g.id, g.name, g.color, g.color)).join('')}
     ${sideGroupRow('', '미분류', 'gray', 'gray')}
     <div class="side-actions">
