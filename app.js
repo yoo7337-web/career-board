@@ -2347,7 +2347,7 @@ function render() {
   const navOwner = { cal: 'dash', devlog: 'journal' };
   const vbtn = (k, label) => `<button class="${(navOwner[view] || view) === k ? 'on' : ''}" data-action="view" data-view="${k}">${label}</button>`;
   const vsep = '<span class="vsep"></span>';
-  const nav = vbtn('dash', '대시보드') + vbtn('map', '구조도') + vsep + vbtn('board', '프로젝트') + vbtn('tbox', '타임박스') + vbtn('notes', '기록') + vsep + vbtn('journal', '일지');
+  const nav = vbtn('dash', '대시보드') + vsep + vbtn('map', '구조도') + vbtn('board', '프로젝트') + vbtn('tbox', '타임박스') + vbtn('notes', '기록') + vsep + vbtn('journal', '일지');
   document.getElementById('app').classList.toggle('wide', view === 'map');
   document.getElementById('app').innerHTML = `
     <header>

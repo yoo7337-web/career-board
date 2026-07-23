@@ -17,6 +17,8 @@
 }
 :root[data-theme=light]{color-scheme:light}
 :root[data-theme=dark]{color-scheme:dark}
+/* 스크롤바 자리를 항상 확보 → 탭마다 세로 스크롤바 유무가 달라도 가운데 정렬(#app)이 좌우로 안 튐 */
+html{scrollbar-gutter:stable}
 body{margin:0;background:var(--bg);color:var(--text);font:15px/1.55 'Segoe UI','Malgun Gothic',system-ui,sans-serif;overflow-x:hidden}
 #app{max-width:1100px;margin:0 auto;padding:20px 16px 60px}
 /* 구조도: 헤더/푸터는 고정(1100), 지도만 뷰포트 전체폭으로 full-bleed */
