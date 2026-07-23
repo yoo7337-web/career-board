@@ -1175,8 +1175,7 @@ function renderCal() {
       <div class="cal-days">${cells}</div>
     </div>`;
   }
-  return `${dashSeg('cal')}
-    <div class="cal-head">
+  return `<div class="cal-head">
       <span class="cal-title">${y}년 ${m}월</span>
       <button class="pill" data-action="cal-prev">◀</button>
       <button class="pill" data-action="cal-today">오늘</button>
@@ -1296,7 +1295,6 @@ function pageSeg(cur, items) {
   return `<div class="seg page-seg">${items.map(([v, label]) =>
     `<button type="button" class="seg-btn ${cur === v ? 'sel' : ''}" data-action="view" data-view="${v}">${label}</button>`).join('')}</div>`;
 }
-function dashSeg(cur) { return pageSeg(cur, [['dash', '📊 현황'], ['cal', '📅 달력']]); }
 function journalSeg(cur) { return isAdmin() ? pageSeg(cur, [['journal', '📔 일지'], ['devlog', '🛠 개발일지']]) : ''; }
 function renderDash() {
   const today = todayStr();
@@ -1362,7 +1360,6 @@ function renderDash() {
       : '<span class="db3 empty">타임박스에서 오늘의 Big 3를 정해보세요 →</span>'}
   </div>`;
   return `<div class="dash">
-    ${dashSeg('dash')}
     ${big3Strip}
     ${weekStrip}
     <div class="dash-kpis">
@@ -2343,11 +2340,11 @@ function render() {
     if (ae.isContentEditable) { caret.ce = true; caret.off = caretOffset(ae); }
     else if (typeof ae.selectionStart === 'number') { caret.start = ae.selectionStart; caret.end = ae.selectionEnd; }
   }
-  // 달력은 현황 탭 안 세그먼트, 개발일지는 일지 탭 안 세그먼트 → 헤더 버튼은 6개(파악│진행│일지)
-  const navOwner = { cal: 'dash', devlog: 'journal' };
+  // 개발일지만 일지 탭 안 세그먼트 → 나머지는 독립 헤더 버튼
+  const navOwner = { devlog: 'journal' };
   const vbtn = (k, label) => `<button class="${(navOwner[view] || view) === k ? 'on' : ''}" data-action="view" data-view="${k}">${label}</button>`;
   const vsep = '<span class="vsep"></span>';
-  const nav = vbtn('dash', '대시보드') + vsep + vbtn('map', '구조도') + vbtn('board', '프로젝트') + vbtn('tbox', '타임박스') + vbtn('notes', '기록') + vsep + vbtn('journal', '일지');
+  const nav = vbtn('dash', '대시보드') + vbtn('cal', '달력') + vsep + vbtn('map', '구조도') + vbtn('board', '프로젝트') + vbtn('tbox', '타임박스') + vbtn('notes', '기록') + vsep + vbtn('journal', '일지');
   document.getElementById('app').classList.toggle('wide', view === 'map');
   document.getElementById('app').innerHTML = `
     <header>
