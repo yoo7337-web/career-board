@@ -2410,13 +2410,25 @@ function prioPicker(val) {
     ${PRIO_ORDER.map(k => `<button type="button" class="swatch ${val === k ? 'sel' : ''}" data-prio="${k}" style="${PRIORITIES[k].bg ? `background:${PRIORITIES[k].bg};color:${PRIORITIES[k].fg}` : ''}">${PRIORITIES[k].label}</button>`).join('')}
   </div>`;
 }
+// 카드 모달의 보드 select — 선택된 프로젝트 소속 보드만(+미배정)
+function cardBoardOptions(gid, curBid) {
+  const opts = (state.projects || []).filter(b => (b.group || '') === gid)
+    .map(b => `<option value="${b.id}" ${curBid === b.id ? 'selected' : ''}>${esc(b.name)}</option>`);
+  return `<option value="" ${!curBid ? 'selected' : ''}>📥 미배정</option>` + opts.join('');
+}
 function openCardModal(id) {
   const c = state.cards.find(x => x.id === id);
   if (!c) return;
+  const cb = boardById(c.project);
+  const gid = cb ? (cb.group || '') : '';
   showModal(`
     <h3>포스트잇 수정</h3>
     ${c.createdAt ? `<div class="reg-date">🗓 등록일 ${fmtDate(c.createdAt)}</div>` : ''}
     <label>내용<input type="text" id="m-title" value="${esc(c.title)}"></label>
+    <div class="two">
+      <label>프로젝트${groupOptions('m-cgroup', gid || null)}</label>
+      <label>보드<select id="m-cboard">${cardBoardOptions(gid, c.project || '')}</select></label>
+    </div>
     <label>중요도${prioPicker(c.priority || 'med')}</label>
     <label>💬 메모 · FU (별도로 확인·기억할 것)<textarea id="m-note" rows="3" placeholder="예: 팀장 리뷰 후 재확인 / 자료 요청 대기중">${esc(c.note || '')}</textarea></label>
     <label>마감일 (선택)<input type="date" id="m-due" value="${c.due || ''}"></label>
@@ -2889,6 +2901,8 @@ document.addEventListener('click', e => {
       c.priority = document.getElementById('m-prio').dataset.val || 'med';
       c.note = document.getElementById('m-note').value.trim() || null;
       c.due = document.getElementById('m-due').value || null;
+      const bs = document.getElementById('m-cboard');
+      if (bs) c.project = bs.value || null;   // 프로젝트·보드 이동 (빈 값 = 미배정)
     }
     closeModal(); render();
   }
@@ -3422,6 +3436,11 @@ document.addEventListener('change', e => {
       b.actual = v === '' ? null : Math.max(0, parseFloat(v));
     }
     render();
+    return;
+  }
+  if (e.target.id === 'm-cgroup') {   // 카드 모달: 프로젝트 변경 → 그 프로젝트의 보드로 목록 교체
+    const bs = document.getElementById('m-cboard');
+    if (bs) bs.innerHTML = cardBoardOptions(e.target.value || '', '');
     return;
   }
   if (e.target.id === 'm-ngroup') {   // 소속 프로젝트 변경 → 보드 목록이 달라지므로 보드 초기화 후 재렌더
