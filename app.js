@@ -787,33 +787,59 @@ function autoLayout() {
     curX += blockW + GAPX; rowH = Math.max(rowH, blockH); placedAny = true;
   };
   (state.groups || []).forEach(g => {
-    const ms = state.projects.filter(b => (b.group || null) === g.id);
+    const ms = state.projects.filter(b => (b.group || null) === g.id && !b.done);   // 완료 보드는 선반에 있으므로 제외
     if (ms.length) place(ms);
   });
-  const un = state.projects.filter(b => !b.group);
+  const un = state.projects.filter(b => !b.group && !b.done);
   if (un.length) place(un);
   save();
 }
 let focusBoard = null;   // board to scroll to in board view after nav
 let pendingMapPos = null; // {x,y,group} for add-board-at-click
+// 완료 보드 선반(구역 오른쪽에 작게 모아두는 영역) 치수
+const SHELF_W = 132, CHIP_H = 22, CHIP_GAP = 4, SHELF_TOP = 34;
+const shelfH = n => SHELF_TOP + n * (CHIP_H + CHIP_GAP) + 10;
 function regionRects() {
   return (state.groups || []).map(g => {
-    const ms = state.projects.filter(b => (b.group || null) === g.id);
-    if (!ms.length) {   // 빈 프로젝트: 지도에서 만든 경우 저장된 위치에 빈 구역으로 표시
-      if (typeof g.mapX === 'number' && typeof g.mapY === 'number')
-        return { gid: g.id, name: g.name, color: g.color, x: g.mapX, y: g.mapY, w: 220, h: 110, empty: true };
-      return null;
+    const all = state.projects.filter(b => (b.group || null) === g.id);
+    const ms = all.filter(b => !b.done);      // 진행 중 보드만 배치 대상
+    const dn = all.filter(b => b.done);       // 완료 보드는 오른쪽 선반에 모음
+    if (!ms.length) {
+      if (!dn.length) {   // 빈 프로젝트: 지도에서 만든 경우 저장된 위치에 빈 구역으로 표시
+        if (typeof g.mapX === 'number' && typeof g.mapY === 'number')
+          return { gid: g.id, name: g.name, color: g.color, x: g.mapX, y: g.mapY, w: 220, h: 110, empty: true, done: [] };
+        return null;
+      }
+      // 완료 보드만 남은 프로젝트 — 선반만 있는 작은 구역
+      const bx = typeof g.mapX === 'number' ? g.mapX : Math.min(...dn.map(b => b.x || 30)) - 18;
+      const by = typeof g.mapY === 'number' ? g.mapY : Math.min(...dn.map(b => b.y || 30)) - 36;
+      return { gid: g.id, name: g.name, color: g.color, x: bx, y: by, w: SHELF_W + 20, h: Math.max(110, shelfH(dn.length)), done: dn, onlyDone: true };
     }
     const xs = ms.map(b => b.x), ys = ms.map(b => b.y);
     const x = Math.min(...xs) - 18, y = Math.min(...ys) - 36;
-    return { gid: g.id, name: g.name, color: g.color, x, y, w: Math.max(...xs) + 150 - x + 18, h: Math.max(...ys) + 44 - y + 18 };
+    let w = Math.max(...xs) + 150 - x + 18, h = Math.max(...ys) + 44 - y + 18;
+    if (dn.length) { w += SHELF_W; h = Math.max(h, shelfH(dn.length)); }
+    return { gid: g.id, name: g.name, color: g.color, x, y, w, h, done: dn };
   }).filter(Boolean);
+}
+// 완료 보드 칩 — 구역 오른쪽 선반에 세로로 쌓아 배치
+function doneChipsHtml(r) {
+  if (!r.done || !r.done.length) return '';
+  const left = r.x + r.w - SHELF_W + 6;
+  const label = `<div class="map-shelf-label" style="left:${left}px;top:${r.y + 12}px">✓ 완료 ${r.done.length}</div>`;
+  return label + r.done.map((b, i) =>
+    `<div class="mapdone c-${b.color}" data-id="${b.id}" style="left:${left}px;top:${r.y + SHELF_TOP + i * (CHIP_H + CHIP_GAP)}px"
+      title="${esc(b.name)}${b.doneAt ? ' · 완료 ' + fmtDate(b.doneAt) : ''} — 클릭하면 보드 설정">${esc(b.name)}</div>`).join('');
 }
 function renderMap() {
   ensurePositions();
-  const regions = regionRects().map(r =>
+  const rects = regionRects();
+  const regions = rects.map(r =>
     `<div class="map-region c-${r.color} ${r.empty ? 'empty' : ''}" data-gid="${r.gid}" style="left:${r.x}px;top:${r.y}px;width:${r.w}px;height:${r.h}px"><span class="map-region-label" data-gid="${r.gid}" title="드래그하면 프로젝트 전체 이동">📁 ${esc(r.name)}</span>${r.empty ? '<span class="region-empty-hint">빈 곳 클릭 → 보드 추가</span>' : ''}</div>`).join('');
-  const nodes = state.projects.map(b => {
+  const doneChips = rects.map(doneChipsHtml).join('')
+    + state.projects.filter(b => b.done && !b.group).map(b =>   // 미분류 완료 보드는 제자리에 칩으로
+      `<div class="mapdone c-${b.color}" data-id="${b.id}" style="left:${b.x}px;top:${b.y}px" title="${esc(b.name)}${b.doneAt ? ' · 완료 ' + fmtDate(b.doneAt) : ''} — 클릭하면 보드 설정">${esc(b.name)}</div>`).join('');
+  const nodes = state.projects.filter(b => !b.done).map(b => {
     const cs = state.cards.filter(c => c.project === b.id);
     const done = cs.filter(c => c.status === 'done').length;
     const doing = cs.filter(c => c.status === 'doing').length;
@@ -828,7 +854,9 @@ function renderMap() {
       <div class="mp mp-bot" data-id="${b.id}" data-role="bot" title="하위 연결점 — 여기서 자식 보드로 끌기"></div>
     </div>`;
   }).join('');
-  const h = Math.max(640, state.projects.reduce((m, b) => Math.max(m, b.y || 0), 0) + 140);
+  const h = Math.max(640,
+    state.projects.filter(b => !b.done).reduce((m, b) => Math.max(m, b.y || 0), 0) + 140,
+    rects.reduce((m, r) => Math.max(m, r.y + r.h), 0) + 40);   // 완료 선반이 아래로 넘치지 않게
   const unassigned = state.cards.filter(c => c.status !== 'done' && !c.project);
   const todoItems = unassigned.map(c => {
     const pr = PRIORITIES[c.priority] || PRIORITIES.none;
@@ -842,7 +870,7 @@ function renderMap() {
       <button class="pill" data-action="map-arrange" title="프로젝트별 구역으로 나눠 상위→하위 자동 배치">⟲ 자동정렬</button>
       <span class="maphint">색 구역 = 프로젝트 · 노드를 구역 안으로 끌면 소속 · 빈 곳 클릭 = 보드 추가 · 더블클릭 = 보드로 이동</span>
     </div>
-    <div class="map" id="map" style="height:${h}px">${regions}<svg class="maplines" id="maplines"></svg>${nodes}</div>
+    <div class="map" id="map" style="height:${h}px">${regions}${doneChips}<svg class="maplines" id="maplines"></svg>${nodes}</div>
     <aside class="map-todos">
       <div class="side-h">📥 미배정 할 일 <span class="gcnt">${unassigned.length}</span></div>
       <p class="maphint2">할 일을 왼쪽 보드로 끌어 배정 · 클릭해 수정</p>
@@ -958,6 +986,8 @@ function initMap() {
       map.setPointerCapture(e.pointerId); e.preventDefault();
       return;
     }
+    const chip = e.target.closest('.mapdone');
+    if (chip) { mode = 'donechip'; id = chip.dataset.id; e.preventDefault(); return; }   // 완료 칩 = 클릭만(드래그·빈곳추가 방지)
     const node = e.target.closest('.mapnode');
     if (node) {
       mode = 'pending'; id = node.dataset.id; sx = e.clientX; sy = e.clientY;
@@ -1010,7 +1040,11 @@ function initMap() {
   map.addEventListener('pointerup', e => {
     const mr = map.getBoundingClientRect();
     map.classList.remove('linking');
-    if (mode === 'cut') {
+    if (mode === 'donechip') {
+      const bid = id; mode = null; id = null;
+      openBoardModal(bid);
+      return;
+    } else if (mode === 'cut') {
       const b = boardById(cutId);
       if (b) { b.parent = null; save(); render(); }   // 연결선 끊기 → 상위 해제
     } else if (mode === 'link') {
@@ -2476,8 +2510,10 @@ function openBoardModal(id) {
       <label>수행 종료일<input type="date" id="m-end" value="${b.end || ''}"></label>
     </div>
     ${b.start && b.end ? `<a class="gcal-link" href="${gcalUrl('[기간] ' + b.name, b.start, nextDay(b.end))}" target="_blank" rel="noopener">＋ Google Calendar에 등록 (${fmtDate(b.start)}~${fmtDate(b.end)})</a>` : ''}
+    ${b.done ? `<p class="restore-note">✅ 완료된 보드입니다${b.doneAt ? ` (완료 ${fmtDate(b.doneAt)})` : ''} — 구조도에서는 프로젝트 오른쪽 선반에 작게 모여 있어요.</p>` : ''}
     <div class="m-actions">
       ${only ? '' : `<button class="danger" data-action="board-del" data-id="${b.id}">보드 삭제</button>`}
+      <button class="ghost" data-action="board-done" data-id="${b.id}" title="구조도에서 프로젝트 오른쪽 선반으로 모읍니다">${b.done ? '↩ 완료 취소' : '✅ 보드 완료'}</button>
       <button class="ghost" data-action="modal-close">취소</button>
       <button class="primary" data-action="board-save" data-id="${b.id}">저장</button>
     </div>`);
@@ -2942,6 +2978,14 @@ document.addEventListener('click', e => {
     closeModal(); render();
   }
   else if (act === 'board-edit') openBoardModal(el.dataset.id);
+  else if (act === 'board-done') {
+    const b = boardById(el.dataset.id);
+    if (b) {
+      if (b.done) { b.done = false; b.doneAt = null; }
+      else { b.done = true; b.doneAt = todayStr(); }
+    }
+    closeModal(); render();
+  }
   else if (act === 'card') openCardModal(el.dataset.id);
   else if (act === 'modal-close') closeModal();
   else if (act === 'unlink') { boardById(el.dataset.id).parent = null; render(); }
