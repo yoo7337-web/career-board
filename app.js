@@ -110,7 +110,7 @@ const DEVLOG_SEED = [
   ['2026-07-07', '개발일지 탭', '관리자 전용 개발 이력·향후 계획 관리'],
 ];
 // 2026-07-07 이후 개발 내역 (기존 개발일지에 1회 백필, 신규 설치는 시드에 포함)
-const DEVLOG_BACKFILL_V = 1;
+const DEVLOG_BACKFILL_V = 2;
 const DEVLOG_BACKFILL = [
   ['2026-07-11', 'Google 로그인 + 구글 캘린더 동기화', '구글 계정 로그인, 마감일·수행기간을 전용 캘린더로 단방향 push'],
   ['2026-07-11', '자동 백업·복원', '변경 시 스냅샷 적재(클라우드+기기 이중), 시점 복원'],
@@ -128,6 +128,14 @@ const DEVLOG_BACKFILL = [
   ['2026-07-16', '라이트/다크 테마 토글', '헤더 스위치로 전환·기기별 저장'],
   ['2026-07-17', '안정화 (버그 수정)', '복원 크래시 방지·백업 용량 상한·지난 일정 자동 정리 등'],
   ['2026-07-18', '휴지통', '삭제한 할 일·보드·일정·기록 보관 후 복원(30일·50개)'],
+  ['2026-07-21', '기록 리치 텍스트 에디터', '굵게·목록·형광펜 등 노션식 서식 + 실시간 저장·커서 유지'],
+  ['2026-07-22', '기록 → Notion 자동 동기화', 'GitHub Actions가 2시간마다 기록을 Notion DB로 반영(프로젝트·보드·유형 속성)'],
+  ['2026-07-22', '메뉴 개편 + 상단 고정', '용도별 그룹 구분선, 현황→대시보드·달력 독립 탭, 스크롤해도 메뉴바 고정'],
+  ['2026-07-22', '달력 개선', '일정/할 일 타입 필터 + 날짜 클릭 시 할 일·일정 선택 추가(프로젝트 지정)'],
+  ['2026-07-22', '트리 탭 신설', '프로젝트→보드→할 일·기록 가로 트리, 기록 본문 인라인 확장'],
+  ['2026-07-22', 'FU 개편', '완수 카드를 다시 진행중으로 — 회차 배지(↩ FU ①②③)와 완수 이력 누적'],
+  ['2026-07-22', '구조도 개선', '보드 hover 말풍선(진행·완수 목록) + 보드 완료 시 구역 오른쪽 선반에 모음'],
+  ['2026-07-22', '사이드바·가독성 개선', '프로젝트 트리 누적 펼침, 미완료 To-do 수 표시, 기록 전체 보기, 밝은 테마 대비 강화'],
 ];
 function seedDevlogDone() { return DEVLOG_SEED.concat(DEVLOG_BACKFILL).map(([date, title, desc]) => ({ id: uid(), date, title, desc })); }
 function ensureDevlog() {
@@ -544,7 +552,7 @@ function archivePanelHtml(gid) {
     body += `<div class="arch-board-h"><span class="drow-proj c-${b.color}">${esc(b.name)}</span><span class="gcnt">${done.length}</span></div>`;
     body += done.map(c => `<div class="arch-row" data-action="card" data-id="${c.id}" data-text="${esc(c.title.toLowerCase())}" title="클릭=수정">
         <span class="arch-date">✓ ${fmtDate(c.doneAt)}</span>
-        <span class="arch-t">${fuBadgeHtml(c)}${esc(c.title)}</span>
+        <span class="arch-t">${fuBadgeHtml(c)}${esc(c.title)}${(c.fuHistory || []).length ? `<span class="arch-fu">↩ ${(c.fuHistory || []).map(d => fmtDate(d)).join(' → ')} → ${fmtDate(c.doneAt)}</span>` : ''}</span>
         ${c.note ? `<span class="card-note" data-note="${esc(c.note)}">💬</span>` : ''}
         <button class="mini-btn fu-btn" data-action="card-fu" data-id="${c.id}" title="완수 이력을 남기고 다시 진행중으로">↩ FU</button>
       </div>`).join('');
@@ -806,7 +814,13 @@ let focusBoard = null;   // board to scroll to in board view after nav
 let pendingMapPos = null; // {x,y,group} for add-board-at-click
 // 완료 보드 선반(구역 오른쪽에 작게 모아두는 영역) 치수
 const SHELF_W = 132, CHIP_H = 22, CHIP_GAP = 4, SHELF_TOP = 34;
-const shelfH = n => SHELF_TOP + n * (CHIP_H + CHIP_GAP) + 10;
+const SHELF_MAX = 8;                     // 이보다 많으면 '+N개 더'로 접음(구역이 세로로 길어지는 것 방지)
+const shelfExpanded = new Set();          // 선반을 펼쳐 본 프로젝트(세션 한정)
+const shelfH = (n, gid) => {
+  // 표시 줄 수: 접힘=최대 8+'+N' 1줄 / 펼침=전체+'접기' 1줄 / 8 이하=그대로
+  const rows = n > SHELF_MAX ? (shelfExpanded.has(gid) ? n + 1 : SHELF_MAX + 1) : n;
+  return SHELF_TOP + rows * (CHIP_H + CHIP_GAP) + 10;
+};
 function regionRects() {
   return (state.groups || []).map(g => {
     const all = state.projects.filter(b => (b.group || null) === g.id);
@@ -821,12 +835,12 @@ function regionRects() {
       // 완료 보드만 남은 프로젝트 — 선반만 있는 작은 구역
       const bx = typeof g.mapX === 'number' ? g.mapX : Math.min(...dn.map(b => b.x || 30)) - 18;
       const by = typeof g.mapY === 'number' ? g.mapY : Math.min(...dn.map(b => b.y || 30)) - 36;
-      return { gid: g.id, name: g.name, color: g.color, x: bx, y: by, w: SHELF_W + 20, h: Math.max(110, shelfH(dn.length)), done: dn, onlyDone: true };
+      return { gid: g.id, name: g.name, color: g.color, x: bx, y: by, w: SHELF_W + 20, h: Math.max(110, shelfH(dn.length, g.id)), done: dn, onlyDone: true };
     }
     const xs = ms.map(b => b.x), ys = ms.map(b => b.y);
     const x = Math.min(...xs) - 18, y = Math.min(...ys) - 36;
     let w = Math.max(...xs) + 150 - x + 18, h = Math.max(...ys) + 44 - y + 18;
-    if (dn.length) { w += SHELF_W; h = Math.max(h, shelfH(dn.length)); }
+    if (dn.length) { w += SHELF_W; h = Math.max(h, shelfH(dn.length, g.id)); }
     return { gid: g.id, name: g.name, color: g.color, x, y, w, h, done: dn };
   }).filter(Boolean);
 }
@@ -834,10 +848,16 @@ function regionRects() {
 function doneChipsHtml(r) {
   if (!r.done || !r.done.length) return '';
   const left = r.x + r.w - SHELF_W + 6;
+  const shown = shelfExpanded.has(r.gid) ? r.done : r.done.slice(0, SHELF_MAX);
+  const rest = r.done.length - shown.length;
   const label = `<div class="map-shelf-label" style="left:${left}px;top:${r.y + 12}px">✓ 완료 ${r.done.length}</div>`;
-  return label + r.done.map((b, i) =>
+  const chips = shown.map((b, i) =>
     `<div class="mapdone c-${b.color}" data-id="${b.id}" style="left:${left}px;top:${r.y + SHELF_TOP + i * (CHIP_H + CHIP_GAP)}px"
       title="${esc(b.name)}${b.doneAt ? ' · 완료 ' + fmtDate(b.doneAt) : ''} — 클릭하면 보드 설정">${esc(b.name)}</div>`).join('');
+  const more = (rest > 0 || shelfExpanded.has(r.gid))
+    ? `<div class="mapdone more" data-gid="${r.gid}" style="left:${left}px;top:${r.y + SHELF_TOP + shown.length * (CHIP_H + CHIP_GAP)}px"
+        title="완료 보드 ${rest > 0 ? '더 보기' : '접기'}">${rest > 0 ? `+${rest}개 더` : '접기'}</div>` : '';
+  return label + chips + more;
 }
 function renderMap() {
   ensurePositions();
@@ -963,6 +983,7 @@ function initMap() {
   let mode = null, id = null, role = null, offx = 0, offy = 0, sx = 0, sy = 0;
   let clickTimer = null, lastId = null, lastTime = 0, cutId = null;
   let regionGid = null, regionStart = null;   // 구역 드래그: gid + 멤버 시작좌표
+  let moreGid = null;                          // 완료 선반 '+N개 더/접기' 칩
 
   // hover 말풍선 — 드래그·연결·스크롤 중에는 방해되지 않게 숨김
   let popTimer = null;
@@ -995,7 +1016,7 @@ function initMap() {
       return;
     }
     const chip = e.target.closest('.mapdone');
-    if (chip) { mode = 'donechip'; id = chip.dataset.id; e.preventDefault(); return; }   // 완료 칩 = 클릭만(드래그·빈곳추가 방지)
+    if (chip) { mode = 'donechip'; id = chip.dataset.id || null; moreGid = chip.dataset.gid || null; e.preventDefault(); return; }   // 완료 칩 = 클릭만(드래그·빈곳추가 방지)
     const node = e.target.closest('.mapnode');
     if (node) {
       mode = 'pending'; id = node.dataset.id; sx = e.clientX; sy = e.clientY;
@@ -1049,8 +1070,9 @@ function initMap() {
     const mr = map.getBoundingClientRect();
     map.classList.remove('linking');
     if (mode === 'donechip') {
-      const bid = id; mode = null; id = null;
-      openBoardModal(bid);
+      const bid = id, mg = moreGid; mode = null; id = null; moreGid = null;
+      if (mg) { shelfExpanded.has(mg) ? shelfExpanded.delete(mg) : shelfExpanded.add(mg); render(); }   // +N개 더 / 접기
+      else if (bid) openBoardModal(bid);
       return;
     } else if (mode === 'cut') {
       const b = boardById(cutId);
@@ -1891,9 +1913,11 @@ function renderTree() {
   const noteLeaf = n => {
     const nt = NOTE_TYPES[n.type] || NOTE_TYPES.memo;
     const open = treeNoteOpen.has(n.id);
+    // 본문은 토글 영역 밖(형제)으로 — 본문 클릭·드래그로 접히지 않게
     const body = open ? `<div class="tr-note-body">${noteBodyForFeed(n.body) || '<span class="tr-sub">내용 없음</span>'}</div>` : '';
-    return trLi(`<div class="tr-node note ${open ? 'open' : ''}" data-action="tree-note" data-id="${n.id}" title="클릭하면 본문 펼치기">
-      <div class="tr-note-head"><span class="tr-caret">${open ? '▾' : '▸'}</span><span class="tr-mk">${nt.icon}</span><span class="tr-t">${esc(n.title || '(제목 없음)')}</span>${n.date ? `<span class="tr-sub">${fmtDate(n.date)}</span>` : ''}</div>${body}</div>`);
+    return trLi(`<div class="tr-node note ${open ? 'open' : ''}">
+      <div class="tr-note-head" data-action="tree-note" data-id="${n.id}" title="클릭하면 본문 펼치기"><span class="tr-caret">${open ? '▾' : '▸'}</span><span class="tr-mk">${nt.icon}</span><span class="tr-t">${esc(n.title || '(제목 없음)')}</span>${n.date ? `<span class="tr-sub">${fmtDate(n.date)}</span>` : ''}
+        <button class="tr-go" data-action="tree-gonote" data-id="${n.id}" title="기록 편집">✎</button></div>${body}</div>`);
   };
   // 보드 노드(하위 보드 재귀 + 할일/기록 묶음)
   const boardNode = b => {
@@ -1934,14 +1958,14 @@ function renderTree() {
   let lvl2 = (byParent.__root || []).map(boardNode).join('');
   const common = gNotes.filter(n => !n.board);
   if (common.length) {
-    const cKey = 'c:common', cOpen = treeOpen(cKey);
+    const cKey = 'c:' + gid, cOpen = treeOpen(cKey);   // 프로젝트별 키 — 접힘 상태가 서로 섞이지 않게
     lvl2 += trLi(`<div class="tr-node board plain" data-action="tree-toggle" data-key="${cKey}">
       ${trCaret(cKey, true, cOpen)}<span class="tr-t">📄 프로젝트 공통</span><span class="tr-cnt">${common.length}</span></div>`,
       cOpen ? common.sort((a, c) => (c.date || '').localeCompare(a.date || '')).map(noteLeaf).join('') : '');
   }
   const scheds = (state.schedules || []).filter(s => (s.group || '') === gid).sort(schedSort);
   if (scheds.length) {
-    const sKey = 's:sched', sOpen = treeOpen(sKey);
+    const sKey = 's:' + gid, sOpen = treeOpen(sKey);
     const rows = scheds.map(s => trLi(`<div class="tr-node item" data-action="sched-edit" data-id="${s.id}" title="클릭하면 수정">
       <span class="tr-caret sp"></span><span class="tr-mk">📌</span><span class="tr-t">${esc(s.title)}</span><span class="tr-sub">${s.date ? fmtDate(s.date) : ''}${s.time ? ' ' + s.time : ''}</span></div>`)).join('');
     lvl2 += trLi(`<div class="tr-node board plain" data-action="tree-toggle" data-key="${sKey}">
@@ -1957,6 +1981,8 @@ function renderTree() {
     : `<div class="tr-root">${rootLabel}</div><div class="empty">이 프로젝트에는 아직 보드·기록이 없어요</div>`;
   return `<div class="tree-wrap">
     <div class="cal-filter"><span class="fl-label">프로젝트</span>${pills}
+      <button class="fpill" data-action="tree-all" data-v="open" title="모든 노드 펼치기">⊞ 모두 펼치기</button>
+      <button class="fpill" data-action="tree-all" data-v="close" title="보드만 남기고 접기">⊟ 모두 접기</button>
       <span class="fl-note">보드 클릭=펼치기 · 기록 클릭=본문 · 할 일 클릭=수정 · ↗=보드로 이동</span></div>
     <div class="tree-canvas slim-scroll">${body}</div>
   </div>`;
@@ -2646,8 +2672,9 @@ function openBoardModal(id) {
     </div>`);
 }
 // 달력 날짜 클릭 → 할 일 / 일정 선택해서 추가 (일정 폼은 openSchedModal과 동일한 id·저장 액션 재사용)
-function openCalAddModal(date, type) {
+function openCalAddModal(date, type, keepTitle) {
   const t = type || 'todo';
+  const kt = esc(keepTitle || '');
   const seg = `<div class="seg">
       <button type="button" class="seg-btn ${t === 'todo' ? 'sel' : ''}" data-action="caladd-type" data-t="todo" data-date="${date}">✅ 할 일</button>
       <button type="button" class="seg-btn ${t === 'sched' ? 'sel' : ''}" data-action="caladd-type" data-t="sched" data-date="${date}">📌 일정</button>
@@ -2656,7 +2683,7 @@ function openCalAddModal(date, type) {
     showModal(`
       <h3>${fmtDate(date)} 추가</h3>
       ${seg}
-      <label>내용<input type="text" id="m-stitle" placeholder="예: 반기검토 보고서 제출 / 감사보고서 마감"></label>
+      <label>내용<input type="text" id="m-stitle" value="${kt}" placeholder="예: 반기검토 보고서 제출 / 감사보고서 마감"></label>
       <div class="two">
         <label>마감일<input type="date" id="m-sdate" value="${date}"></label>
         <label title="입력하면 타임박스 해당 시간칸에 표시됩니다">시간 (선택)<input type="time" id="m-stime" value=""></label>
@@ -2677,7 +2704,7 @@ function openCalAddModal(date, type) {
   showModal(`
     <h3>${fmtDate(date)} 추가</h3>
     ${seg}
-    <label>내용<input type="text" id="m-title" placeholder="예: 감사조서 리뷰"></label>
+    <label>내용<input type="text" id="m-title" value="${kt}" placeholder="예: 감사조서 리뷰"></label>
     <div class="two">
       <label>프로젝트${groupOptions('m-cgroup', gid || null)}</label>
       <label>보드<select id="m-cboard">${cardBoardOptions(gid, last ? last.id : '')}</select></label>
@@ -2885,7 +2912,11 @@ document.addEventListener('click', e => {
   else if (act === 'cal-next') calShift(1);
   else if (act === 'cal-today') { state.sel.calYm = todayStr().slice(0, 7); render(); }
   else if (act === 'cal-add') openCalAddModal(el.dataset.date);
-  else if (act === 'caladd-type') openCalAddModal(el.dataset.date, el.dataset.t);
+  else if (act === 'caladd-type') {
+    // 탭 전환 시 입력 중이던 제목은 이어받음(모달을 다시 그리므로)
+    const cur = document.getElementById('m-title') || document.getElementById('m-stitle');
+    openCalAddModal(el.dataset.date, el.dataset.t, cur ? cur.value : '');
+  }
   else if (act === 'caladd-save') {
     const t = document.getElementById('m-title').value.trim();
     if (t) {
@@ -2948,7 +2979,9 @@ document.addEventListener('click', e => {
       b.done = el.checked;
       const c = state.cards.find(x => x.id === b.cardId);
       if (c) {
-        c.status = b.done ? 'done' : 'todo'; c.doneAt = b.done ? todayStr() : null;
+        // 체크 해제 시 원래 상태로 복귀(FU로 진행중이던 카드가 '예정'으로 떨어지지 않게)
+        if (b.done) { c.prevStatus = c.status === 'done' ? (c.prevStatus || 'todo') : c.status; c.status = 'done'; c.doneAt = todayStr(); }
+        else { c.status = c.prevStatus || 'todo'; c.doneAt = null; }
         // 같은 카드가 담긴 모든 날짜의 Big3 완수 표시를 동기화(미래 계획 포함)
         Object.values(state.timebox || {}).forEach(day => (day.big3 || []).forEach(x => { if (x && x.cardId === c.id) x.done = b.done; }));
       }
@@ -3034,6 +3067,9 @@ document.addEventListener('click', e => {
       if (c.doneAt) c.fuHistory = (c.fuHistory || []).concat([c.doneAt]);
       c.status = 'doing';
       c.doneAt = null;
+      // 완료 처리된 보드에 다시 일이 생긴 것 → 그 보드의 완료도 자동 해제(구조도 선반에서 복귀)
+      const b = boardById(c.project);
+      if (b && b.done) { b.done = false; b.doneAt = null; }
     }
     closeModal(); render();
   }
@@ -3097,6 +3133,18 @@ document.addEventListener('click', e => {
     const id = el.dataset.id;
     treeNoteOpen.has(id) ? treeNoteOpen.delete(id) : treeNoteOpen.add(id);
     render();
+  }
+  else if (act === 'tree-all') {
+    const gid = treeGroupId();
+    const boards = state.projects.filter(b => (b.group || '') === gid);
+    const keys = ['c:' + gid, 's:' + gid].concat(boards.flatMap(b => ['b:' + b.id, 't:' + b.id, 'n:' + b.id, 'd:' + b.id]));
+    if (el.dataset.v === 'open') { keys.forEach(k => { treeClosed.delete(k); treeSeeded.add(k); }); }
+    else { treeClosed.clear(); treeNoteOpen.clear(); keys.filter(k => !k.startsWith('b:')).forEach(k => treeClosed.add(k)); }
+    render();
+  }
+  else if (act === 'tree-gonote') {
+    const n = (state.notes || []).find(x => x.id === el.dataset.id);
+    if (n) { state.sel.view = 'notes'; state.sel.noteGroup = n.group || ''; state.sel.noteBoard = ''; noteEditing = n.id; noteDraft = null; render(); }
   }
   else if (act === 'tree-goboard') {
     const b = boardById(el.dataset.bid);

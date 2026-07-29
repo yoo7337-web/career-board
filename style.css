@@ -40,6 +40,9 @@ header::before{content:'';position:absolute;inset:0 calc(50% - 50vw);background:
   header .views{order:2;width:100%}      /* 탭 바는 아래 한 줄 전체 */
   header .week-count{display:none}
   .views button{padding:5px 11px;font-size:12.5px}
+  /* 스크롤하면 제목 줄을 접어 탭 바만 남김(화면 점유 축소) */
+  :root.scrolled header{padding-top:4px;padding-bottom:5px}
+  :root.scrolled header h1,:root.scrolled header .theme-toggle{display:none}
 }
 header h1{font-size:20px;margin:0;font-weight:600}
 .views{display:flex;flex-wrap:wrap;justify-content:center;gap:4px;background:var(--surface);border:1px solid var(--border);border-radius:999px;padding:3px}
@@ -134,9 +137,10 @@ body.dragging-board .delete-lane{display:flex}
   background:var(--warn-bg);color:var(--warn-fg);border:1px solid transparent}
 .card{position:relative}
 .card.doing{border:2px solid var(--accent);box-shadow:0 1px 4px rgba(0,0,0,.15);padding-top:13px}
-/* FU 카드 왼쪽 띠 — .card.doing 뒤에 와야 덮이지 않음 */
-.card.is-fu{box-shadow:inset 3px 0 0 var(--warn-fg),0 1px 2px rgba(0,0,0,.08)}
-.card.doing.is-fu{box-shadow:inset 3px 0 0 var(--warn-fg),0 1px 4px rgba(0,0,0,.15)}
+/* FU 카드 왼쪽 띠 — .card.doing 뒤에 와야 덮이지 않음.
+   포스트잇 배경(중요도 색, 다크 테마에서도 밝음) 위라 테마 변수 대신 고정 진갈색(#a16207)로 대비 확보 */
+.card.is-fu{box-shadow:inset 3px 0 0 #a16207,0 1px 2px rgba(0,0,0,.08)}
+.card.doing.is-fu{box-shadow:inset 3px 0 0 #a16207,0 1px 4px rgba(0,0,0,.15)}
 .card.done{filter:saturate(.45);opacity:.72}
 .stamp{position:absolute;top:50%;right:10px;transform:translateY(-50%) rotate(-12deg);pointer-events:none;
   border:2px solid var(--ok);color:var(--ok);font-size:13px;font-weight:800;letter-spacing:2px;
@@ -234,6 +238,11 @@ ul.tr-children>li:only-child::after{display:none}
 .tr-node.board.is-done{opacity:.6}
 .tr-node.grp{color:var(--muted);background:transparent;border-style:dashed}
 .tr-node.item{cursor:pointer;max-width:420px}
+.tr-node.item.doing{border-left:3px solid var(--accent)}   /* 진행중은 왼쪽 액센트로 눈에 띄게 */
+.tr-note-head{cursor:pointer}
+.tr-note-head .tr-go{opacity:0;transition:opacity .12s}
+.tr-node.note:hover .tr-go{opacity:1}
+.arch-fu{display:block;font-size:10.5px;color:var(--faint);margin-top:2px}
 .tr-node.item:hover,.tr-node.note:hover,.tr-node.board:hover{border-color:var(--accent)}
 .tr-node.item.done .tr-t{text-decoration:line-through;opacity:.6}
 .tr-node.note{cursor:pointer;flex-direction:column;align-items:flex-start;max-width:200px}
@@ -274,6 +283,8 @@ ul.tr-children>li:only-child::after{display:none}
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border:1px solid rgba(0,0,0,.08);z-index:1}
 .mapdone::before{content:'✓ ';font-weight:700}
 .mapdone:hover{opacity:1;box-shadow:0 1px 4px rgba(0,0,0,.18)}
+.mapdone.more{background:transparent;border:1px dashed var(--border);color:var(--muted);text-align:center;opacity:.85}
+.mapdone.more::before{content:''}
 .mapnode-name{font-size:13px;font-weight:600;word-break:break-word}
 .node-badge{position:absolute;top:-9px;right:-7px;pointer-events:none;font-size:9.5px;font-weight:700;
   padding:1.5px 7px;border-radius:999px;color:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);z-index:1}
