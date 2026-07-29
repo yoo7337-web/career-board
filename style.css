@@ -276,6 +276,7 @@ ul.tr-children>li:only-child::after{display:none}
 .mapnode{position:absolute;width:150px;min-height:44px;border-radius:10px;padding:10px 12px;cursor:grab;
   box-shadow:0 1px 3px rgba(0,0,0,.15);border:1px solid rgba(0,0,0,.06);touch-action:none;user-select:none}
 .mapnode.dragging{opacity:.85;cursor:grabbing}
+.mapnode.folder{border-style:dashed;opacity:.92}   /* 묶음(분류) 보드 — 실보드와 구분 */
 /* 완료 보드 — 프로젝트 구역 오른쪽 선반에 작게 모음 */
 .map-shelf-label{position:absolute;font-size:10px;font-weight:700;color:var(--muted);opacity:.9;pointer-events:none;letter-spacing:.02em}
 .mapdone{position:absolute;width:118px;height:22px;line-height:1;border-radius:6px;padding:5px 8px;
@@ -327,6 +328,13 @@ ul.tr-children>li:only-child::after{display:none}
 .mpop-empty{color:var(--muted);font-size:12px}
 .mpop-foot{margin-top:8px;padding-top:7px;border-top:1px solid var(--border);font-size:11.5px;color:var(--muted)}
 .board-panel.flash{outline:2px solid var(--accent);outline-offset:2px}
+/* 묶음 보드: 칸반 대신 얇은 머리글 한 줄 */
+.folder-panel{display:flex;align-items:center;gap:8px;padding:8px 12px;background:transparent;
+  border:1px dashed var(--border);border-radius:10px;box-shadow:none}
+.folder-panel .bname{font-size:13px}
+.folder-sub{font-size:10.5px;color:var(--faint);border:1px solid var(--border);border-radius:999px;padding:0 7px}
+.folder-check{display:flex;align-items:center;gap:7px;font-size:13px;color:var(--muted);margin-top:10px;cursor:pointer}
+.folder-check input{width:auto;margin:0}
 
 /* calendar */
 .cal-head{display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap}
