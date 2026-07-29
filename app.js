@@ -1827,11 +1827,12 @@ function renderTbox() {
     const bboard = bcard && bcard.project ? boardById(bcard.project) : null;
     const bgroup = bboard && bboard.group ? groupById(bboard.group) : null;
     const projBadge = bgroup ? `<span class="drow-proj c-${bgroup.color}" title="${esc(bgroup.name)}${bboard ? ' · ' + esc(bboard.name) : ''}">${esc(bgroup.name)}</span>` : '';
+    const boardBadge = bboard ? `<span class="tb-board-badge" title="보드">🗂 ${esc(bboard.name)}</span>` : '';
     return `<div class="tb-big3-row ${tbSel === i ? 'sel' : ''} ${done ? 'done' : ''}" data-idx="${i}" data-action="tb-select" title="클릭=선택 후 시간 칸 드래그로 배정">
       <span class="tb-grip" draggable="true" data-idx="${i}" title="드래그로 순서 변경">⠿</span>
       <span class="tb-chip" style="background:${c.bg}"></span>
       <input type="checkbox" data-action="tb-check" data-idx="${i}" ${done ? 'checked' : ''} title="완수 처리 (보드에도 반영)">
-      ${projBadge}<span class="tb-title">${esc(tbTitle(b))}</span>
+      ${projBadge}${boardBadge}<span class="tb-title">${esc(tbTitle(b))}</span>
       <span class="tb-sum">${sum ? '계획 ' + sum + 'h' : ''}</span>
       <span class="tb-actual-wrap" title="실제 소요 시간 기록">실제 <input type="number" class="tb-actual-input" data-idx="${i}" step="0.5" min="0" placeholder="-" value="${hasActual ? b.actual : ''}">h</span>
       ${diffHtml}
@@ -2468,12 +2469,43 @@ function openBoardModal(id) {
       <button class="primary" data-action="board-save" data-id="${b.id}">저장</button>
     </div>`);
 }
-function openCalAddModal(date) {
-  const opts = state.projects.map(b => `<option value="${b.id}" ${state.sel.lastBoard === b.id ? 'selected' : ''}>${esc(b.name)}</option>`).join('');
+// 달력 날짜 클릭 → 할 일 / 일정 선택해서 추가 (일정 폼은 openSchedModal과 동일한 id·저장 액션 재사용)
+function openCalAddModal(date, type) {
+  const t = type || 'todo';
+  const seg = `<div class="seg">
+      <button type="button" class="seg-btn ${t === 'todo' ? 'sel' : ''}" data-action="caladd-type" data-t="todo" data-date="${date}">✅ 할 일</button>
+      <button type="button" class="seg-btn ${t === 'sched' ? 'sel' : ''}" data-action="caladd-type" data-t="sched" data-date="${date}">📌 일정</button>
+    </div>`;
+  if (t === 'sched') {
+    showModal(`
+      <h3>${fmtDate(date)} 추가</h3>
+      ${seg}
+      <label>내용<input type="text" id="m-stitle" placeholder="예: 반기검토 보고서 제출 / 감사보고서 마감"></label>
+      <div class="two">
+        <label>마감일<input type="date" id="m-sdate" value="${date}"></label>
+        <label title="입력하면 타임박스 해당 시간칸에 표시됩니다">시간 (선택)<input type="time" id="m-stime" value=""></label>
+      </div>
+      <label>프로젝트<select id="m-sgroup">
+        ${(state.groups || []).map(g => `<option value="${g.id}">${esc(g.name)}</option>`).join('')}
+        <option value="">미분류</option>
+      </select></label>
+      <label>메모 (선택)<input type="text" id="m-snote" placeholder="예: 팀장 검토 후 제출"></label>
+      <div class="m-actions">
+        <button class="ghost" data-action="modal-close">취소</button>
+        <button class="primary" data-action="sched-save" data-id="">저장</button>
+      </div>`);
+    return;
+  }
+  const last = state.sel.lastBoard ? boardById(state.sel.lastBoard) : null;
+  const gid = last ? (last.group || '') : '';
   showModal(`
-    <h3>${fmtDate(date)} 할 일 추가</h3>
+    <h3>${fmtDate(date)} 추가</h3>
+    ${seg}
     <label>내용<input type="text" id="m-title" placeholder="예: 감사조서 리뷰"></label>
-    <label>보드<select id="m-board">${opts}</select></label>
+    <div class="two">
+      <label>프로젝트${groupOptions('m-cgroup', gid || null)}</label>
+      <label>보드<select id="m-cboard">${cardBoardOptions(gid, last ? last.id : '')}</select></label>
+    </div>
     <label>중요도${prioPicker('med')}</label>
     <div class="m-actions">
       <button class="ghost" data-action="modal-close">취소</button>
@@ -2677,11 +2709,12 @@ document.addEventListener('click', e => {
   else if (act === 'cal-next') calShift(1);
   else if (act === 'cal-today') { state.sel.calYm = todayStr().slice(0, 7); render(); }
   else if (act === 'cal-add') openCalAddModal(el.dataset.date);
+  else if (act === 'caladd-type') openCalAddModal(el.dataset.date, el.dataset.t);
   else if (act === 'caladd-save') {
     const t = document.getElementById('m-title').value.trim();
     if (t) {
-      const board = document.getElementById('m-board').value;
-      state.sel.lastBoard = board;
+      const board = document.getElementById('m-cboard').value || null;
+      if (board) state.sel.lastBoard = board;
       state.cards.push({ id: uid(), project: board, title: t, status: 'todo', priority: document.getElementById('m-prio').dataset.val || 'med', due: el.dataset.date, doneAt: null, note: null, createdAt: todayStr() });
     }
     closeModal(); render();
