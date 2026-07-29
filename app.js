@@ -1359,7 +1359,7 @@ function renderDash() {
     <span class="db3-label">🎯 오늘의 Big 3</span>
     ${hasBig3
       ? [0, 1, 2].map(i => { const b = td.big3[i], c = tbColor(i), bd = tbDone(b);
-          return b ? `<span class="db3 ${bd ? 'done' : ''}" style="background:${c.bg};color:${c.fg}">${bd ? '✓ ' : ''}${esc(b.title)}</span>`
+          return b ? `<span class="db3 ${bd ? 'done' : ''}" style="background:${c.bg};color:${c.fg}">${bd ? '✓ ' : ''}${esc(tbTitle(b))}</span>`
                    : `<span class="db3 empty">Big ${i + 1}</span>`; }).join('')
       : '<span class="db3 empty">타임박스에서 오늘의 Big 3를 정해보세요 →</span>'}
   </div>`;
@@ -1775,6 +1775,12 @@ function tbDone(b) {
   if (b.cardId) { const c = state.cards.find(x => x.id === b.cardId); if (c) return c.status === 'done'; }
   return !!b.done;
 }
+// Big3 제목은 원본 카드에서 실시간으로 읽음 — 카드 내용을 고치면 Big3에도 바로 반영(직접 입력 항목은 저장된 title 사용)
+function tbTitle(b) {
+  if (!b) return '';
+  if (b.cardId) { const c = state.cards.find(x => x.id === b.cardId); if (c) return c.title; }
+  return b.title || '';
+}
 function tbShift(n) {
   const [y, m, dd] = (state.sel.tboxDate || todayStr()).split('-').map(Number);
   state.sel.tboxDate = dstr(new Date(y, m - 1, dd + n));
@@ -1825,7 +1831,7 @@ function renderTbox() {
       <span class="tb-grip" draggable="true" data-idx="${i}" title="드래그로 순서 변경">⠿</span>
       <span class="tb-chip" style="background:${c.bg}"></span>
       <input type="checkbox" data-action="tb-check" data-idx="${i}" ${done ? 'checked' : ''} title="완수 처리 (보드에도 반영)">
-      ${projBadge}<span class="tb-title">${esc(b.title)}</span>
+      ${projBadge}<span class="tb-title">${esc(tbTitle(b))}</span>
       <span class="tb-sum">${sum ? '계획 ' + sum + 'h' : ''}</span>
       <span class="tb-actual-wrap" title="실제 소요 시간 기록">실제 <input type="number" class="tb-actual-input" data-idx="${i}" step="0.5" min="0" placeholder="-" value="${hasActual ? b.actual : ''}">h</span>
       ${diffHtml}
@@ -1894,7 +1900,7 @@ function renderTbox() {
   }
   grid += '</div>';
   const selB = tbSel !== null ? d.big3[tbSel] : null;
-  const hint = selB ? `<b>${esc(selB.title)}</b> 배정 중 — 시간 칸을 드래그하세요 (칠한 칸 다시 드래그=지우기)` : 'Big 3 행을 클릭해 선택 → 오른쪽 시간 칸을 드래그해 배정';
+  const hint = selB ? `<b>${esc(tbTitle(selB))}</b> 배정 중 — 시간 칸을 드래그하세요 (칠한 칸 다시 드래그=지우기)` : 'Big 3 행을 클릭해 선택 → 오른쪽 시간 칸을 드래그해 배정';
   return `<div class="cal-head">
       <span class="cal-title">⏱ ${date} (${dow})${isToday ? ' · 오늘' : ''}</span>
       <button class="pill" data-action="tbox-prev">◀</button>
@@ -2014,7 +2020,7 @@ function journalDerive(date) {
       const plan = tbSum(td, i);
       const actual = (b.actual !== undefined && b.actual !== null && b.actual !== '') ? b.actual : null;
       planH += plan; if (actual !== null) actualH += actual;
-      big3.push({ title: b.title, done: tbDone(b), plan, actual });
+      big3.push({ title: tbTitle(b), done: tbDone(b), plan, actual });
     });
   }
   const notes = (state.notes || []).filter(n => n.date === date).map(n => ({ type: n.type, title: n.title }));
