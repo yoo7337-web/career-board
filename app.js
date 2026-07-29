@@ -2342,6 +2342,18 @@ function openDevlogModal(kind, id) {
     </div>`);
 }
 
+/* ---------- 고정 헤더 ---------- */
+// 헤더 높이를 CSS 변수로 노출 (기록 에디터 툴바가 헤더 아래에 붙도록) + 스크롤 시 그림자
+function syncHeaderH() {
+  const h = document.querySelector('header');
+  if (h) document.documentElement.style.setProperty('--hdr-h', Math.round(h.getBoundingClientRect().height) + 'px');
+}
+if (typeof window !== 'undefined') {
+  const onScroll = () => document.documentElement.classList.toggle('scrolled', window.scrollY > 4);
+  window.addEventListener('scroll', onScroll, { passive: true });
+  window.addEventListener('resize', syncHeaderH);
+}
+
 /* ---------- render ---------- */
 function render() {
   let view = state.sel.view || 'board';
@@ -2389,6 +2401,7 @@ function render() {
       else if (typeof caret.start === 'number') { try { el.setSelectionRange(caret.start, caret.end); } catch (e) { } }
     }
   }
+  syncHeaderH();
   if (view === 'map') initMap();
   if (view === 'cal') markCalOverflow();
   if (view === 'notes') markNoteOverflow();
