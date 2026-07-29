@@ -1845,6 +1845,123 @@ function tbMoveBig3(from, to) {
   if (tbSel !== null && oldToNew[tbSel] !== undefined) tbSel = oldToNew[tbSel];
   save(); render();
 }
+/* ---------- 트리 (프로젝트 세부 내역: 보드 › 할일·기록) ---------- */
+const treeClosed = new Set();     // 접은 노드 키 (기본은 펼침)
+const treeSeeded = new Set();     // 기본 접힘으로 시드한 키(완수 묶음)
+const treeNoteOpen = new Set();   // 본문을 펼친 기록
+function treeOpen(key, defClosed) {
+  if (defClosed && !treeSeeded.has(key)) { treeSeeded.add(key); treeClosed.add(key); }
+  return !treeClosed.has(key);
+}
+function treeGroupId() {
+  const groups = state.groups || [];
+  let gid = state.sel.treeGroup;
+  if (gid === undefined || (gid !== '' && !groupById(gid))) gid = groups.length ? groups[0].id : '';
+  state.sel.treeGroup = gid;
+  return gid;
+}
+function trCaret(key, has, open) {
+  if (!has) return '<span class="tr-caret sp"></span>';
+  return `<button class="tr-caret" data-action="tree-toggle" data-key="${esc(key)}" title="${open ? '접기' : '펼치기'}">${open ? '▾' : '▸'}</button>`;
+}
+function trLi(node, children) {
+  return `<li>${node}${children ? `<ul class="tr-children">${children}</ul>` : ''}</li>`;
+}
+function renderTree() {
+  const groups = state.groups || [];
+  const gid = treeGroupId();
+  const g = gid ? groupById(gid) : null;
+  const color = g ? g.color : 'gray';
+  const pills = groups.map(x => `<button class="fpill ${gid === x.id ? 'on c-' + x.color : ''}" data-action="tree-group" data-gid="${x.id}">📁 ${esc(x.name)}</button>`).join('')
+    + `<button class="fpill ${gid === '' ? 'on c-gray' : ''}" data-action="tree-group" data-gid="">미분류</button>`;
+
+  const boards = state.projects.filter(b => (b.group || '') === gid);
+  const bIds = new Set(boards.map(b => b.id));
+  const byParent = {};
+  boards.forEach(b => { const p = (b.parent && bIds.has(b.parent)) ? b.parent : '__root'; (byParent[p] = byParent[p] || []).push(b); });
+  const gNotes = (state.notes || []).filter(n => (n.group || '') === gid);
+
+  // 개별 항목 노드
+  const cardLeaf = c => {
+    const mark = c.status === 'done' ? '<span class="tr-mk done">✓</span>' : c.status === 'doing' ? '<span class="tr-mk doing">▶</span>' : '<span class="tr-mk">□</span>';
+    const due = (c.status !== 'done' && c.due) ? `<span class="tr-sub">${fmtDate(c.due)}</span>` : (c.doneAt ? `<span class="tr-sub">${fmtDate(c.doneAt)}</span>` : '');
+    return trLi(`<div class="tr-node item ${c.status}" data-action="card" data-id="${c.id}" title="클릭하면 수정">
+      <span class="tr-caret sp"></span>${mark}${fuBadgeHtml(c)}<span class="tr-t">${esc(c.title)}</span>${due}</div>`);
+  };
+  const noteLeaf = n => {
+    const nt = NOTE_TYPES[n.type] || NOTE_TYPES.memo;
+    const open = treeNoteOpen.has(n.id);
+    const body = open ? `<div class="tr-note-body">${noteBodyForFeed(n.body) || '<span class="tr-sub">내용 없음</span>'}</div>` : '';
+    return trLi(`<div class="tr-node note ${open ? 'open' : ''}" data-action="tree-note" data-id="${n.id}" title="클릭하면 본문 펼치기">
+      <div class="tr-note-head"><span class="tr-caret">${open ? '▾' : '▸'}</span><span class="tr-mk">${nt.icon}</span><span class="tr-t">${esc(n.title || '(제목 없음)')}</span>${n.date ? `<span class="tr-sub">${fmtDate(n.date)}</span>` : ''}</div>${body}</div>`);
+  };
+  // 보드 노드(하위 보드 재귀 + 할일/기록 묶음)
+  const boardNode = b => {
+    const kids = byParent[b.id] || [];
+    const cs = state.cards.filter(c => c.project === b.id);
+    const live = cs.filter(c => c.status !== 'done').sort((a, c) => (a.status === 'doing' ? -1 : 0) - (c.status === 'doing' ? -1 : 0));
+    const done = cs.filter(c => c.status === 'done').sort((a, c) => (c.doneAt || '').localeCompare(a.doneAt || ''));
+    const ns = gNotes.filter(n => n.board === b.id).sort((a, c) => (c.date || '').localeCompare(a.date || ''));
+    const bKey = 'b:' + b.id, bOpen = treeOpen(bKey);
+    let sub = '';
+    if (bOpen) {
+      if (cs.length) {
+        const tKey = 't:' + b.id, tOpen = treeOpen(tKey);
+        const dKey = 'd:' + b.id, dOpen = treeOpen(dKey, true);   // 완수 묶음은 기본 접힘
+        let items = tOpen ? live.map(cardLeaf).join('') : '';
+        if (tOpen && done.length) {
+          items += trLi(`<div class="tr-node grp done-grp" data-action="tree-toggle" data-key="${dKey}">
+            ${trCaret(dKey, true, dOpen)}<span class="tr-t">✓ 완수</span><span class="tr-cnt">${done.length}</span></div>`,
+            dOpen ? done.map(cardLeaf).join('') : '');
+        }
+        sub += trLi(`<div class="tr-node grp" data-action="tree-toggle" data-key="${tKey}">
+          ${trCaret(tKey, true, tOpen)}<span class="tr-t">✅ 할 일</span><span class="tr-cnt">${cs.length}</span></div>`, items);
+      }
+      if (ns.length) {
+        const nKey = 'n:' + b.id, nOpen = treeOpen(nKey);
+        sub += trLi(`<div class="tr-node grp" data-action="tree-toggle" data-key="${nKey}">
+          ${trCaret(nKey, true, nOpen)}<span class="tr-t">📝 기록</span><span class="tr-cnt">${ns.length}</span></div>`, nOpen ? ns.map(noteLeaf).join('') : '');
+      }
+      sub += kids.map(boardNode).join('');
+    }
+    const hasKids = !!(cs.length || ns.length || kids.length);
+    const doneMark = b.done ? '<span class="tr-sub">✓ 완료</span>' : '';
+    return trLi(`<div class="tr-node board c-${b.color} ${b.done ? 'is-done' : ''}">
+      ${trCaret(bKey, hasKids, bOpen)}<span class="tr-t">🗂 ${esc(b.name)}</span>${doneMark}
+      <button class="tr-go" data-action="tree-goboard" data-bid="${b.id}" title="이 보드로 이동">↗</button></div>`, sub);
+  };
+
+  let lvl2 = (byParent.__root || []).map(boardNode).join('');
+  const common = gNotes.filter(n => !n.board);
+  if (common.length) {
+    const cKey = 'c:common', cOpen = treeOpen(cKey);
+    lvl2 += trLi(`<div class="tr-node board plain" data-action="tree-toggle" data-key="${cKey}">
+      ${trCaret(cKey, true, cOpen)}<span class="tr-t">📄 프로젝트 공통</span><span class="tr-cnt">${common.length}</span></div>`,
+      cOpen ? common.sort((a, c) => (c.date || '').localeCompare(a.date || '')).map(noteLeaf).join('') : '');
+  }
+  const scheds = (state.schedules || []).filter(s => (s.group || '') === gid).sort(schedSort);
+  if (scheds.length) {
+    const sKey = 's:sched', sOpen = treeOpen(sKey);
+    const rows = scheds.map(s => trLi(`<div class="tr-node item" data-action="sched-edit" data-id="${s.id}" title="클릭하면 수정">
+      <span class="tr-caret sp"></span><span class="tr-mk">📌</span><span class="tr-t">${esc(s.title)}</span><span class="tr-sub">${s.date ? fmtDate(s.date) : ''}${s.time ? ' ' + s.time : ''}</span></div>`)).join('');
+    lvl2 += trLi(`<div class="tr-node board plain" data-action="tree-toggle" data-key="${sKey}">
+      ${trCaret(sKey, true, sOpen)}<span class="tr-t">📌 일정 · 마감</span><span class="tr-cnt">${scheds.length}</span></div>`, sOpen ? rows : '');
+  }
+
+  const cardCnt = state.cards.filter(c => c.project && bIds.has(c.project)).length;
+  const rootLabel = `<div class="tr-node root c-${color}">
+      <span class="tr-t">📁 ${esc(g ? g.name : '미분류')}</span>
+      <span class="tr-cnt">🗂 ${boards.length} · ✅ ${cardCnt} · 📝 ${gNotes.length}</span></div>`;
+  const body = lvl2
+    ? `<div class="tr-root">${rootLabel}<ul class="tr-children">${lvl2}</ul></div>`
+    : `<div class="tr-root">${rootLabel}</div><div class="empty">이 프로젝트에는 아직 보드·기록이 없어요</div>`;
+  return `<div class="tree-wrap">
+    <div class="cal-filter"><span class="fl-label">프로젝트</span>${pills}
+      <span class="fl-note">보드 클릭=펼치기 · 기록 클릭=본문 · 할 일 클릭=수정 · ↗=보드로 이동</span></div>
+    <div class="tree-canvas slim-scroll">${body}</div>
+  </div>`;
+}
+
 function renderTbox() {
   const date = state.sel.tboxDate || todayStr();
   state.sel.tboxDate = date;
@@ -2414,8 +2531,8 @@ function render() {
   const navOwner = { devlog: 'journal' };
   const vbtn = (k, label) => `<button class="${(navOwner[view] || view) === k ? 'on' : ''}" data-action="view" data-view="${k}">${label}</button>`;
   const vsep = '<span class="vsep"></span>';
-  const nav = vbtn('dash', '대시보드') + vbtn('cal', '달력') + vsep + vbtn('map', '구조도') + vbtn('board', '프로젝트') + vbtn('tbox', '타임박스') + vbtn('notes', '기록') + vsep + vbtn('journal', '일지');
-  document.getElementById('app').classList.toggle('wide', view === 'map');
+  const nav = vbtn('dash', '대시보드') + vbtn('cal', '달력') + vsep + vbtn('map', '구조도') + vbtn('tree', '트리') + vbtn('board', '프로젝트') + vbtn('tbox', '타임박스') + vbtn('notes', '기록') + vsep + vbtn('journal', '일지');
+  document.getElementById('app').classList.toggle('wide', view === 'map' || view === 'tree');
   document.getElementById('app').innerHTML = `
     <header>
       <h1>업무 보드</h1>
@@ -2423,7 +2540,7 @@ function render() {
       <span class="week-count">이번 주 ${weekDone()}개 완료</span>
       <button class="theme-toggle" data-action="theme-toggle" title="${document.documentElement.dataset.theme === 'dark' ? '밝은 테마로 전환' : '어두운 테마로 전환'}">${document.documentElement.dataset.theme === 'dark' ? '☀️' : '🌙'}</button>
     </header>
-    ${view === 'map' ? renderMap() : view === 'cal' ? renderCal() : view === 'devlog' ? renderDevlog() : view === 'dash' ? renderDash() : view === 'notes' ? (noteEditing !== undefined ? renderNoteEditor() : renderNotes()) : view === 'journal' ? renderJournal() : view === 'tbox' ? renderTbox() : renderBoardView()}
+    ${view === 'map' ? renderMap() : view === 'tree' ? renderTree() : view === 'cal' ? renderCal() : view === 'devlog' ? renderDevlog() : view === 'dash' ? renderDash() : view === 'notes' ? (noteEditing !== undefined ? renderNoteEditor() : renderNotes()) : view === 'journal' ? renderJournal() : view === 'tbox' ? renderTbox() : renderBoardView()}
     <footer>
       <button data-action="restore-open">🛟 백업·복원</button>
       <button data-action="trash-open">🗑 휴지통${(state.trash && state.trash.length) ? ' ' + state.trash.length : ''}</button>
@@ -2969,6 +3086,21 @@ document.addEventListener('click', e => {
   else if (act === 'side-board') {
     const b = boardById(el.dataset.bid);
     if (b) { state.sel.boardGroup = b.group || ''; focusBoard = b.id; render(); }
+  }
+  else if (act === 'tree-group') { state.sel.treeGroup = el.dataset.gid; render(); }
+  else if (act === 'tree-toggle') {
+    const k = el.dataset.key;
+    treeClosed.has(k) ? treeClosed.delete(k) : treeClosed.add(k);
+    treeSeeded.add(k); render();
+  }
+  else if (act === 'tree-note') {
+    const id = el.dataset.id;
+    treeNoteOpen.has(id) ? treeNoteOpen.delete(id) : treeNoteOpen.add(id);
+    render();
+  }
+  else if (act === 'tree-goboard') {
+    const b = boardById(el.dataset.bid);
+    if (b) { state.sel.boardGroup = b.group || ''; focusBoard = b.id; state.sel.view = 'board'; render(); }
   }
   else if (act === 'cal-type') {
     state.sel.calType = el.dataset.t || 'all';

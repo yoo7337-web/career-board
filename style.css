@@ -22,7 +22,7 @@ html{scrollbar-gutter:stable}
 body{margin:0;background:var(--bg);color:var(--text);font:15px/1.55 'Segoe UI','Malgun Gothic',system-ui,sans-serif;overflow-x:hidden}
 #app{max-width:1100px;margin:0 auto;padding:20px 16px 60px}
 /* 구조도: 헤더/푸터는 고정(1100), 지도만 뷰포트 전체폭으로 full-bleed */
-#app.wide .map-split{width:100vw;margin-left:calc(50% - 50vw);margin-right:calc(50% - 50vw);padding:0 24px}
+#app.wide .map-split,#app.wide .tree-wrap{width:100vw;margin-left:calc(50% - 50vw);margin-right:calc(50% - 50vw);padding:0 24px}
 
 /* 상단 메뉴바 고정 — 스크롤해도 따라옴. z-index는 모달 오버레이(10)보다 낮게 유지 */
 header{position:sticky;top:0;z-index:5;background:var(--bg);
@@ -213,6 +213,48 @@ body.dragging-board .delete-lane{display:flex}
 .map-region-label:hover{outline:2px solid var(--accent);outline-offset:1px}
 .map-region.empty{border-style:dashed;opacity:.7}
 .region-empty-hint{position:absolute;left:16px;top:34px;font-size:11px;color:var(--faint)}
+/* ===== 트리 탭: 좌→우 가로 트리 (프로젝트 › 보드 › 할일·기록) ===== */
+.tree-wrap{display:flex;flex-direction:column;min-height:0}
+.tree-canvas{overflow:auto;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+  padding:18px 22px 26px;min-height:60vh}
+.tr-root{display:inline-flex;align-items:center;min-width:min-content}
+ul.tr-children{display:flex;flex-direction:column;justify-content:center;list-style:none;margin:0;padding:0;min-width:min-content}
+ul.tr-children>li{display:flex;align-items:center;position:relative;padding-left:26px;margin:3px 0;min-width:min-content}
+ul.tr-children>li::before{content:'';position:absolute;left:0;top:50%;width:26px;height:1px;background:var(--border)}
+ul.tr-children>li::after{content:'';position:absolute;left:0;top:0;bottom:0;width:1px;background:var(--border)}
+ul.tr-children>li:first-child::after{top:50%}
+ul.tr-children>li:last-child::after{bottom:50%}
+ul.tr-children>li:only-child::after{display:none}
+.tr-node{display:inline-flex;align-items:center;gap:6px;flex:none;white-space:nowrap;
+  border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12.5px}
+.tr-node:not(.root){background:var(--bg)}   /* root는 .c-* 프로젝트 색이 그대로 보이도록 배경 미지정 */
+.tr-node.root{font-size:14px;font-weight:700;padding:10px 14px;border-color:transparent}
+.tr-node.board{font-weight:600;background:var(--surface)}
+.tr-node.board.plain{background:var(--bg)}
+.tr-node.board.is-done{opacity:.6}
+.tr-node.grp{color:var(--muted);background:transparent;border-style:dashed}
+.tr-node.item{cursor:pointer;max-width:420px}
+.tr-node.item:hover,.tr-node.note:hover,.tr-node.board:hover{border-color:var(--accent)}
+.tr-node.item.done .tr-t{text-decoration:line-through;opacity:.6}
+.tr-node.note{cursor:pointer;flex-direction:column;align-items:flex-start;max-width:200px}
+.tr-node.note.open{max-width:460px;white-space:normal;background:var(--surface)}
+.tr-note-head{display:flex;align-items:center;gap:6px;white-space:nowrap;max-width:100%}
+.tr-note-body{margin-top:7px;padding-top:7px;border-top:1px solid var(--border);font-size:12px;line-height:1.6;
+  color:var(--muted);white-space:normal;max-height:260px;overflow-y:auto;width:100%}
+.tr-note-body *{max-width:100%}
+.tr-t{overflow:hidden;text-overflow:ellipsis}
+.tr-cnt{flex:none;font-size:11px;color:var(--muted);background:var(--bg);border:1px solid var(--border);border-radius:999px;padding:0 8px}
+.tr-node.root .tr-cnt{background:rgba(0,0,0,.10);border-color:transparent;color:inherit;opacity:.85}
+.tr-sub{flex:none;font-size:11px;color:var(--faint)}
+.tr-mk{flex:none;font-size:11px;width:13px;text-align:center;color:var(--muted)}
+.tr-mk.doing{color:var(--accent);font-weight:700}
+.tr-mk.done{color:var(--ok);font-weight:700}
+.tr-caret{flex:none;border:0;background:transparent;color:var(--faint);font-size:10px;cursor:pointer;padding:0;width:11px;line-height:1}
+.tr-caret.sp{visibility:hidden}
+.tr-caret:hover{color:var(--accent)}
+.tr-go{flex:none;border:1px solid var(--border);background:var(--bg);color:var(--muted);border-radius:5px;
+  font:inherit;font-size:10px;line-height:1;padding:3px 5px;cursor:pointer;margin-left:2px}
+.tr-go:hover{border-color:var(--accent);color:var(--accent)}
 /* 구조도 추가 모달: 프로젝트/보드 선택 토글 */
 .seg{display:flex;gap:6px;margin-bottom:12px}
 .seg-btn{flex:1;border:1px solid var(--border);background:var(--surface);color:var(--muted);border-radius:8px;padding:9px;font:inherit;font-size:13px;cursor:pointer}
