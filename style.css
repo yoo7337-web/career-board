@@ -128,8 +128,15 @@ body.dragging-board .delete-lane{display:flex}
 .card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:9px 11px;margin-bottom:8px;cursor:grab;box-shadow:0 1px 2px rgba(0,0,0,.08)}
 .card:hover{filter:brightness(.98)}
 .card .t{font-size:13.5px}
+/* FU(완수 후 재개) 뱃지 — 회차까지 표시해 반복 업무의 사슬이 보이도록 */
+.fu-badge{display:inline-block;font-size:10px;font-weight:700;line-height:1.6;padding:0 6px;border-radius:4px;
+  margin-right:5px;vertical-align:1px;white-space:nowrap;cursor:help;
+  background:var(--warn-bg);color:var(--warn-fg);border:1px solid transparent}
 .card{position:relative}
 .card.doing{border:2px solid var(--accent);box-shadow:0 1px 4px rgba(0,0,0,.15);padding-top:13px}
+/* FU 카드 왼쪽 띠 — .card.doing 뒤에 와야 덮이지 않음 */
+.card.is-fu{box-shadow:inset 3px 0 0 var(--warn-fg),0 1px 2px rgba(0,0,0,.08)}
+.card.doing.is-fu{box-shadow:inset 3px 0 0 var(--warn-fg),0 1px 4px rgba(0,0,0,.15)}
 .card.done{filter:saturate(.45);opacity:.72}
 .stamp{position:absolute;top:50%;right:10px;transform:translateY(-50%) rotate(-12deg);pointer-events:none;
   border:2px solid var(--ok);color:var(--ok);font-size:13px;font-weight:800;letter-spacing:2px;

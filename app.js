@@ -469,6 +469,14 @@ function dueBadge(due) {
   if (diff <= 3) return `<span class="tag warn">D-${diff}</span>`;
   return `<span class="tag">~ ${fmtDate(due)}</span>`;
 }
+const CIRCLED = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩'];
+const fuNum = n => CIRCLED[n - 1] || String(n);
+// FU 뱃지: 완수 후 다시 꺼낸 카드에 몇 차 후속인지 + 지난 완수 이력을 툴팁으로
+function fuBadgeHtml(c) {
+  if (!c.fuCount) return '';
+  const hist = (c.fuHistory || []).map((d, i) => `${i + 1}차 완수 ${fmtDate(d)}`).join(' · ');
+  return `<span class="fu-badge" title="${esc(hist ? hist + ' → 재개' : '완수 후 다시 진행')}">↩ FU ${fuNum(c.fuCount)}</span>`;
+}
 function cardHtml(c) {
   const pr = PRIORITIES[c.priority] || PRIORITIES.none;
   const style = pr.bg ? `style="background:${pr.bg};color:${pr.fg};border-color:transparent"` : '';
@@ -478,8 +486,8 @@ function cardHtml(c) {
   const overlay = c.status === 'done' ? '<span class="stamp">완료</span>'
     : c.status === 'doing' ? '<span class="doing-badge">진행중</span>' : '';
   const note = c.note ? `<span class="card-note" data-note="${esc(c.note)}">💬</span>` : '';
-  return `<div class="card ${c.status}" ${style} draggable="true" data-id="${c.id}" data-action="card">
-    ${overlay}<div class="t">${esc(c.title)}${note}</div>
+  return `<div class="card ${c.status} ${c.fuCount ? 'is-fu' : ''}" ${style} draggable="true" data-id="${c.id}" data-action="card">
+    ${overlay}<div class="t">${fuBadgeHtml(c)}${esc(c.title)}${note}</div>
     ${tags.length ? `<div class="meta">${tags.join('')}</div>` : ''}
   </div>`;
 }
@@ -536,9 +544,9 @@ function archivePanelHtml(gid) {
     body += `<div class="arch-board-h"><span class="drow-proj c-${b.color}">${esc(b.name)}</span><span class="gcnt">${done.length}</span></div>`;
     body += done.map(c => `<div class="arch-row" data-action="card" data-id="${c.id}" data-text="${esc(c.title.toLowerCase())}" title="클릭=수정">
         <span class="arch-date">✓ ${fmtDate(c.doneAt)}</span>
-        <span class="arch-t">${esc(c.title)}</span>
+        <span class="arch-t">${fuBadgeHtml(c)}${esc(c.title)}</span>
         ${c.note ? `<span class="card-note" data-note="${esc(c.note)}">💬</span>` : ''}
-        <button class="mini-btn fu-btn" data-action="card-fu" data-id="${c.id}" title="이 완수건의 후속 할 일(FU) 만들기">→ FU</button>
+        <button class="mini-btn fu-btn" data-action="card-fu" data-id="${c.id}" title="완수 이력을 남기고 다시 진행중으로">↩ FU</button>
       </div>`).join('');
   });
   const pill = (v, label) => `<button class="fpill ${mSel === v ? 'on' : ''}" data-action="arch-month" data-m="${v}">${label}</button>`;
@@ -1286,7 +1294,7 @@ function dashRow(c, hidePill) {
   return `<div class="drow${overdue}" data-kind="card" data-id="${c.id}" title="클릭=수정 · 더블클릭=보드로 이동">
     <span class="drow-prio" style="${pr.bg ? `background:${pr.bg}` : ''}"></span>
     <div class="drow-body">
-      <div class="drow-l1">${stPill}<span class="drow-title">${esc(c.title)}</span>${note}</div>
+      <div class="drow-l1">${stPill}${fuBadgeHtml(c)}<span class="drow-title">${esc(c.title)}</span>${note}</div>
       ${meta}
     </div>
   </div>`;
@@ -2487,8 +2495,10 @@ function openCardModal(id) {
     <label>💬 메모 · FU (별도로 확인·기억할 것)<textarea id="m-note" rows="3" placeholder="예: 팀장 리뷰 후 재확인 / 자료 요청 대기중">${esc(c.note || '')}</textarea></label>
     <label>마감일 (선택)<input type="date" id="m-due" value="${c.due || ''}"></label>
     ${c.due ? `<a class="gcal-link" href="${gcalUrl((boardById(c.project) ? boardById(c.project).name + ' - ' : '') + c.title, c.due, nextDay(c.due))}" target="_blank" rel="noopener">＋ Google Calendar에 등록 (${fmtDate(c.due)} 종일)</a>` : ''}
+    ${c.fuCount ? `<p class="restore-note">↩ ${fuNum(c.fuCount)} 후속 진행 중${(c.fuHistory || []).length ? ` — ${(c.fuHistory || []).map((d, i) => `${i + 1}차 완수 ${fmtDate(d)}`).join(' · ')}` : ''}</p>` : ''}
     <div class="m-actions">
       <button class="danger" data-action="card-del" data-id="${c.id}">삭제</button>
+      ${c.status === 'done' ? `<button class="ghost" data-action="card-fu" data-id="${c.id}" title="완수 이력을 남기고 다시 진행중으로">↩ FU (다시 진행)</button>` : ''}
       <button class="ghost" data-action="modal-close">취소</button>
       <button class="primary" data-action="card-save" data-id="${c.id}">저장</button>
     </div>`);
@@ -2899,12 +2909,16 @@ document.addEventListener('click', e => {
   else if (act === 'lane-toggle') { const bid = el.dataset.board; openDoneLanes.has(bid) ? openDoneLanes.delete(bid) : openDoneLanes.add(bid); render(); }
   else if (act === 'arch-month') { state.sel.archMonth = el.dataset.m; render(); }
   else if (act === 'sched-past-toggle') { pastSchedOpen = !pastSchedOpen; render(); }
+  // FU: 완수된 카드를 다시 진행중으로 — 완수 이력을 남겨 '몇 차 후속인지' 표시
   else if (act === 'card-fu') {
-    const src = state.cards.find(x => x.id === el.dataset.id);
-    if (src) {
-      state.cards.push({ id: uid(), project: src.project, title: 'FU: ' + src.title, status: 'todo', priority: 'med', due: null, doneAt: null, note: `원본 완수건: ${src.title} (완수 ${src.doneAt})`, createdAt: todayStr() });
-      render();
+    const c = state.cards.find(x => x.id === el.dataset.id);
+    if (c) {
+      c.fuCount = (c.fuCount || 0) + 1;
+      if (c.doneAt) c.fuHistory = (c.fuHistory || []).concat([c.doneAt]);
+      c.status = 'doing';
+      c.doneAt = null;
     }
+    closeModal(); render();
   }
   else if (act === 'note-todo') openNoteTodoModal(el.dataset.id);
   else if (act === 'ne-fmt') {   // 리치 서식 적용 (선택 영역에)
