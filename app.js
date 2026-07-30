@@ -508,7 +508,7 @@ function panelHtml(b, depth) {
   // 묶음 보드: 칸반 없이 얇은 머리글만 — 하위 보드들이 들여쓰기로 이어짐
   if (b.folder) {
     return `<section class="board-panel folder-panel" data-board="${b.id}" style="margin-left:${depth * 22}px">
-      <span class="bname board-drag c-${b.color}" draggable="true" data-action="board-edit" data-id="${b.id}" title="묶음 보드 — 클릭=설정">📂 ${esc(b.name)}</span>
+      <span class="bname board-drag c-${b.color}" draggable="true" data-action="board-edit" data-id="${b.id}" title="묶음 보드 — 클릭=설정">🗃 ${esc(b.name)}</span>
       <span class="folder-sub">묶음</span>
     </section>`;
   }
@@ -699,6 +699,7 @@ function renderBoardView() {
     <div class="side-actions">
       <button class="pill" data-action="group-add">📁 + 프로젝트</button>
       <button class="pill" data-action="proj-add" ${sel !== '__all' && sel !== '' ? `data-group="${sel}"` : ''}>+ 보드</button>
+      <button class="pill" data-action="folder-add" ${sel !== '__all' && sel !== '' ? `data-group="${sel}"` : ''} title="하위 보드를 묶는 분류용 보드">🗃 + 묶음</button>
     </div>
   </aside>`;
   const inbox = state.cards.filter(c => !c.project && c.status !== 'done');
@@ -885,7 +886,7 @@ function renderMap() {
     return `
     <div class="mapnode c-${b.color} ${b.folder ? 'folder' : ''}" data-id="${b.id}" style="left:${b.x}px;top:${b.y}px" data-stat="${esc(b.name)}${b.folder ? ' — 묶음 보드' : stat}">
       <div class="mp mp-top" data-id="${b.id}" data-role="top" title="상위 연결점 — 여기서 부모 보드로 끌기"></div>
-      ${badge}<div class="mapnode-name">${b.folder ? '📂 ' : ''}${esc(b.name)}</div>${b.folder ? '' : prog}
+      ${badge}<div class="mapnode-name">${b.folder ? '🗃 ' : ''}${esc(b.name)}</div>${b.folder ? '' : prog}
       <div class="mp mp-bot" data-id="${b.id}" data-role="bot" title="하위 연결점 — 여기서 자식 보드로 끌기"></div>
     </div>`;
   }).join('');
@@ -1123,6 +1124,7 @@ function initMap() {
 }
 function mapAddHint(type, hit) {
   if (type === 'project') return '새 프로젝트(분류)를 만듭니다. 이 위치에 빈 구역으로 표시되고, 그 안을 클릭해 보드를 넣을 수 있어요.';
+  if (type === 'folder') return `'별도'처럼 하위 보드를 묶는 분류용 보드입니다. 할 일은 담지 않고, 프로젝트 탭에서 머리글로만 보여요.${hit ? ` (📁 ${esc(hit.name)} 소속)` : ''}`;
   return hit ? `'${esc(hit.name)}' 프로젝트 소속 보드로 추가됩니다.` : '어느 프로젝트에도 속하지 않는 보드로 추가됩니다.';
 }
 function openAddBoardAt(x, y) {
@@ -1134,6 +1136,7 @@ function openAddBoardAt(x, y) {
     <div class="seg" id="m-addtype" data-val="${def}">
       <button type="button" class="seg-btn ${def === 'project' ? 'sel' : ''}" data-action="mapadd-type" data-t="project">📁 프로젝트</button>
       <button type="button" class="seg-btn ${def === 'board' ? 'sel' : ''}" data-action="mapadd-type" data-t="board">🗂 보드</button>
+      <button type="button" class="seg-btn" data-action="mapadd-type" data-t="folder">🗃 묶음</button>
     </div>
     <label>이름<input type="text" id="m-title" placeholder="이름 입력 후 Enter"></label>
     <p class="restore-note" id="m-addhint">${mapAddHint(def, hit)}</p>
@@ -1745,7 +1748,7 @@ function renderNoteEditor() {
   const gBoards = state.projects.filter(b => (b.group || '') === gid);
   const curBoard = d ? d.board : (n ? (n.board || '') : ((state.sel.noteBoard && state.sel.noteBoard !== '__common') ? state.sel.noteBoard : ''));
   const boardOpts = `<option value="">— 프로젝트 공통 —</option>` + gBoards.filter(b => !b.folder || b.id === curBoard)
-    .map(b => `<option value="${b.id}" ${curBoard === b.id ? 'selected' : ''}>${b.folder ? '📂 ' : ''}${esc(b.name)}</option>`).join('');
+    .map(b => `<option value="${b.id}" ${curBoard === b.id ? 'selected' : ''}>${b.folder ? '🗃 ' : ''}${esc(b.name)}</option>`).join('');
   const groupOpts = (state.groups || []).map(x => `<option value="${x.id}" ${gid === x.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('')
     + `<option value="" ${gid === '' ? 'selected' : ''}>미분류</option>`;
   const isNew = !n;
@@ -1959,7 +1962,7 @@ function renderTree() {
     const hasKids = !!(cs.length || ns.length || kids.length);
     const doneMark = b.done ? '<span class="tr-sub">✓ 완료</span>' : '';
     return trLi(`<div class="tr-node board c-${b.color} ${b.done ? 'is-done' : ''}">
-      ${trCaret(bKey, hasKids, bOpen)}<span class="tr-t">${b.folder ? '📂' : '🗂'} ${esc(b.name)}</span>${doneMark}
+      ${trCaret(bKey, hasKids, bOpen)}<span class="tr-t">${b.folder ? '🗃' : '🗂'} ${esc(b.name)}</span>${doneMark}
       <button class="tr-go" data-action="tree-goboard" data-bid="${b.id}" title="이 보드로 이동">↗</button></div>`, sub);
   };
 
@@ -2626,7 +2629,7 @@ function prioPicker(val) {
 // 카드 모달의 보드 select — 선택된 프로젝트 소속 보드만(+미배정)
 function cardBoardOptions(gid, curBid) {
   const opts = (state.projects || []).filter(b => (b.group || '') === gid && (!b.folder || b.id === curBid))   // 묶음 보드는 할 일 대상에서 제외(이미 속해 있으면 표시)
-    .map(b => `<option value="${b.id}" ${curBid === b.id ? 'selected' : ''}>${b.folder ? '📂 ' : ''}${esc(b.name)}</option>`);
+    .map(b => `<option value="${b.id}" ${curBid === b.id ? 'selected' : ''}>${b.folder ? '🗃 ' : ''}${esc(b.name)}</option>`);
   return `<option value="" ${!curBid ? 'selected' : ''}>📥 미배정</option>` + opts.join('');
 }
 function openCardModal(id) {
@@ -2672,7 +2675,7 @@ function openBoardModal(id) {
     </div>
     ${b.start && b.end ? `<a class="gcal-link" href="${gcalUrl('[기간] ' + b.name, b.start, nextDay(b.end))}" target="_blank" rel="noopener">＋ Google Calendar에 등록 (${fmtDate(b.start)}~${fmtDate(b.end)})</a>` : ''}
     <label class="folder-check" title="'별도'처럼 하위 보드를 묶는 분류용 보드 — 프로젝트 탭에서 칸반 없이 머리글로만 표시되고 보드 수·할 일 대상에서 빠집니다">
-      <input type="checkbox" id="m-folder" ${b.folder ? 'checked' : ''}> 📂 묶음 보드 (할 일 없이 하위 보드를 묶는 용도)
+      <input type="checkbox" id="m-folder" ${b.folder ? 'checked' : ''}> 🗃 묶음 보드 (할 일 없이 하위 보드를 묶는 용도)
     </label>
     ${b.folder && state.cards.some(c => c.project === b.id) ? `<p class="restore-note">⚠ 이 보드에 할 일 ${state.cards.filter(c => c.project === b.id).length}건이 남아 있어요 — 묶음 보드에서는 안 보이니 하위 보드로 옮겨주세요.</p>` : ''}
     ${b.done ? `<p class="restore-note">✅ 완료된 보드입니다${b.doneAt ? ` (완료 ${fmtDate(b.doneAt)})` : ''} — 구조도에서는 프로젝트 오른쪽 선반에 작게 모여 있어요.</p>` : ''}
@@ -2795,14 +2798,15 @@ function groupOptions(selId, cur) {
     .concat((state.groups || []).map(g => `<option value="${g.id}" ${cur === g.id ? 'selected' : ''}>${esc(g.name)}</option>`));
   return `<select id="${selId}">${opts.join('')}</select>`;
 }
-function openProjModal(preGroup) {
+function openProjModal(preGroup, folder) {
   showModal(`
-    <h3>보드 추가</h3>
-    <label>이름<input type="text" id="m-title" placeholder="예: Issue log / 결산 지원"></label>
+    <h3>${folder ? '묶음 보드 추가' : '보드 추가'}</h3>
+    <label>이름<input type="text" id="m-title" placeholder="${folder ? '예: 별도 / 연결' : '예: Issue log / 결산 지원'}"></label>
     <label>프로젝트 (분류)${groupOptions('m-group', preGroup || null)}</label>
+    ${folder ? `<p class="restore-note">🗃 하위 보드를 묶는 분류용 보드입니다. 할 일은 담지 않고, 프로젝트 탭에서 머리글로만 표시돼요. (추가 후 보드 설정에서 상위 보드를 지정하면 그 아래로 들어갑니다)</p>` : ''}
     <div class="m-actions">
       <button class="ghost" data-action="modal-close">취소</button>
-      <button class="primary" data-action="proj-save">추가</button>
+      <button class="primary" data-action="proj-save" ${folder ? 'data-folder="1"' : ''}>추가</button>
     </div>`);
 }
 function periodRowHtml(s, e) {
@@ -2942,6 +2946,7 @@ document.addEventListener('click', e => {
   else if (act === 'ics') icsExport();
   else if (act === 'samples') { if (confirm('회계 업무 샘플 보드 3개와 카드들을 추가할까요? (기존 데이터는 유지)')) loadSamples(); }
   else if (act === 'proj-add') openProjModal(el.dataset.group || null);
+  else if (act === 'folder-add') openProjModal(el.dataset.group || null, true);
   else if (act === 'group-add') openGroupModal();
   else if (act === 'group-edit') openGroupModal(el.dataset.id);
   else if (act === 'period-add') { const box = document.getElementById('m-periods'); box.insertAdjacentHTML('beforeend', periodRowHtml('', '')); }
@@ -3247,7 +3252,9 @@ document.addEventListener('click', e => {
     if (t) {
       const i = state.projects.length;
       const grp = document.getElementById('m-group') ? (document.getElementById('m-group').value || null) : null;
-      state.projects.push({ id: 'p-' + uid(), name: t, color: RAMP[i % RAMP.length], parent: null, group: grp, x: 30 + (i % 4) * 180, y: 30 + Math.floor(i / 4) * 120 });
+      const nb = { id: 'p-' + uid(), name: t, color: RAMP[i % RAMP.length], parent: null, group: grp, x: 30 + (i % 4) * 180, y: 30 + Math.floor(i / 4) * 120 };
+      if (el.dataset.folder) nb.folder = true;
+      state.projects.push(nb);
     }
     closeModal(); render();
   }
@@ -3267,7 +3274,9 @@ document.addEventListener('click', e => {
         state.groups.push({ id: 'g-' + uid(), name: t, color: RAMP[state.groups.length % RAMP.length], periods: [], mapX: pendingMapPos.rawX, mapY: pendingMapPos.rawY });
       } else {
         const i = state.projects.length;
-        state.projects.push({ id: 'p-' + uid(), name: t, color: RAMP[i % RAMP.length], parent: null, group: pendingMapPos.group || null, x: pendingMapPos.x, y: pendingMapPos.y });
+        const nb = { id: 'p-' + uid(), name: t, color: RAMP[i % RAMP.length], parent: null, group: pendingMapPos.group || null, x: pendingMapPos.x, y: pendingMapPos.y };
+        if (type === 'folder') nb.folder = true;
+        state.projects.push(nb);
       }
     }
     pendingMapPos = null;
