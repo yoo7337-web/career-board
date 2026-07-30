@@ -2548,6 +2548,41 @@ function openDevlogModal(kind, id) {
     </div>`);
 }
 
+/* ---------- 급한 일 알림 토스트 (우하단, 하루 1회) ---------- */
+let alertsShown = false;
+function maybeShowAlerts() {
+  if (alertsShown) return;
+  if (CLOUD && !boardLoaded) return;                      // 클라우드 데이터 수신 전에는 판단 보류
+  const key = 'alerts-shown-' + todayStr();
+  try { if (sessionStorage.getItem(key)) { alertsShown = true; return; } } catch (e) { }
+  const today = todayStr();
+  const over = state.cards.filter(c => c.status !== 'done' && c.due && c.due < today)
+    .sort((a, b) => (a.due || '').localeCompare(b.due || ''));
+  const dueToday = state.cards.filter(c => c.status !== 'done' && c.due === today);
+  const scheds = (state.schedules || []).filter(s => s.date && !schedIsStale(s))
+    .filter(s => { const d = dday(s.date); return d <= 1; })                     // 지남(7일 내)~내일
+    .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+  alertsShown = true;
+  if (!over.length && !dueToday.length && !scheds.length) return;
+  try { sessionStorage.setItem(key, '1'); } catch (e) { }
+  const projOf = c => { const b = c.project ? boardById(c.project) : null; const g = b && b.group ? groupById(b.group) : null; return g ? g.name : ''; };
+  const cardRow = c => `<div class="at-row" data-action="alert-card" data-id="${c.id}">
+      <span class="at-t">${esc(c.title)}</span>${projOf(c) ? `<span class="at-p">${esc(projOf(c))}</span>` : ''}${dueBadge(c.due)}</div>`;
+  const schedRowT = s => { const g = s.group ? groupById(s.group) : null; return `<div class="at-row" data-action="alert-sched" data-id="${s.id}">
+      <span class="at-t">📌 ${esc(s.title)}</span>${g ? `<span class="at-p">${esc(g.name)}</span>` : ''}${dueBadge(s.date)}</div>`; };
+  const sec = (label, items, rowFn) => items.length
+    ? `<div class="at-sec">${label} ${items.length}건</div>` + items.slice(0, 4).map(rowFn).join('')
+      + (items.length > 4 ? `<div class="at-more">+${items.length - 4}건 더 — 대시보드에서 확인</div>` : '')
+    : '';
+  const el = document.createElement('div');
+  el.className = 'alert-toast';
+  el.innerHTML = `<div class="at-head">⏰ 챙길 일이 있어요<button class="at-x" data-action="alert-close" title="닫기">✕</button></div>
+    ${sec('🔥 마감 지남', over, cardRow)}
+    ${sec('📅 오늘 마감', dueToday, cardRow)}
+    ${sec('📌 임박 일정', scheds, schedRowT)}`;
+  document.body.appendChild(el);
+}
+
 /* ---------- 고정 헤더 ---------- */
 // 헤더 높이를 CSS 변수로 노출 (기록 에디터 툴바가 헤더 아래에 붙도록) + 스크롤 시 그림자
 function syncHeaderH() {
@@ -2608,6 +2643,7 @@ function render() {
     }
   }
   syncHeaderH();
+  maybeShowAlerts();
   if (view === 'map') initMap();
   if (view === 'cal') markCalOverflow();
   if (view === 'notes') markNoteOverflow();
@@ -3163,6 +3199,9 @@ document.addEventListener('click', e => {
     const b = boardById(el.dataset.bid);
     if (b) { state.sel.boardGroup = b.group || ''; focusBoard = b.id; render(); }
   }
+  else if (act === 'alert-close') { document.querySelector('.alert-toast')?.remove(); }
+  else if (act === 'alert-card') openCardModal(el.dataset.id);
+  else if (act === 'alert-sched') openSchedModal(el.dataset.id);
   else if (act === 'tree-group') { state.sel.treeGroup = el.dataset.gid; render(); }
   else if (act === 'tree-toggle') {
     const k = el.dataset.key;
