@@ -2458,6 +2458,37 @@ function jrDayCard(date, a, entry, live) {
     <div class="jr-memo" data-action="jr-memo" data-date="${date}" title="클릭해서 회고 쓰기">${memo ? `💭 ${esc(memo)}` : '<span class="jr-memo-ph">💭 클릭해 한 줄 회고 남기기</span>'}</div>
   </section>`;
 }
+// 주간 요약: 월요일 시작 주의 일지들을 합산
+function jrWeekSummary(mondayStr, entries) {
+  let done = 0, plan = 0, actual = 0, notes = 0, b3done = 0, b3tot = 0, memos = 0;
+  const byProj = {};
+  entries.forEach(({ a, entry }) => {
+    if (!a) return;
+    (a.done || []).forEach(d => { done++; const k = d.proj || '미분류'; byProj[k] = (byProj[k] || 0) + 1; });
+    plan += a.planH || 0; actual += a.actualH || 0;
+    notes += (a.notes || []).length;
+    (a.big3 || []).forEach(b => { b3tot++; if (b.done) b3done++; });
+    if (entry && entry.memo) memos++;
+  });
+  if (!done && !b3tot && !notes) return '';
+  const end = new Date(mondayStr + 'T00:00:00'); end.setDate(end.getDate() + 6);
+  const top = Object.entries(byProj).sort((a, b) => b[1] - a[1]).slice(0, 4);
+  const maxV = top.length ? top[0][1] : 1;
+  const bars = top.map(([n, v]) => `<div class="jw-row"><span class="jw-n">${esc(n)}</span>
+      <span class="jw-bar"><i style="width:${Math.round(v / maxV * 100)}%"></i></span><span class="jw-v">${v}</span></div>`).join('');
+  const diff = Math.round((actual - plan) * 10) / 10;
+  return `<div class="jr-week">
+    <div class="jw-head">📊 주간 요약 <span class="jw-range">${fmtDate(mondayStr)} ~ ${fmtDate(dstr(end))}</span></div>
+    <div class="jw-kpis">
+      <span class="jw-kpi"><b>${done}</b>완수</span>
+      ${b3tot ? `<span class="jw-kpi"><b>${b3done}/${b3tot}</b> Big3</span>` : ''}
+      ${(plan || actual) ? `<span class="jw-kpi"><b>${actual}h</b> 실제<i class="jw-diff ${diff > 0 ? 'over' : diff < 0 ? 'under' : ''}">${plan ? `계획 ${plan}h${diff ? (diff > 0 ? ` · +${diff}` : ` · ${diff}`) : ''}` : ''}</i></span>` : ''}
+      ${notes ? `<span class="jw-kpi"><b>${notes}</b>기록</span>` : ''}
+      ${memos ? `<span class="jw-kpi"><b>${memos}</b>회고</span>` : ''}
+    </div>
+    ${bars ? `<div class="jw-bars">${bars}</div>` : ''}
+  </div>`;
+}
 function renderJournal() {
   journalFreeze();   // 열 때 과거 확정 (render 끝의 save()가 영속화)
   const today = todayStr();
@@ -2471,9 +2502,22 @@ function renderJournal() {
     const m = date.slice(0, 7);
     if (m !== lastMonth) { lastMonth = m; const [yy, mm] = m.split('-'); feed += `<div class="note-group-h">${yy}년 ${Number(mm)}월</div>`; }
   };
+  const monOf = d => { const t = new Date(d + 'T00:00:00'); t.setDate(t.getDate() - ((t.getDay() + 6) % 7)); return dstr(t); };
+  const weekBuf = [];   // 같은 주의 일지를 모아 주가 바뀔 때 요약 카드 삽입
+  let curWeek = null;
+  const flushWeek = () => { if (curWeek && weekBuf.length) feed += jrWeekSummary(curWeek, weekBuf.splice(0)); weekBuf.length = 0; };
   pushMonth(today);
   feed += jrDayCard(today, journalDerive(today), state.journal[today], true);
-  shown.forEach(d => { pushMonth(d); feed += jrDayCard(d, state.journal[d].auto, state.journal[d], false); });
+  curWeek = monOf(today);
+  weekBuf.push({ a: journalDerive(today), entry: state.journal[today] });
+  shown.forEach(d => {
+    const w = monOf(d);
+    if (w !== curWeek) { flushWeek(); curWeek = w; }
+    pushMonth(d);
+    feed += jrDayCard(d, state.journal[d].auto, state.journal[d], false);
+    weekBuf.push({ a: state.journal[d].auto, entry: state.journal[d] });
+  });
+  flushWeek();
   const moreBtn = pastDates.length > limit ? `<button class="pill jr-more" data-action="jr-more">+ 이전 일지 더 보기 (${pastDates.length - limit}일)</button>` : '';
   const keyBtn = `<button class="jr-mini jr-key-btn" data-action="jr-key">🔑 AI 키 ${geminiKey() ? '✓' : '설정'}</button>`;
   return `<div class="journal">

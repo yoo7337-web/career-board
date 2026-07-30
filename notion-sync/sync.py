@@ -127,7 +127,41 @@ def ensure_data_source(integ, key, title, icon, props, desc):
     return dsid, db["id"]
 
 
+DONE_PROPS = {
+    "제목": {"type": "title", "title": {}},
+    "완수일": {"type": "date", "date": {}},
+    "프로젝트": {"type": "select", "select": {}},
+    "보드": {"type": "select", "select": {}},
+    "중요도": {"type": "select", "select": {}},
+    "FU회차": {"type": "number", "number": {}},
+    "카드ID": {"type": "rich_text", "rich_text": {}},
+}
+PRIO_KO = {"high": "높음", "med": "보통", "low": "낮음", "none": "없음"}
+
 DOW = ["월", "화", "수", "목", "금", "토", "일"]
+
+
+def done_payload(card, gname, bname):
+    """완수 카드 → Notion 속성 + 본문(메모·FU 이력)."""
+    title = (card.get("title") or "").strip() or "(제목 없음)"
+    props = {
+        "제목": {"title": [{"type": "text", "text": {"content": title[:1900]}}]},
+        "완수일": {"date": {"start": card["doneAt"]}},
+        "프로젝트": {"select": {"name": gname}} if gname else {"select": None},
+        "보드": {"select": {"name": bname}} if bname else {"select": None},
+        "중요도": {"select": {"name": PRIO_KO.get(card.get("priority") or "none", "없음")}},
+        "FU회차": {"number": card.get("fuCount") or 0},
+        "카드ID": {"rich_text": [{"type": "text", "text": {"content": card.get("id", "")}}]},
+    }
+    NL = chr(10)
+    L = []
+    if card.get("note"):
+        L.append(str(card["note"]))
+    hist = card.get("fuHistory") or []
+    if hist:
+        chain = " → ".join(list(hist) + [card["doneAt"]])
+        L.append(f"↩ FU 이력: {chain}")
+    return props, (NL + NL).join(L)[:MD_LIMIT]
 
 
 def journal_markdown(entry):
@@ -204,6 +238,7 @@ def main():
     notes = state.get("notes") or []
     gname = {g["id"]: g.get("name", "") for g in (state.get("groups") or []) if g.get("id")}
     bname = {b["id"]: b.get("name", "") for b in (state.get("projects") or []) if b.get("id")}
+    bmeta = {b["id"]: b for b in (state.get("projects") or []) if b.get("id")}
 
     integ_ref = db.collection("integrations").document(uid)
     integ = integ_ref.get().to_dict() or {}
@@ -290,6 +325,48 @@ def main():
         jpayload["journal"]["databaseId"] = j_new_db
     integ_ref.set(jpayload, merge=True)
     print(f"일지 동기화 완료 — 신규 {jc} · 수정 {ju} · 전체 {len(jpages)}일")
+
+    # ── 완수 아카이브 → '완수 기록' DB ──
+    done_cards = [c for c in (state.get("cards") or [])
+                  if c.get("status") == "done" and c.get("doneAt") and c.get("id")]
+    ddsid, d_new_db = ensure_data_source(integ, "done", "완수 기록", "✅", DONE_PROPS,
+                                         "업무 보드에서 완수한 할 일이 자동 동기화됩니다. (앱 → Notion 단방향)")
+    dpages = dict(((integ.get("done") or {}).get("pages") or {}))
+    dc = du = da = 0
+    for c in done_cards:
+        b = bmeta.get(c.get("project") or "")
+        props, md = done_payload(c, gname.get((b or {}).get("group") or ""), (b or {}).get("name") or "")
+        h = hashlib.sha1(json.dumps([props, md], ensure_ascii=False, sort_keys=True).encode()).hexdigest()
+        prev = dpages.get(c["id"])
+        if prev and prev.get("hash") == h:
+            continue
+        if prev:
+            try:
+                notion("PATCH", f"/pages/{prev['pageId']}", json={"in_trash": True})
+            except RuntimeError as e:
+                print("구본 보관 실패(무시):", e, file=sys.stderr)
+        body = {"parent": {"data_source_id": ddsid}, "properties": props}
+        if md:
+            body["markdown"] = md
+        page = notion("POST", "/pages", json=body)
+        dpages[c["id"]] = {"pageId": page["id"], "hash": h}
+        if prev:
+            du += 1
+        else:
+            dc += 1
+    live_done = {c["id"] for c in done_cards}
+    for cid in [k for k in dpages if k not in live_done]:   # 삭제되거나 FU로 재개된 건 보관
+        try:
+            notion("PATCH", f"/pages/{dpages[cid]['pageId']}", json={"in_trash": True})
+            da += 1
+        except RuntimeError as e:
+            print("보관 실패(무시):", e, file=sys.stderr)
+        dpages.pop(cid, None)
+    dpayload = {"done": {"dataSourceId": ddsid, "pages": dpages, "syncedAt": int(time.time())}}
+    if d_new_db:
+        dpayload["done"]["databaseId"] = d_new_db
+    integ_ref.set(dpayload, merge=True)
+    print(f"완수 동기화 완료 — 신규 {dc} · 수정 {du} · 보관 {da} · 전체 {len(dpages)}건")
 
 
 if __name__ == "__main__":
