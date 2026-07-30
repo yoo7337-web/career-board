@@ -772,6 +772,7 @@ function renderBoardView() {
         ${topArea}
         ${page}
       </div></div>`
+    + `<div class="unassign-hint">📥 보드 밖에 놓으면 <b>미배정</b>으로 이동</div>`
     + `<div class="detach-lane"><span>◀<br>여기에 놓으면<br>보드 분리<br>(독립)</span></div>`
     + `<div class="delete-lane"><span>🗑<br>여기에 놓으면<br>보드 삭제</span></div>`;
 }
@@ -2662,6 +2663,7 @@ function openCardModal(id) {
     <div class="m-actions">
       <button class="danger" data-action="card-del" data-id="${c.id}">삭제</button>
       ${c.status === 'done' ? `<button class="ghost" data-action="card-fu" data-id="${c.id}" title="완수 이력을 남기고 다시 진행중으로">↩ FU (다시 진행)</button>` : ''}
+      ${c.status !== 'done' && c.fuCount ? `<button class="ghost" data-action="card-fu-undo" data-id="${c.id}" title="FU를 취소하고 직전 완수 상태로 되돌립니다">⤺ FU 취소 (완수로 복귀)</button>` : ''}
       <button class="ghost" data-action="modal-close">취소</button>
       <button class="primary" data-action="card-save" data-id="${c.id}">저장</button>
     </div>`);
@@ -3085,6 +3087,18 @@ document.addEventListener('click', e => {
   else if (act === 'lane-toggle') { const bid = el.dataset.board; openDoneLanes.has(bid) ? openDoneLanes.delete(bid) : openDoneLanes.add(bid); render(); }
   else if (act === 'arch-month') { state.sel.archMonth = el.dataset.m; render(); }
   else if (act === 'sched-past-toggle') { pastSchedOpen = !pastSchedOpen; render(); }
+  // FU 취소: 직전 완수 상태로 복귀 (fuHistory 마지막 날짜 복원, 회차 -1)
+  else if (act === 'card-fu-undo') {
+    const c = state.cards.find(x => x.id === el.dataset.id);
+    if (c && c.fuCount) {
+      c.doneAt = (c.fuHistory && c.fuHistory.length) ? c.fuHistory.pop() : todayStr();
+      c.status = 'done';
+      c.fuCount = c.fuCount - 1 || undefined;
+      if (c.fuHistory && !c.fuHistory.length) c.fuHistory = undefined;
+      if (!c.fuCount) c.prevStatus = undefined;
+    }
+    closeModal(); render();
+  }
   // FU: 완수된 카드를 다시 진행중으로 — 완수 이력을 남겨 '몇 차 후속인지' 표시
   else if (act === 'card-fu') {
     const c = state.cards.find(x => x.id === el.dataset.id);
@@ -3423,11 +3437,17 @@ document.addEventListener('dragstart', e => {
   const chip = e.target.closest('.chip');
   if (chip && chip.dataset.id) { dragItem = { kind: 'cal', id: chip.dataset.id }; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', 'cal'); return; }
   const c = e.target.closest('.card');
-  if (c) { dragItem = { kind: 'card', id: c.dataset.id }; e.dataTransfer.setData('text/plain', c.dataset.id); return; }
+  if (c) {
+    dragItem = { kind: 'card', id: c.dataset.id };
+    e.dataTransfer.setData('text/plain', c.dataset.id);
+    const cc = state.cards.find(x => x.id === c.dataset.id);
+    if (state.sel.view === 'board' && cc && cc.project) document.body.classList.add('dragging-card');   // '밖에 놓으면 미배정' 힌트
+    return;
+  }
   const bd = e.target.closest('.board-drag');
   if (bd) { dragItem = { kind: 'board', id: bd.dataset.id }; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', 'board'); document.body.classList.add('dragging-board'); }
 });
-document.addEventListener('dragend', () => { dragItem = null; document.body.classList.remove('dragging-board'); clearDropHints(); });
+document.addEventListener('dragend', () => { dragItem = null; document.body.classList.remove('dragging-board', 'dragging-card'); clearDropHints(); });
 document.addEventListener('dragover', e => {
   if (dragItem && dragItem.kind === 'big3') {
     const row = e.target.closest('.tb-big3-row');
@@ -3473,7 +3493,14 @@ document.addEventListener('dragover', e => {
   const col = e.target.closest('.col');
   if (col) { e.preventDefault(); col.classList.add('dragover'); return; }
   const cp = e.target.closest('.compact-panel');
-  if (cp) { e.preventDefault(); cp.classList.add('dragover'); }   // 컴팩트 보드에 드롭 = To-do로
+  if (cp) { e.preventDefault(); cp.classList.add('dragover'); return; }   // 컴팩트 보드에 드롭 = To-do로
+  // 보드 영역 밖(패널 사이 여백·하단 힌트 바)에 놓으면 미배정
+  if (dragItem && dragItem.kind === 'card' && document.body.classList.contains('dragging-card')
+      && !e.target.closest('.board-panel') && !e.target.closest('.notes-side')
+      && (e.target.closest('.board-page') || e.target.closest('.unassign-hint'))) {
+    e.preventDefault();
+    document.querySelector('.unassign-hint')?.classList.add('hot');
+  } else document.querySelector('.unassign-hint')?.classList.remove('hot');
 });
 document.addEventListener('dragleave', e => {
   const col = e.target.closest('.col');
@@ -3574,7 +3601,16 @@ document.addEventListener('drop', e => {
   const col = e.target.closest('.col');
   if (!col) {
     const cp = e.target.closest('.compact-panel');
-    if (cp) { e.preventDefault(); moveCard(e.dataTransfer.getData('text/plain'), 'todo', cp.dataset.board); }
+    if (cp) { e.preventDefault(); moveCard(e.dataTransfer.getData('text/plain'), 'todo', cp.dataset.board); return; }
+    if (dragItem && dragItem.kind === 'card' && document.body.classList.contains('dragging-card')
+        && !e.target.closest('.board-panel') && !e.target.closest('.notes-side')
+        && (e.target.closest('.board-page') || e.target.closest('.unassign-hint'))) {
+      e.preventDefault();
+      const c = state.cards.find(x => x.id === e.dataTransfer.getData('text/plain'));
+      if (c) { c.project = null; if (c.status === 'done') { c.status = 'todo'; c.doneAt = null; } }   // 인박스 드롭과 동일 규칙
+      document.body.classList.remove('dragging-card');
+      render();
+    }
     return;
   }
   e.preventDefault();

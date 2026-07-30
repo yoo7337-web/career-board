@@ -93,29 +93,96 @@ def note_payload(note, gname, bname):
     return props, body_markdown(note)
 
 
-def ensure_data_source(integ):
-    """저장된 data source가 있으면 재사용, 없으면 DB를 새로 만든다."""
-    dsid = (integ.get("notion") or {}).get("dataSourceId")
+JOURNAL_PROPS = {
+    "제목": {"type": "title", "title": {}},
+    "날짜": {"type": "date", "date": {}},
+    "완수": {"type": "number", "number": {}},
+    "기록": {"type": "number", "number": {}},
+    "회고": {"type": "checkbox", "checkbox": {}},
+}
+
+
+def ensure_data_source(integ, key, title, icon, props, desc):
+    """integrations.{key}.dataSourceId가 살아있으면 재사용, 없으면 DB를 새로 만든다."""
+    dsid = (integ.get(key) or {}).get("dataSourceId")
     if dsid:
         try:
             notion("GET", f"/data_sources/{dsid}")
             return dsid, None
         except RuntimeError as e:
-            print("저장된 data source를 못 찾음 → 새로 생성합니다:", e, file=sys.stderr)
+            print(f"저장된 data source({title})를 못 찾음 → 새로 생성합니다:", e, file=sys.stderr)
     parent = (os.environ.get("NOTION_PARENT_PAGE_ID") or "").strip().strip('"')
     if not parent:
         sys.exit("NOTION_PARENT_PAGE_ID 가 없습니다. DB를 만들 부모 페이지를 통합에 공유하고 id를 넣어주세요.")
     db = notion("POST", "/databases", json={
         "parent": {"type": "page_id", "page_id": parent},
-        "title": [{"type": "text", "text": {"content": "업무 기록"}}],
-        "description": [{"type": "text", "text": {"content": "업무 보드의 '기록' 탭이 자동 동기화됩니다. (앱 → Notion 단방향)"}}],
-        "icon": {"type": "emoji", "emoji": "📝"},
+        "title": [{"type": "text", "text": {"content": title}}],
+        "description": [{"type": "text", "text": {"content": desc}}],
+        "icon": {"type": "emoji", "emoji": icon},
         "is_inline": False,
-        "initial_data_source": {"properties": PROPS},
+        "initial_data_source": {"properties": props},
     })
     dsid = db["data_sources"][0]["id"]
-    print(f"Notion DB 생성됨: {db.get('url')}")
+    print(f"Notion DB 생성됨({title}): {db.get('url')}")
     return dsid, db["id"]
+
+
+DOW = ["월", "화", "수", "목", "금", "토", "일"]
+
+
+def journal_markdown(entry):
+    """journal[date] = {auto:{done,created,big3,planH,actualH,notes}, memo, ai} -> 마크다운 본문."""
+    NL = chr(10)
+    a = entry.get("auto") or {}
+    L = []
+    done = a.get("done") or []
+    if done:
+        rows = [f"- {d.get('title', '')}" + (f" ({' · '.join(x for x in [d.get('proj'), d.get('board')] if x)})" if (d.get('proj') or d.get('board')) else "") for d in done]
+        L.append(f"## ✅ 완수 {len(done)}건" + NL + NL.join(rows))
+    big3 = a.get("big3") or []
+    if big3:
+        rows = []
+        for b in big3:
+            meta = []
+            if b.get("plan"):
+                meta.append(f"계획 {b['plan']}h")
+            if b.get("actual") is not None:
+                meta.append(f"실제 {b['actual']}h")
+            mark = "✓" if b.get("done") else "○"
+            rows.append(f"- {mark} {b.get('title', '')}" + (f" ({' · '.join(meta)})" if meta else ""))
+        L.append(f"## 🎯 Big3 {sum(1 for b in big3 if b.get('done'))}/{len(big3)}" + NL + NL.join(rows))
+    if a.get("planH") or a.get("actualH"):
+        L.append("## ⏱ 시간" + NL + f"계획 {a.get('planH') or 0}h · 실제 {a.get('actualH') or 0}h")
+    notes = a.get("notes") or []
+    if notes:
+        rows = [f"- {NOTE_TYPES.get(n.get('type'), '💡 메모')} {n.get('title', '')}" for n in notes]
+        L.append(f"## 📝 기록 {len(notes)}건" + NL + NL.join(rows))
+    if a.get("created"):
+        L.append(f"➕ 새 할 일 등록 {a['created']}건")
+    if entry.get("memo"):
+        L.append("## 💭 한 줄 회고" + NL + str(entry["memo"]))
+    if entry.get("ai"):
+        L.append("## ✨ AI 정리" + NL + str(entry["ai"]))
+    return (NL + NL).join(L)[:MD_LIMIT]
+
+
+def journal_payload(date, entry):
+    a = entry.get("auto") or {}
+    dt = None
+    try:
+        import datetime as _dt
+        dt = _dt.date.fromisoformat(date)
+    except Exception:
+        pass
+    title = f"{date} ({DOW[dt.weekday()]})" if dt else date
+    props = {
+        "제목": {"title": [{"type": "text", "text": {"content": title}}]},
+        "날짜": {"date": {"start": date}},
+        "완수": {"number": len(a.get("done") or [])},
+        "기록": {"number": len(a.get("notes") or [])},
+        "회고": {"checkbox": bool(entry.get("memo"))},
+    }
+    return props, journal_markdown(entry)
 
 
 def clear_children(page_id):
@@ -150,7 +217,8 @@ def main():
 
     integ_ref = db.collection("integrations").document(uid)
     integ = integ_ref.get().to_dict() or {}
-    dsid, new_db_id = ensure_data_source(integ)
+    dsid, new_db_id = ensure_data_source(integ, "notion", "업무 기록", "📝", PROPS,
+                                         "업무 보드의 '기록' 탭이 자동 동기화됩니다. (앱 → Notion 단방향)")
     saved = ((integ.get("notion") or {}).get("pages") or {})
 
     pages = dict(saved)
@@ -193,7 +261,44 @@ def main():
     if new_db_id:
         payload["notion"]["databaseId"] = new_db_id
     integ_ref.set(payload, merge=True)
-    print(f"동기화 완료 — 신규 {created} · 수정 {updated} · 보관 {archived} · 전체 {len(pages)}건")
+    print(f"기록 동기화 완료 — 신규 {created} · 수정 {updated} · 보관 {archived} · 전체 {len(pages)}건")
+
+    # ── 일지 → '업무 일지' DB (확정된 과거 스냅샷 auto + 회고 memo + AI 정리) ──
+    journal = state.get("journal") or {}
+    jdsid, j_new_db = ensure_data_source(integ, "journal", "업무 일지", "📔", JOURNAL_PROPS,
+                                         "업무 보드의 '일지' 탭이 자동 동기화됩니다. (앱 → Notion 단방향, 확정된 날짜만)")
+    jpages = dict(((integ.get("journal") or {}).get("pages") or {}))
+    jc = ju = 0
+    for date in sorted(journal.keys()):
+        entry = journal.get(date) or {}
+        if not isinstance(entry, dict):
+            continue
+        if not (entry.get("auto") or entry.get("memo") or entry.get("ai")):
+            continue
+        props, md = journal_payload(date, entry)
+        h = hashlib.sha1(json.dumps([props, md], ensure_ascii=False, sort_keys=True).encode()).hexdigest()
+        prev = jpages.get(date)
+        if prev and prev.get("hash") == h:
+            continue
+        if prev:
+            notion("PATCH", f"/pages/{prev['pageId']}", json={"properties": props, "in_trash": False})
+            clear_children(prev["pageId"])
+            if md:
+                notion("PATCH", f"/blocks/{prev['pageId']}/children", json={"markdown": md})
+            jpages[date] = {"pageId": prev["pageId"], "hash": h}
+            ju += 1
+        else:
+            body = {"parent": {"data_source_id": jdsid}, "properties": props}
+            if md:
+                body["markdown"] = md
+            page = notion("POST", "/pages", json=body)
+            jpages[date] = {"pageId": page["id"], "hash": h}
+            jc += 1
+    jpayload = {"journal": {"dataSourceId": jdsid, "pages": jpages, "syncedAt": int(time.time())}}
+    if j_new_db:
+        jpayload["journal"]["databaseId"] = j_new_db
+    integ_ref.set(jpayload, merge=True)
+    print(f"일지 동기화 완료 — 신규 {jc} · 수정 {ju} · 전체 {len(jpages)}일")
 
 
 if __name__ == "__main__":
