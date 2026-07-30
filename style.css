@@ -367,7 +367,12 @@ ul.tr-children>li:only-child::after{display:none}
 .cal-day.has-more::before{content:'⌄';position:absolute;bottom:0;left:50%;transform:translateX(-50%);pointer-events:none;z-index:1;font-size:12px;line-height:1.1;color:var(--muted);opacity:.6}
 .chip{cursor:grab}
 .dnum{display:inline-block;font-size:11px;color:var(--muted);min-width:18px;height:18px;line-height:18px;text-align:center;border-radius:50%}
-.cal-day.today .dnum{background:var(--accent);color:#fff}
+/* 오늘 칸: 배경 틴트 + 액센트 링 + 날짜 알약에 '오늘' 표기 */
+.cal-day.today{background:var(--accent-soft);box-shadow:inset 0 0 0 2px var(--accent)}
+.cal-day.today:hover{box-shadow:inset 0 0 0 3px var(--accent)}
+.cal-day.today.has-more::after{background:linear-gradient(transparent,var(--accent-soft))}
+.cal-day.today .dnum{background:var(--accent);color:#fff;font-weight:700;border-radius:999px;padding:0 7px}
+.cal-day.today .dnum::after{content:' 오늘';font-size:9.5px;font-weight:600;opacity:.95}
 .chip{display:block;font-size:11px;border-radius:5px;padding:2px 5px;margin-top:2px;cursor:pointer;overflow:hidden}
 .chip-proj-top{display:inline-block;max-width:100%;font-size:9px;line-height:1.3;font-weight:700;padding:0 5px;border-radius:4px;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:top}
@@ -645,6 +650,8 @@ footer button:hover{border-color:var(--accent);color:var(--text)}
 .sched-panel .gname{padding:0;font-size:14px;cursor:default;color:var(--text)}
 .sched-panel .gcnt{background:var(--bg);border:1px solid var(--border);border-radius:999px;padding:0 8px;font-size:11.5px;color:var(--muted);font-weight:600}
 .sched-list{display:flex;flex-direction:column;gap:5px}
+.sched-panel .past-toggle{margin-top:10px}        /* 일정 목록과 붙어 겹쳐 보이던 간격 확보 */
+.sched-panel .sched-past{margin-top:6px}
 .sched-row{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;background:var(--bg);cursor:pointer;font-size:13px}
 .sched-row:hover{background:var(--accent-soft)}
 .sched-row.overdue,.drow.overdue{box-shadow:inset 3px 0 0 var(--danger-fg)}
