@@ -185,16 +185,6 @@ def journal_payload(date, entry):
     return props, journal_markdown(entry)
 
 
-def clear_children(page_id):
-    while True:
-        res = notion("GET", f"/blocks/{page_id}/children?page_size=100")
-        blocks = res.get("results", [])
-        for b in blocks:
-            notion("DELETE", f"/blocks/{b['id']}")
-        if not res.get("has_more"):
-            return
-
-
 def main():
     missing = [k for k in ("FIREBASE_SA", "NOTION_TOKEN") if not (os.environ.get(k) or "").strip()]
     if missing:
@@ -233,19 +223,20 @@ def main():
         prev = pages.get(nid)
         if prev and prev.get("hash") == h:
             continue
+        # 본문 갱신: children append API는 markdown을 안 받음(실측 400) → 구본을 휴지통으로 보내고 재생성
         if prev:
-            notion("PATCH", f"/pages/{prev['pageId']}", json={"properties": props, "in_trash": False})
-            clear_children(prev["pageId"])
-            if md:
-                notion("PATCH", f"/blocks/{prev['pageId']}/children", json={"markdown": md})
-            pages[nid] = {"pageId": prev["pageId"], "hash": h}
+            try:
+                notion("PATCH", f"/pages/{prev['pageId']}", json={"in_trash": True})
+            except RuntimeError as e:
+                print("구본 보관 실패(무시):", e, file=sys.stderr)
+        body = {"parent": {"data_source_id": dsid}, "properties": props}
+        if md:
+            body["markdown"] = md
+        page = notion("POST", "/pages", json=body)
+        pages[nid] = {"pageId": page["id"], "hash": h}
+        if prev:
             updated += 1
         else:
-            body = {"parent": {"data_source_id": dsid}, "properties": props}
-            if md:
-                body["markdown"] = md
-            page = notion("POST", "/pages", json=body)
-            pages[nid] = {"pageId": page["id"], "hash": h}
             created += 1
 
     live = {n.get("id") for n in notes if n.get("id")}
@@ -281,18 +272,18 @@ def main():
         if prev and prev.get("hash") == h:
             continue
         if prev:
-            notion("PATCH", f"/pages/{prev['pageId']}", json={"properties": props, "in_trash": False})
-            clear_children(prev["pageId"])
-            if md:
-                notion("PATCH", f"/blocks/{prev['pageId']}/children", json={"markdown": md})
-            jpages[date] = {"pageId": prev["pageId"], "hash": h}
+            try:
+                notion("PATCH", f"/pages/{prev['pageId']}", json={"in_trash": True})
+            except RuntimeError as e:
+                print("구본 보관 실패(무시):", e, file=sys.stderr)
+        body = {"parent": {"data_source_id": jdsid}, "properties": props}
+        if md:
+            body["markdown"] = md
+        page = notion("POST", "/pages", json=body)
+        jpages[date] = {"pageId": page["id"], "hash": h}
+        if prev:
             ju += 1
         else:
-            body = {"parent": {"data_source_id": jdsid}, "properties": props}
-            if md:
-                body["markdown"] = md
-            page = notion("POST", "/pages", json=body)
-            jpages[date] = {"pageId": page["id"], "hash": h}
             jc += 1
     jpayload = {"journal": {"dataSourceId": jdsid, "pages": jpages, "syncedAt": int(time.time())}}
     if j_new_db:
