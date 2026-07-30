@@ -508,7 +508,7 @@ function panelHtml(b, depth) {
   // 묶음 보드: 칸반 없이 얇은 머리글만 — 하위 보드들이 들여쓰기로 이어짐
   if (b.folder) {
     return `<section class="board-panel folder-panel" data-board="${b.id}" style="margin-left:${depth * 22}px">
-      <span class="bname board-drag c-${b.color}" draggable="true" data-action="board-edit" data-id="${b.id}" title="묶음 보드 — 클릭=설정">🗃 ${esc(b.name)}</span>
+      <span class="bname board-drag c-${b.color}" draggable="true" data-action="board-edit" data-id="${b.id}" title="묶음 보드 — 클릭=설정">📚 ${esc(b.name)}</span>
       <span class="folder-sub">묶음</span>
     </section>`;
   }
@@ -516,6 +516,15 @@ function panelHtml(b, depth) {
   const doing = cardsOf(b.id, 'doing');
   const done = cardsOf(b.id, 'done').sort((a, c) => (c.doneAt || '').localeCompare(a.doneAt || ''));
   const doneOpen = openDoneLanes.has(b.id);
+  // 미완료가 없는 보드는 한 줄 컴팩트 바로 — 입력하면 카드 생성과 함께 자동으로 전체 칸반 복귀
+  if (!todo.length && !doing.length && !doneOpen) {
+    return `<section class="board-panel compact-panel" data-board="${b.id}" style="margin-left:${depth * 22}px">
+      <span class="bname board-drag c-${b.color}" draggable="true" data-action="board-edit" data-id="${b.id}" title="클릭=설정 · 끌어서 상하 구조">${esc(b.name)}</span>
+      ${parent ? `<span class="bcrumb">▸ ${esc(parent.name)}</span>` : ''}
+      ${done.length ? `<button class="mini-btn" data-action="lane-toggle" data-board="${b.id}" title="완수 내역 펼치기">✓ 완수 ${done.length} ▸</button>` : '<span class="cp-empty">할 일 없음</span>'}
+      <form class="quick cp-quick" data-project="${b.id}"><input name="t" placeholder="+ 할 일 추가하고 Enter" autocomplete="off"></form>
+    </section>`;
+  }
   return `<section class="board-panel" data-board="${b.id}" style="margin-left:${depth * 22}px">
     <div class="panel-head">
       <span class="bname board-drag c-${b.color}" draggable="true" data-action="board-edit" data-id="${b.id}" title="클릭=설정 · 끌어서 다른 보드 위/아래에 놓으면 상하 구조">${esc(b.name)}</span>
@@ -698,8 +707,8 @@ function renderBoardView() {
     ${sideGroupRow('', '미분류', 'gray', 'gray')}
     <div class="side-actions">
       <button class="pill" data-action="group-add">📁 + 프로젝트</button>
-      <button class="pill" data-action="proj-add" ${sel !== '__all' && sel !== '' ? `data-group="${sel}"` : ''}>+ 보드</button>
-      <button class="pill" data-action="folder-add" ${sel !== '__all' && sel !== '' ? `data-group="${sel}"` : ''} title="하위 보드를 묶는 분류용 보드">🗃 + 묶음</button>
+      <button class="pill" data-action="folder-add" ${sel !== '__all' && sel !== '' ? `data-group="${sel}"` : ''} title="하위 보드를 묶는 분류용 보드">📚 + 묶음</button>
+      <button class="pill" data-action="proj-add" ${sel !== '__all' && sel !== '' ? `data-group="${sel}"` : ''}>🗂 + 보드</button>
     </div>
   </aside>`;
   const inbox = state.cards.filter(c => !c.project && c.status !== 'done');
@@ -886,7 +895,7 @@ function renderMap() {
     return `
     <div class="mapnode c-${b.color} ${b.folder ? 'folder' : ''}" data-id="${b.id}" style="left:${b.x}px;top:${b.y}px" data-stat="${esc(b.name)}${b.folder ? ' — 묶음 보드' : stat}">
       <div class="mp mp-top" data-id="${b.id}" data-role="top" title="상위 연결점 — 여기서 부모 보드로 끌기"></div>
-      ${badge}<div class="mapnode-name">${b.folder ? '🗃 ' : ''}${esc(b.name)}</div>${b.folder ? '' : prog}
+      ${badge}<div class="mapnode-name">${b.folder ? '📚 ' : ''}${esc(b.name)}</div>${b.folder ? '' : prog}
       <div class="mp mp-bot" data-id="${b.id}" data-role="bot" title="하위 연결점 — 여기서 자식 보드로 끌기"></div>
     </div>`;
   }).join('');
@@ -1135,8 +1144,8 @@ function openAddBoardAt(x, y) {
     <h3>구조도에 추가${hit ? ` — 📁 ${esc(hit.name)}` : ''}</h3>
     <div class="seg" id="m-addtype" data-val="${def}">
       <button type="button" class="seg-btn ${def === 'project' ? 'sel' : ''}" data-action="mapadd-type" data-t="project">📁 프로젝트</button>
+      <button type="button" class="seg-btn" data-action="mapadd-type" data-t="folder">📚 묶음</button>
       <button type="button" class="seg-btn ${def === 'board' ? 'sel' : ''}" data-action="mapadd-type" data-t="board">🗂 보드</button>
-      <button type="button" class="seg-btn" data-action="mapadd-type" data-t="folder">🗃 묶음</button>
     </div>
     <label>이름<input type="text" id="m-title" placeholder="이름 입력 후 Enter"></label>
     <p class="restore-note" id="m-addhint">${mapAddHint(def, hit)}</p>
@@ -1552,7 +1561,7 @@ function renderNotes() {
   if (isAll) {
     const last = gNotes.slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''))[0];
     const withNotes = new Set(gNotes.map(n => n.group || ''));
-    pageHead = `<div class="page-head"><span class="page-icon c-gray">🗃</span><h2 class="page-title">전체 기록</h2></div>`;
+    pageHead = `<div class="page-head"><span class="page-icon c-gray">📚</span><h2 class="page-title">전체 기록</h2></div>`;
     propBar = `<div class="prop-bar">
       <span class="prop-chip">📁 프로젝트 ${withNotes.size}</span>
       <span class="prop-chip">📝 기록 ${gNotes.length}</span>
@@ -1748,7 +1757,7 @@ function renderNoteEditor() {
   const gBoards = state.projects.filter(b => (b.group || '') === gid);
   const curBoard = d ? d.board : (n ? (n.board || '') : ((state.sel.noteBoard && state.sel.noteBoard !== '__common') ? state.sel.noteBoard : ''));
   const boardOpts = `<option value="">— 프로젝트 공통 —</option>` + gBoards.filter(b => !b.folder || b.id === curBoard)
-    .map(b => `<option value="${b.id}" ${curBoard === b.id ? 'selected' : ''}>${b.folder ? '🗃 ' : ''}${esc(b.name)}</option>`).join('');
+    .map(b => `<option value="${b.id}" ${curBoard === b.id ? 'selected' : ''}>${b.folder ? '📚 ' : ''}${esc(b.name)}</option>`).join('');
   const groupOpts = (state.groups || []).map(x => `<option value="${x.id}" ${gid === x.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('')
     + `<option value="" ${gid === '' ? 'selected' : ''}>미분류</option>`;
   const isNew = !n;
@@ -1962,7 +1971,7 @@ function renderTree() {
     const hasKids = !!(cs.length || ns.length || kids.length);
     const doneMark = b.done ? '<span class="tr-sub">✓ 완료</span>' : '';
     return trLi(`<div class="tr-node board c-${b.color} ${b.done ? 'is-done' : ''}">
-      ${trCaret(bKey, hasKids, bOpen)}<span class="tr-t">${b.folder ? '🗃' : '🗂'} ${esc(b.name)}</span>${doneMark}
+      ${trCaret(bKey, hasKids, bOpen)}<span class="tr-t">${b.folder ? '📚' : '🗂'} ${esc(b.name)}</span>${doneMark}
       <button class="tr-go" data-action="tree-goboard" data-bid="${b.id}" title="이 보드로 이동">↗</button></div>`, sub);
   };
 
@@ -2629,7 +2638,7 @@ function prioPicker(val) {
 // 카드 모달의 보드 select — 선택된 프로젝트 소속 보드만(+미배정)
 function cardBoardOptions(gid, curBid) {
   const opts = (state.projects || []).filter(b => (b.group || '') === gid && (!b.folder || b.id === curBid))   // 묶음 보드는 할 일 대상에서 제외(이미 속해 있으면 표시)
-    .map(b => `<option value="${b.id}" ${curBid === b.id ? 'selected' : ''}>${b.folder ? '🗃 ' : ''}${esc(b.name)}</option>`);
+    .map(b => `<option value="${b.id}" ${curBid === b.id ? 'selected' : ''}>${b.folder ? '📚 ' : ''}${esc(b.name)}</option>`);
   return `<option value="" ${!curBid ? 'selected' : ''}>📥 미배정</option>` + opts.join('');
 }
 function openCardModal(id) {
@@ -2675,7 +2684,7 @@ function openBoardModal(id) {
     </div>
     ${b.start && b.end ? `<a class="gcal-link" href="${gcalUrl('[기간] ' + b.name, b.start, nextDay(b.end))}" target="_blank" rel="noopener">＋ Google Calendar에 등록 (${fmtDate(b.start)}~${fmtDate(b.end)})</a>` : ''}
     <label class="folder-check" title="'별도'처럼 하위 보드를 묶는 분류용 보드 — 프로젝트 탭에서 칸반 없이 머리글로만 표시되고 보드 수·할 일 대상에서 빠집니다">
-      <input type="checkbox" id="m-folder" ${b.folder ? 'checked' : ''}> 🗃 묶음 보드 (할 일 없이 하위 보드를 묶는 용도)
+      <input type="checkbox" id="m-folder" ${b.folder ? 'checked' : ''}> 📚 묶음 보드 (할 일 없이 하위 보드를 묶는 용도)
     </label>
     ${b.folder && state.cards.some(c => c.project === b.id) ? `<p class="restore-note">⚠ 이 보드에 할 일 ${state.cards.filter(c => c.project === b.id).length}건이 남아 있어요 — 묶음 보드에서는 안 보이니 하위 보드로 옮겨주세요.</p>` : ''}
     ${b.done ? `<p class="restore-note">✅ 완료된 보드입니다${b.doneAt ? ` (완료 ${fmtDate(b.doneAt)})` : ''} — 구조도에서는 프로젝트 오른쪽 선반에 작게 모여 있어요.</p>` : ''}
@@ -2803,7 +2812,7 @@ function openProjModal(preGroup, folder) {
     <h3>${folder ? '묶음 보드 추가' : '보드 추가'}</h3>
     <label>이름<input type="text" id="m-title" placeholder="${folder ? '예: 별도 / 연결' : '예: Issue log / 결산 지원'}"></label>
     <label>프로젝트 (분류)${groupOptions('m-group', preGroup || null)}</label>
-    ${folder ? `<p class="restore-note">🗃 하위 보드를 묶는 분류용 보드입니다. 할 일은 담지 않고, 프로젝트 탭에서 머리글로만 표시돼요. (추가 후 보드 설정에서 상위 보드를 지정하면 그 아래로 들어갑니다)</p>` : ''}
+    ${folder ? `<p class="restore-note">📚 하위 보드를 묶는 분류용 보드입니다. 할 일은 담지 않고, 프로젝트 탭에서 머리글로만 표시돼요. (추가 후 보드 설정에서 상위 보드를 지정하면 그 아래로 들어갑니다)</p>` : ''}
     <div class="m-actions">
       <button class="ghost" data-action="modal-close">취소</button>
       <button class="primary" data-action="proj-save" ${folder ? 'data-folder="1"' : ''}>추가</button>
@@ -3462,11 +3471,15 @@ document.addEventListener('dragover', e => {
     return;
   }
   const col = e.target.closest('.col');
-  if (col) { e.preventDefault(); col.classList.add('dragover'); }
+  if (col) { e.preventDefault(); col.classList.add('dragover'); return; }
+  const cp = e.target.closest('.compact-panel');
+  if (cp) { e.preventDefault(); cp.classList.add('dragover'); }   // 컴팩트 보드에 드롭 = To-do로
 });
 document.addEventListener('dragleave', e => {
   const col = e.target.closest('.col');
   if (col) col.classList.remove('dragover');
+  const cp = e.target.closest('.compact-panel');
+  if (cp && !cp.contains(e.relatedTarget)) cp.classList.remove('dragover');
   const row = e.target.closest('.tb-big3-row');
   if (row && !row.contains(e.relatedTarget)) row.classList.remove('drop-into', 'tb-reorder-over');
   const day = e.target.closest('.cal-day');
@@ -3559,7 +3572,11 @@ document.addEventListener('drop', e => {
     return;
   }
   const col = e.target.closest('.col');
-  if (!col) return;
+  if (!col) {
+    const cp = e.target.closest('.compact-panel');
+    if (cp) { e.preventDefault(); moveCard(e.dataTransfer.getData('text/plain'), 'todo', cp.dataset.board); }
+    return;
+  }
   e.preventDefault();
   const cid = e.dataTransfer.getData('text/plain');
   if (col.dataset.inbox) {                                  // 보드 카드 → 미배정으로 되돌리기
