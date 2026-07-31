@@ -1757,8 +1757,9 @@ function renderNoteEditor() {
   const g = gid ? groupById(gid) : null;
   const gBoards = state.projects.filter(b => (b.group || '') === gid);
   const curBoard = d ? d.board : (n ? (n.board || '') : ((state.sel.noteBoard && state.sel.noteBoard !== '__common') ? state.sel.noteBoard : ''));
-  const boardOpts = `<option value="">— 프로젝트 공통 —</option>` + gBoards.filter(b => !b.folder || b.id === curBoard)
-    .map(b => `<option value="${b.id}" ${curBoard === b.id ? 'selected' : ''}>${b.folder ? '📚 ' : ''}${esc(b.name)}</option>`).join('');
+  const boardOpts = `<option value="">— 프로젝트 공통 —</option>` + orderedBoardsIn(gid || null)
+    .filter(({ board }) => !board.folder || board.id === curBoard)
+    .map(({ board }) => `<option value="${board.id}" ${curBoard === board.id ? 'selected' : ''}>${esc(boardPathLabel(board))}</option>`).join('');
   const groupOpts = (state.groups || []).map(x => `<option value="${x.id}" ${gid === x.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('')
     + `<option value="" ${gid === '' ? 'selected' : ''}>미분류</option>`;
   const isNew = !n;
@@ -2717,9 +2718,22 @@ function prioPicker(val) {
   </div>`;
 }
 // 카드 모달의 보드 select — 선택된 프로젝트 소속 보드만(+미배정)
+// 보드 선택지 라벨: 상위 보드(📚 묶음 포함) 경로를 앞에 붙여 어디 소속인지 보이게
+function boardPathLabel(b) {
+  const parts = [];
+  const seen = new Set([b.id]);
+  let cur = b.parent ? boardById(b.parent) : null;
+  while (cur && !seen.has(cur.id)) {
+    seen.add(cur.id);
+    parts.unshift((cur.folder ? '📚 ' : '') + cur.name);
+    cur = cur.parent ? boardById(cur.parent) : null;
+  }
+  return parts.concat((b.folder ? '📚 ' : '') + b.name).join(' › ');
+}
 function cardBoardOptions(gid, curBid) {
-  const opts = (state.projects || []).filter(b => (b.group || '') === gid && (!b.folder || b.id === curBid))   // 묶음 보드는 할 일 대상에서 제외(이미 속해 있으면 표시)
-    .map(b => `<option value="${b.id}" ${curBid === b.id ? 'selected' : ''}>${b.folder ? '📚 ' : ''}${esc(b.name)}</option>`);
+  const opts = orderedBoardsIn(gid || null)
+    .filter(({ board }) => !board.folder || board.id === curBid)   // 묶음 보드는 할 일 대상에서 제외(이미 속해 있으면 표시)
+    .map(({ board }) => `<option value="${board.id}" ${curBid === board.id ? 'selected' : ''}>${esc(boardPathLabel(board))}</option>`);
   return `<option value="" ${!curBid ? 'selected' : ''}>📥 미배정</option>` + opts.join('');
 }
 function openCardModal(id) {
