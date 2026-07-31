@@ -1263,7 +1263,8 @@ function renderCal() {
       <div class="cal-days">${cells}</div>
     </div>`;
   }
-  return `<div class="cal-head">
+  return `<div class="cal-sticky">
+    <div class="cal-head">
       <span class="cal-title">${y}년 ${m}월</span>
       <button class="pill" data-action="cal-prev">◀</button>
       <button class="pill" data-action="cal-today">오늘</button>
@@ -1272,6 +1273,7 @@ function renderCal() {
       <span class="cal-status-legend"><span class="sl"><i class="bdot"></i>계획</span><span class="sl"><i class="chip-mk doing">▶</i>진행 중</span><span class="sl done"><i class="chip-mk done">✓</i>완수</span></span>
     </div>
     ${calFilterBar()}
+    </div>
     <div class="cal">
       <div class="cal-dow">${['일', '월', '화', '수', '목', '금', '토'].map((n, i) => `<span class="${i === 0 ? 'sun' : ''}">${n}</span>`).join('')}</div>
       ${weeksHtml}
@@ -2660,7 +2662,11 @@ function syncHeaderH() {
   if (h) document.documentElement.style.setProperty('--hdr-h', Math.round(h.getBoundingClientRect().height) + 'px');
 }
 if (typeof window !== 'undefined') {
-  const onScroll = () => document.documentElement.classList.toggle('scrolled', window.scrollY > 4);
+  const onScroll = () => {
+    const was = document.documentElement.classList.contains('scrolled');
+    const now = window.scrollY > 4;
+    if (was !== now) { document.documentElement.classList.toggle('scrolled', now); syncHeaderH(); }   // 헤더가 줄면 --hdr-h도 갱신(달력 고정바가 헤더에 딱 붙도록)
+  };
   window.addEventListener('scroll', onScroll, { passive: true });
   window.addEventListener('resize', syncHeaderH);
 }

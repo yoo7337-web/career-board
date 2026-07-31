@@ -385,6 +385,17 @@ ul.tr-children>li:only-child::after{display:none}
 
 /* calendar */
 .cal-head{display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+/* 달력 상단(월 이동 + 표시·프로젝트 필터) 고정 — 고정 헤더(--hdr-h) 바로 아래에 붙음 */
+.cal-sticky{position:sticky;top:var(--hdr-h,0px);z-index:4;background:var(--bg);
+  margin:0 -16px;padding:10px 16px 2px;box-shadow:0 6px 10px -8px rgba(0,0,0,.25)}
+.cal-sticky .cal-filter:last-child{margin-bottom:8px}
+/* 좁은 화면: 필터까지 고정하면 화면의 절반을 먹어 월 이동 줄만 고정 */
+@media (max-width:760px){
+  .cal-sticky{display:contents}   /* 래퍼 박스를 없애야 .cal-head가 래퍼 높이에 갇히지 않고 계속 고정됨 */
+  .cal-sticky .cal-head{position:sticky;top:var(--hdr-h,0px);z-index:4;background:var(--bg);
+    margin:0 -16px 8px;padding:8px 16px 6px;box-shadow:0 6px 10px -8px rgba(0,0,0,.25)}
+  .cal-sticky .cal-hint{display:none}
+}
 .cal-title{font-size:16px;font-weight:600;margin-right:4px}
 .cal-hint{font-size:11.5px;color:var(--faint);margin-left:auto}
 .cal{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
