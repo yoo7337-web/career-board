@@ -1287,12 +1287,18 @@ let calWheelAt = 0;
 if (typeof window !== 'undefined') {
   window.addEventListener('wheel', e => {
     if ((state.sel.view || '') !== 'cal') return;
-    if (e.target.closest && e.target.closest('.cal-scroll, .modal, .alert-toast')) return;   // 칸 안 칩 목록·팝업 스크롤이 우선
+    if (e.target.closest && e.target.closest('.modal, .alert-toast')) return;
     const dy = e.deltaY;
     if (!dy) return;
+    // 칸 안 칩 목록은 '실제로 더 스크롤할 수 있을 때만' 양보 (칸 전체가 .cal-scroll이라 무조건 막으면 달 이동이 안 됨)
+    const sc = e.target.closest && e.target.closest('.cal-scroll');
+    if (sc && sc.scrollHeight > sc.clientHeight + 2) {
+      const scAtEnd = dy > 0 ? (sc.scrollTop + sc.clientHeight >= sc.scrollHeight - 2) : (sc.scrollTop <= 2);
+      if (!scAtEnd) return;
+    }
     const doc = document.documentElement;
-    const atBottom = window.scrollY + window.innerHeight >= doc.scrollHeight - 2;
-    const atTop = window.scrollY <= 2;
+    const atBottom = window.scrollY + window.innerHeight >= doc.scrollHeight - 4;
+    const atTop = window.scrollY <= 4;
     if (!((dy > 0 && atBottom) || (dy < 0 && atTop))) return;   // 아직 스크롤할 곳이 남았으면 평소대로
     const now = Date.now();
     if (now - calWheelAt < 320) return;                          // 관성 스크롤로 여러 달 넘어가지 않게
