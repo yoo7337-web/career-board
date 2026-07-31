@@ -630,6 +630,8 @@ footer button:hover{border-color:var(--accent);color:var(--text)}
 .side-sub-item{display:flex;align-items:center;gap:7px;padding:5px 8px;border-radius:7px;cursor:pointer;font-size:12.5px;color:var(--muted)}
 .side-sub-item:hover{background:var(--surface)}
 .side-sub-item.on{font-weight:700;color:var(--text);background:var(--surface)}
+.side-sub-item.is-folder{color:var(--faint)}          /* 묶음 보드 — 실보드와 구분 */
+.side-sub-item.is-folder .side-dot{opacity:.5}
 .side-sub-item .side-dot{width:7px;height:7px}
 .side-sub-item .side-dot.plain{background:var(--border)}
 .page-head{display:flex;align-items:center;gap:10px;margin-bottom:8px}

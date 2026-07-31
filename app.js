@@ -696,7 +696,7 @@ function renderBoardView() {
     const caret = boards.length ? `<button class="side-caret" data-action="side-toggle" data-gid="${gid}" title="보드 ${expanded ? '접기' : '펼치기'}">${expanded ? '▾' : '▸'}</button>` : '<span class="side-caret sp"></span>';
     let html = `<div class="side-item ${sel === gid ? 'on c-' + color : ''}" data-action="board-group" data-gid="${gid}">${caret}<span class="side-dot c-${dot || color}"></span><span class="side-name">${esc(name)}</span><span class="side-cnt" title="미완료 To-do">${openTodosGroup(gid) || ''}</span></div>`;
     if (expanded && boards.length) {
-      html += `<div class="side-sub">` + boards.map(({ board, depth }) => `<div class="side-sub-item ${focusBoard === board.id ? 'on' : ''}" data-action="side-board" data-bid="${board.id}" style="padding-left:${8 + depth * 13}px" title="이 보드로 이동"><span class="side-dot c-${board.color}"></span><span class="side-name">${esc(board.name)}</span><span class="side-cnt" title="미완료 To-do">${openTodos(board.id) || ''}</span></div>`).join('') + `</div>`;
+      html += `<div class="side-sub">` + boards.map(({ board, depth }) => `<div class="side-sub-item ${focusBoard === board.id ? 'on' : ''} ${board.folder ? 'is-folder' : ''}" data-action="side-board" data-bid="${board.id}" style="padding-left:${8 + depth * 13}px" title="${board.folder ? '묶음 보드' : '이 보드로 이동'}"><span class="side-dot c-${board.color}"></span><span class="side-name">${board.folder ? '📚 ' : ''}${esc(board.name)}</span><span class="side-cnt" title="미완료 To-do">${openTodos(board.id) || ''}</span></div>`).join('') + `</div>`;
     }
     return html;
   };
@@ -1536,17 +1536,17 @@ function renderNotes() {
   const cntBoard = bid => gNotes.filter(n => (bid === '__common' ? !n.board : n.board === bid)).length;
   // 사이드바: 프로젝트 목록 + 선택된 프로젝트 아래 보드 트리(아코디언)
   // 펼침은 openSideGroups로만 판단 → 프로젝트별 독립 토글·누적(보드 탭과 동일, Set 공유)
+  // 프로젝트 탭 사이드바와 동일 구조: 보드 상하관계 들여쓰기 + 📚 묶음 보드 구분
   const subTree = xgid => {
     if (!openSideGroups.has(xgid)) return '';
     const xNotes = allNotes.filter(n => (n.group || '') === xgid);
-    const xBoards = state.projects.filter(b => (b.group || '') === xgid);
     const cntB = bid => xNotes.filter(n => (bid === '__common' ? !n.board : n.board === bid)).length;
-    const sub = (label, bid, cnt, color) => `<div class="side-sub-item ${(gid === xgid && bsel === bid) ? 'on' : ''}" data-action="note-board-nav" data-gid="${xgid}" data-bid="${bid}">
-        <span class="side-dot ${color ? 'c-' + color : 'plain'}"></span><span class="side-name">${label}</span><span class="side-cnt">${cnt || ''}</span></div>`;
+    const sub = (label, bid, cnt, color, depth, folder) => `<div class="side-sub-item ${(gid === xgid && bsel === bid) ? 'on' : ''} ${folder ? 'is-folder' : ''}" data-action="note-board-nav" data-gid="${xgid}" data-bid="${bid}" style="padding-left:${8 + (depth || 0) * 13}px">
+        <span class="side-dot ${color ? 'c-' + color : 'plain'}"></span><span class="side-name">${folder ? '📚 ' : ''}${label}</span><span class="side-cnt">${cnt || ''}</span></div>`;
     return `<div class="side-sub">
-      ${sub('전체', '', xNotes.length, null)}
-      ${sub('공통', '__common', cntB('__common'), null)}
-      ${xBoards.map(b => sub(esc(b.name), b.id, cntB(b.id), b.color)).join('')}
+      ${sub('전체', '', xNotes.length, null, 0)}
+      ${sub('공통', '__common', cntB('__common'), null, 0)}
+      ${orderedBoardsIn(xgid || null).map(({ board, depth }) => sub(esc(board.name), board.id, cntB(board.id), board.color, depth, board.folder)).join('')}
     </div>`;
   };
   const noteRow = (xgid, name, color) => {
