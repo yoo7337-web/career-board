@@ -1268,7 +1268,7 @@ function renderCal() {
       <button class="pill" data-action="cal-prev">◀</button>
       <button class="pill" data-action="cal-today">오늘</button>
       <button class="pill" data-action="cal-next">▶</button>
-      <span class="cal-hint">날짜 클릭 = 할 일 추가 · 칩을 다른 날로 드래그 = 날짜 변경 · 막대 = 수행기간</span>
+      <span class="cal-hint">날짜 클릭 = 할 일 추가 · 칩 드래그 = 날짜 변경 · 막대 = 수행기간 · <b>맨 아래/위에서 휠 = 다음·이전 달</b></span>
       <span class="cal-status-legend"><span class="sl"><i class="bdot"></i>계획</span><span class="sl"><i class="chip-mk doing">▶</i>진행 중</span><span class="sl done"><i class="chip-mk done">✓</i>완수</span></span>
     </div>
     ${calFilterBar()}
@@ -1281,6 +1281,25 @@ function markCalOverflow() {
   document.querySelectorAll('.cal-scroll').forEach(sc => {
     sc.parentElement.classList.toggle('has-more', sc.scrollHeight > sc.clientHeight + 2);
   });
+}
+// 달력: 페이지 스크롤이 끝(맨 아래/맨 위)에 닿은 상태에서 한 번 더 굴리면 달 이동
+let calWheelAt = 0;
+if (typeof window !== 'undefined') {
+  window.addEventListener('wheel', e => {
+    if ((state.sel.view || '') !== 'cal') return;
+    if (e.target.closest && e.target.closest('.cal-scroll, .modal, .alert-toast')) return;   // 칸 안 칩 목록·팝업 스크롤이 우선
+    const dy = e.deltaY;
+    if (!dy) return;
+    const doc = document.documentElement;
+    const atBottom = window.scrollY + window.innerHeight >= doc.scrollHeight - 2;
+    const atTop = window.scrollY <= 2;
+    if (!((dy > 0 && atBottom) || (dy < 0 && atTop))) return;   // 아직 스크롤할 곳이 남았으면 평소대로
+    const now = Date.now();
+    if (now - calWheelAt < 320) return;                          // 관성 스크롤로 여러 달 넘어가지 않게
+    calWheelAt = now;
+    calShift(dy > 0 ? 1 : -1);
+    if (dy > 0) window.scrollTo(0, 0);                           // 다음 달은 위에서부터 보도록
+  }, { passive: true });
 }
 function calShift(n) {
   const [y, m] = (state.sel.calYm || todayStr().slice(0, 7)).split('-').map(Number);
