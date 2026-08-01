@@ -491,8 +491,9 @@ function cardHtml(c) {
   const tags = [];
   if (c.status !== 'done' && c.due) tags.push(dueBadge(c.due));
   if (c.status === 'done' && c.doneAt) tags.push(`<span class="tag">${fmtDate(c.doneAt)} 완료</span>`);
-  const overlay = c.status === 'done' ? '<span class="stamp">완료</span>'
-    : c.status === 'doing' ? '<span class="doing-badge">진행중</span>' : '';
+  // 진행중은 인라인 칩(카드 밖으로 튀어나오면 레인 스크롤에 잘림), 완수만 워터마크 스탬프
+  const overlay = c.status === 'done' ? '<span class="stamp">완료</span>' : '';
+  if (c.status === 'doing') tags.unshift('<span class="doing-chip">진행중</span>');
   const note = c.note ? `<span class="card-note" data-note="${esc(c.note)}">💬</span>` : '';
   // 제목과 배지를 한 줄에 (2단 → 1단, 높이 절반)
   return `<div class="card ${c.status} ${c.fuCount ? 'is-fu' : ''}" ${style} draggable="true" data-id="${c.id}" data-action="card" title="${esc(c.title)}">
