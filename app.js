@@ -503,6 +503,9 @@ function cardHtml(c) {
 const openDoneLanes = new Set();   // 완수 레인 펼침 상태 (세션 한정 — 기본 접힘)
 const openSideGroups = new Set();  // 보드 탭 사이드바에서 보드 목록 펼친 프로젝트 (세션 한정)
 let pastSchedOpen = false;         // 일정 패널 '지난 일정' 그룹 펼침 (세션 한정)
+const openPanels = new Set();      // 일정·완수 아카이브 패널 펼침 (세션 한정, 기본 접힘 — 화면 점유 축소)
+const panelOpen = k => openPanels.has(k);
+const panelCaret = k => `<span class="pn-caret">${panelOpen(k) ? '▾' : '▸'}</span>`;
 function panelHtml(b, depth) {
   const parent = b.parent ? boardById(b.parent) : null;
   // 묶음 보드: 칸반 없이 얇은 머리글만 — 하위 보드들이 들여쓰기로 이어짐
@@ -574,12 +577,13 @@ function archivePanelHtml(gid) {
       </div>`).join('');
   });
   const pill = (v, label) => `<button class="fpill ${mSel === v ? 'on' : ''}" data-action="arch-month" data-m="${v}">${label}</button>`;
-  return `<section class="sched-panel arch-panel">
-    <div class="group-head"><span class="gname">✅ 완수 아카이브</span><span class="gcnt">${total}</span>
-      <span class="arch-filter">${pill('', '전체')}${pill(ym, '이번 달')}${pill(lastYm, '지난 달')}</span>
-      <input type="search" id="arch-q" placeholder="🔍 완수 내역 검색" autocomplete="off">
+  const aOpen = panelOpen('arch');
+  return `<section class="sched-panel arch-panel ${aOpen ? '' : 'collapsed'}">
+    <div class="group-head" data-action="panel-toggle" data-k="arch" title="${aOpen ? '접기' : '펼치기'}">${panelCaret('arch')}<span class="gname">✅ 완수 아카이브</span><span class="gcnt">${total}</span>
+      ${!aOpen ? '' : `<span class="arch-filter">${pill('', '전체')}${pill(ym, '이번 달')}${pill(lastYm, '지난 달')}</span>
+      <input type="search" id="arch-q" placeholder="🔍 완수 내역 검색" autocomplete="off">`}
     </div>
-    ${total ? `<div class="arch-list slim-scroll">${body}</div>` : `<div class="empty">${mSel ? '이 달에 완수한 내역이 없어요' : '아직 완수한 내역이 없어요'}</div>`}
+    ${!aOpen ? '' : (total ? `<div class="arch-list slim-scroll">${body}</div>` : `<div class="empty">${mSel ? '이 달에 완수한 내역이 없어요' : '아직 완수한 내역이 없어요'}</div>`)}
   </section>`;
 }
 
@@ -731,9 +735,10 @@ function renderBoardView() {
   let page, topArea = sel === '' ? inboxHtml : splitTop;
   if (sel === '__all') {
     const allScheds = (state.schedules || []).slice().sort(schedSort);
-    const schedPanel = `<section class="sched-panel">
-        <div class="group-head"><span class="gname">📌 일정 · 마감 (전체)</span><span class="gcnt">${allScheds.length}</span><button class="mini-btn" data-action="sched-add">+ 일정 추가</button></div>
-        ${allScheds.length ? `<div class="sched-list">${schedRowsGrouped(allScheds)}</div>` : '<div class="empty">보고서 제출·마감 등 프로젝트 일정을 추가하세요 (추가 시 프로젝트 선택)</div>'}
+    const sOpen = panelOpen('sched');
+    const schedPanel = `<section class="sched-panel ${sOpen ? '' : 'collapsed'}">
+        <div class="group-head" data-action="panel-toggle" data-k="sched" title="${sOpen ? '접기' : '펼치기'}">${panelCaret('sched')}<span class="gname">📌 일정 · 마감 (전체)</span><span class="gcnt">${allScheds.length}</span><button class="mini-btn" data-action="sched-add">+ 일정 추가</button></div>
+        ${!sOpen ? '' : (allScheds.length ? `<div class="sched-list">${schedRowsGrouped(allScheds)}</div>` : '<div class="empty">보고서 제출·마감 등 프로젝트 일정을 추가하세요 (추가 시 프로젝트 선택)</div>')}
       </section>`;
     page = schedPanel + groups.map(g => groupSecHtml(g.id)).join('');   // 미분류는 상단으로 이동
   } else {
@@ -751,10 +756,11 @@ function renderBoardView() {
     const nextSched = scheds.find(s => !s.done);
     const dd = nextSched ? dday(nextSched.date) : 0;
     const schedChip = nextSched ? `<span class="prop-chip sched-chip" data-action="sched-edit" data-id="${nextSched.id}" title="다가오는 일정">📌 ${esc(nextSched.title)} · ${dd < 0 ? -dd + '일 지남' : dd === 0 ? 'D-day' : 'D-' + dd}</span>` : '';
-    const schedPanel = `<section class="sched-panel">
-        <div class="group-head"><span class="gname">📌 일정 · 마감</span><span class="gcnt">${scheds.length}</span><button class="mini-btn" data-action="sched-add" data-group="${sel}">+ 일정 추가</button></div>
-        ${scheds.length ? `<div class="sched-list">${scheds.map(s => schedRow(s, true)).join('')}</div>` : '<div class="empty">보고서 제출·마감 등 이 프로젝트의 일정을 추가하세요</div>'}
-        ${pastScheds.length ? `<button class="mini-btn past-toggle" data-action="sched-past-toggle">지난 일정 ${pastScheds.length} ${pastSchedOpen ? '▾' : '▸'}</button>${pastSchedOpen ? `<div class="sched-list sched-past">${pastScheds.map(s => schedRow(s, true)).join('')}</div>` : ''}` : ''}
+    const sOpen = panelOpen('sched');
+    const schedPanel = `<section class="sched-panel ${sOpen ? '' : 'collapsed'}">
+        <div class="group-head" data-action="panel-toggle" data-k="sched" title="${sOpen ? '접기' : '펼치기'}">${panelCaret('sched')}<span class="gname">📌 일정 · 마감</span><span class="gcnt">${scheds.length}</span>${nextSched ? `<span class="pn-peek">다음 ${esc(nextSched.title)} · ${dd < 0 ? -dd + '일 지남' : dd === 0 ? 'D-day' : 'D-' + dd}</span>` : ''}<button class="mini-btn" data-action="sched-add" data-group="${sel}">+ 일정 추가</button></div>
+        ${!sOpen ? '' : `${scheds.length ? `<div class="sched-list">${scheds.map(s => schedRow(s, true)).join('')}</div>` : '<div class="empty">보고서 제출·마감 등 이 프로젝트의 일정을 추가하세요</div>'}
+        ${pastScheds.length ? `<button class="mini-btn past-toggle" data-action="sched-past-toggle">지난 일정 ${pastScheds.length} ${pastSchedOpen ? '▾' : '▸'}</button>${pastSchedOpen ? `<div class="sched-list sched-past">${pastScheds.map(s => schedRow(s, true)).join('')}</div>` : ''}` : ''}`}
       </section>`;
     page = `<div class="page-head"><span class="page-icon c-${g ? g.color : 'gray'}">📁</span><h2 class="page-title">${esc(gname)}</h2>
         ${g ? `<button class="mini-btn" data-action="group-edit" data-id="${g.id}">설정</button>` : ''}
@@ -3230,6 +3236,11 @@ document.addEventListener('click', e => {
   }
   else if (act === 'lane-toggle') { const bid = el.dataset.board; openDoneLanes.has(bid) ? openDoneLanes.delete(bid) : openDoneLanes.add(bid); render(); }
   else if (act === 'arch-month') { state.sel.archMonth = el.dataset.m; render(); }
+  else if (act === 'panel-toggle') {
+    const k = el.dataset.k;
+    openPanels.has(k) ? openPanels.delete(k) : openPanels.add(k);
+    render();
+  }
   else if (act === 'sched-past-toggle') { pastSchedOpen = !pastSchedOpen; render(); }
   // FU 취소: 직전 완수 상태로 복귀 (fuHistory 마지막 날짜 복원, 회차 -1)
   else if (act === 'card-fu-undo') {
