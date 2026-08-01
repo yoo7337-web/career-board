@@ -1212,17 +1212,36 @@ function renderCal() {
   const [y, m] = ym.split('-').map(Number);
   const startDow = new Date(y, m - 1, 1).getDay();
   const today = todayStr();
+  // 칸 안 칩 정렬: 프로젝트 순(사이드바와 같은 순서, 미분류는 뒤) → 보드 → 제목
+  const cardProjOrder = c => {
+    const b = c.project ? boardById(c.project) : null;
+    return schedProjOrder({ group: b ? (b.group || '') : '' });
+  };
+  const cardBoardName = c => { const b = c.project ? boardById(c.project) : null; return b ? b.name : ''; };
+  const byProject = (a, b) => {
+    const pa = cardProjOrder(a), pb = cardProjOrder(b);
+    if (pa !== pb) return pa - pb;
+    const ba = cardBoardName(a), bb = cardBoardName(b);
+    if (ba !== bb) return ba.localeCompare(bb);
+    return (a.title || '').localeCompare(b.title || '');
+  };
   const cardsByDate = {};
   state.cards.forEach(c => {
     if (!calCardVisible(c)) return;
     const d = c.due || (c.status === 'done' ? c.doneAt : null);
     if (d) (cardsByDate[d] = cardsByDate[d] || []).push(c);
   });
+  Object.values(cardsByDate).forEach(list => list.sort(byProject));
   const schedByDate = {};
   (state.schedules || []).forEach(s => {
     if (!s.date || !calShowType('sched') || !calPeriodVisible(s.group || '')) return;
     (schedByDate[s.date] = schedByDate[s.date] || []).push(s);
   });
+  Object.values(schedByDate).forEach(list => list.sort((a, b) => {
+    const pa = schedProjOrder(a), pb = schedProjOrder(b);
+    if (pa !== pb) return pa - pb;
+    return (a.time || '').localeCompare(b.time || '') || (a.title || '').localeCompare(b.title || '');
+  }));
   const periodItems = [];
   state.projects.filter(b => b.start && b.end && b.start <= b.end).forEach(b => {   // 프로젝트 수행기간 막대는 타입 필터와 무관하게 항상 표시
     if (calPeriodVisible(b.group || '')) periodItems.push({ name: b.name, color: b.color, start: b.start, end: b.end, kind: 'board', id: b.id });
