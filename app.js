@@ -494,8 +494,9 @@ function cardHtml(c) {
   const overlay = c.status === 'done' ? '<span class="stamp">완료</span>'
     : c.status === 'doing' ? '<span class="doing-badge">진행중</span>' : '';
   const note = c.note ? `<span class="card-note" data-note="${esc(c.note)}">💬</span>` : '';
-  return `<div class="card ${c.status} ${c.fuCount ? 'is-fu' : ''}" ${style} draggable="true" data-id="${c.id}" data-action="card">
-    ${overlay}<div class="t">${fuBadgeHtml(c)}${esc(c.title)}${note}</div>
+  // 제목과 배지를 한 줄에 (2단 → 1단, 높이 절반)
+  return `<div class="card ${c.status} ${c.fuCount ? 'is-fu' : ''}" ${style} draggable="true" data-id="${c.id}" data-action="card" title="${esc(c.title)}">
+    ${overlay}<div class="t">${fuBadgeHtml(c)}<span class="ct">${esc(c.title)}</span>${note}</div>
     ${tags.length ? `<div class="meta">${tags.join('')}</div>` : ''}
   </div>`;
 }
@@ -536,17 +537,17 @@ function panelHtml(b, depth) {
     <div class="panel-cols">
       <div class="col" data-status="todo">
         <h3>To-do <span class="cnt">${todo.length}</span></h3>
-        ${todo.map(cardHtml).join('')}
+        <div class="col-body slim-scroll">${todo.map(cardHtml).join('')}</div>
         <form class="quick" data-project="${b.id}"><input name="t" placeholder="+ 포스트잇 추가하고 Enter" autocomplete="off"></form>
       </div>
       <div class="col doing-col" data-status="doing">
         <h3>진행 중 <span class="cnt">${doing.length}</span></h3>
-        ${doing.map(cardHtml).join('') || '<div class="empty">지금 할 1~3장을 여기로 끌어오세요</div>'}
+        <div class="col-body slim-scroll">${doing.map(cardHtml).join('') || '<div class="empty">지금 할 1~3장을 여기로 끌어오세요</div>'}</div>
       </div>
       ${doneOpen
         ? `<div class="col done-col" data-status="done">
         <h3 data-action="lane-toggle" data-board="${b.id}" title="접기">완수 <span class="cnt">${done.length}</span> <span class="lane-arrow">▾</span></h3>
-        ${done.slice(0, 20).map(cardHtml).join('') || '<div class="empty">끝내면 여기로!</div>'}
+        <div class="col-body slim-scroll">${done.slice(0, 20).map(cardHtml).join('') || '<div class="empty">끝내면 여기로!</div>'}</div>
       </div>`
         : `<div class="col done-col col-collapsed" data-status="done">
         <h3 data-action="lane-toggle" data-board="${b.id}" title="펼치기">완수 <span class="cnt">${done.length}</span> <span class="lane-arrow">▸</span></h3>
