@@ -102,18 +102,42 @@ JOURNAL_PROPS = {
 }
 
 
-def ensure_data_source(integ, key, title, icon, props, desc):
-    """integrations.{key}.dataSourceId가 살아있으면 재사용, 없으면 DB를 새로 만든다."""
-    dsid = (integ.get(key) or {}).get("dataSourceId")
-    if dsid:
-        try:
-            notion("GET", f"/data_sources/{dsid}")
-            return dsid, None
-        except RuntimeError as e:
-            print(f"저장된 data source({title})를 못 찾음 → 새로 생성합니다:", e, file=sys.stderr)
+NL_ = chr(10)
+
+
+class NotionAccessError(Exception):
+    """통합에 페이지/DB가 공유되지 않은 상태(코드 문제 아님 — 사용자 조치 필요)."""
+
+
+def check_parent_access():
+    """부모 페이지 접근 가능 여부를 먼저 확인. 연결이 끊기면 여기서 잡아 안내한다."""
     parent = (os.environ.get("NOTION_PARENT_PAGE_ID") or "").strip().strip('"')
     if not parent:
         sys.exit("NOTION_PARENT_PAGE_ID 가 없습니다. DB를 만들 부모 페이지를 통합에 공유하고 id를 넣어주세요.")
+    try:
+        notion("GET", f"/pages/{parent}")
+    except RuntimeError as e:
+        if "object_not_found" in str(e) or "unauthorized" in str(e):
+            raise NotionAccessError(
+                f"Notion 부모 페이지에 접근할 수 없습니다 (id: {parent})." + NL_
+                + "  Notion에서 그 페이지를 열고 ··· → 연결(Connections) → '업무보드' 통합을 다시 추가해주세요." + NL_
+                + "  (페이지를 지웠거나 휴지통에 있으면 복구하거나, 새 페이지를 만들고 NOTION_PARENT_PAGE_ID 시크릿을 갱신하세요.)")
+        raise
+    return parent
+
+
+def ensure_data_source(integ, key, title, icon, props, desc):
+    """integrations.{key}.dataSourceId가 살아있으면 재사용, 없으면 DB를 새로 만든다."""
+    dsid = (integ.get(key) or {}).get("dataSourceId")
+    stale = False
+    if dsid:
+        try:
+            notion("GET", f"/data_sources/{dsid}")
+            return dsid, None, False
+        except RuntimeError as e:
+            print(f"저장된 data source({title})를 못 찾음 → 새로 생성합니다:", e, file=sys.stderr)
+            stale = True   # 옛 DB의 페이지 매핑은 무효 → 호출부에서 초기화
+    parent = check_parent_access()
     db = notion("POST", "/databases", json={
         "parent": {"type": "page_id", "page_id": parent},
         "title": [{"type": "text", "text": {"content": title}}],
@@ -124,7 +148,7 @@ def ensure_data_source(integ, key, title, icon, props, desc):
     })
     dsid = db["data_sources"][0]["id"]
     print(f"Notion DB 생성됨({title}): {db.get('url')}")
-    return dsid, db["id"]
+    return dsid, db["id"], stale
 
 
 DONE_PROPS = {
@@ -231,6 +255,12 @@ def main():
     email = (os.environ.get("BOARD_EMAIL") or "yoo7337@gmail.com").strip()
     uid = fb_auth.get_user_by_email(email).uid
 
+    try:
+        check_parent_access()
+    except NotionAccessError as e:
+        print("[Notion 연결 문제]", e, file=sys.stderr)
+        sys.exit(1)
+
     snap = db.collection("boards").document(uid).get()
     if not snap.exists:
         sys.exit(f"boards/{uid} 문서가 없습니다.")
@@ -242,9 +272,9 @@ def main():
 
     integ_ref = db.collection("integrations").document(uid)
     integ = integ_ref.get().to_dict() or {}
-    dsid, new_db_id = ensure_data_source(integ, "notion", "업무 기록", "📝", PROPS,
-                                         "업무 보드의 '기록' 탭이 자동 동기화됩니다. (앱 → Notion 단방향)")
-    saved = ((integ.get("notion") or {}).get("pages") or {})
+    dsid, new_db_id, stale = ensure_data_source(integ, "notion", "업무 기록", "📝", PROPS,
+                                                "업무 보드의 '기록' 탭이 자동 동기화됩니다. (앱 → Notion 단방향)")
+    saved = {} if stale else ((integ.get("notion") or {}).get("pages") or {})
 
     pages = dict(saved)
     created = updated = archived = 0
@@ -291,9 +321,9 @@ def main():
 
     # ── 일지 → '업무 일지' DB (확정된 과거 스냅샷 auto + 회고 memo + AI 정리) ──
     journal = state.get("journal") or {}
-    jdsid, j_new_db = ensure_data_source(integ, "journal", "업무 일지", "📔", JOURNAL_PROPS,
-                                         "업무 보드의 '일지' 탭이 자동 동기화됩니다. (앱 → Notion 단방향, 확정된 날짜만)")
-    jpages = dict(((integ.get("journal") or {}).get("pages") or {}))
+    jdsid, j_new_db, jstale = ensure_data_source(integ, "journal", "업무 일지", "📔", JOURNAL_PROPS,
+                                                 "업무 보드의 '일지' 탭이 자동 동기화됩니다. (앱 → Notion 단방향, 확정된 날짜만)")
+    jpages = {} if jstale else dict(((integ.get("journal") or {}).get("pages") or {}))
     jc = ju = 0
     for date in sorted(journal.keys()):
         entry = journal.get(date) or {}
@@ -329,9 +359,9 @@ def main():
     # ── 완수 아카이브 → '완수 기록' DB ──
     done_cards = [c for c in (state.get("cards") or [])
                   if c.get("status") == "done" and c.get("doneAt") and c.get("id")]
-    ddsid, d_new_db = ensure_data_source(integ, "done", "완수 기록", "✅", DONE_PROPS,
-                                         "업무 보드에서 완수한 할 일이 자동 동기화됩니다. (앱 → Notion 단방향)")
-    dpages = dict(((integ.get("done") or {}).get("pages") or {}))
+    ddsid, d_new_db, dstale = ensure_data_source(integ, "done", "완수 기록", "✅", DONE_PROPS,
+                                                 "업무 보드에서 완수한 할 일이 자동 동기화됩니다. (앱 → Notion 단방향)")
+    dpages = {} if dstale else dict(((integ.get("done") or {}).get("pages") or {}))
     dc = du = da = 0
     for c in done_cards:
         b = bmeta.get(c.get("project") or "")
