@@ -726,15 +726,9 @@ function renderBoardView() {
       <form class="quick" data-project="__inbox"><input name="t" placeholder="+ 예정 할 일 추가" autocomplete="off"></form>
     </div>
   </section>`;
-  // 상단 2단: 좌=미배정 예정 / 우=미분류 보드 — 전체·개별 프로젝트 공통
-  // (사이드바에서 '미분류'를 고른 경우엔 본문이 곧 미분류라 중복 방지 위해 미배정만)
-  const unassignedPanel = `<section class="top-panel">
-      <div class="tp-head"><span class="tp-title">📄 미분류 보드</span><span class="tp-cnt">${bCount('')}</span></div>
-      <p class="tp-sub">프로젝트에 속하지 않은 보드 · 사이드바 프로젝트로 끌어 편입</p>
-      ${groupSecHtml('', true)}
-    </section>`;
-  const splitTop = `<div class="board-top">${inboxHtml}${unassignedPanel}</div>`;
-  let page, topArea = sel === '' ? inboxHtml : splitTop;
+  // 상단 영역(미배정·예정 / 미분류 보드)은 사이드바 '미분류'에서만 — 다른 화면에선 자리만 차지해서 숨김
+  // (미분류 화면은 본문이 곧 미분류 보드 목록이라 인박스만 띄움)
+  let page, topArea = sel === '' ? inboxHtml : '';
   if (sel === '__all') {
     const allScheds = (state.schedules || []).slice().sort(schedSort);
     const sOpen = panelOpen('sched');
@@ -742,7 +736,8 @@ function renderBoardView() {
         <div class="group-head" data-action="panel-toggle" data-k="sched" title="${sOpen ? '접기' : '펼치기'}">${panelCaret('sched')}<span class="gname">📌 일정 · 마감 (전체)</span><span class="gcnt">${allScheds.length}</span><button class="mini-btn" data-action="sched-add">+ 일정 추가</button></div>
         ${!sOpen ? '' : (allScheds.length ? `<div class="sched-list">${schedRowsGrouped(allScheds)}</div>` : '<div class="empty">보고서 제출·마감 등 프로젝트 일정을 추가하세요 (추가 시 프로젝트 선택)</div>')}
       </section>`;
-    page = schedPanel + groups.map(g => groupSecHtml(g.id)).join('');   // 미분류는 상단으로 이동
+    // 상단 패널을 숨긴 대신, 전체 보기에선 미분류 보드를 본문 맨 아래에 붙여 접근성 유지
+    page = schedPanel + groups.map(g => groupSecHtml(g.id)).join('') + (bCount('') ? groupSecHtml('') : '');
   } else {
     const g = sel ? groupById(sel) : null;
     const gname = g ? g.name : '미분류';
@@ -2794,6 +2789,19 @@ function cardBoardOptions(gid, curBid) {
     .map(({ board }) => `<option value="${board.id}" ${curBid === board.id ? 'selected' : ''}>${esc(boardPathLabel(board))}</option>`);
   return `<option value="" ${!curBid ? 'selected' : ''}>📥 미배정</option>` + opts.join('');
 }
+// 카드 모달의 입력값을 카드에 반영 (저장·상태전환 공용)
+function saveCardModalFields(c) {
+  const t = (document.getElementById('m-title') || {}).value;
+  if (t !== undefined && t.trim()) c.title = t.trim();
+  const pr = document.getElementById('m-prio');
+  if (pr) c.priority = pr.dataset.val || 'med';
+  const nt = document.getElementById('m-note');
+  if (nt) c.note = nt.value.trim() || null;
+  const du = document.getElementById('m-due');
+  if (du) c.due = du.value || null;
+  const bs = document.getElementById('m-cboard');
+  if (bs) c.project = bs.value || null;   // 프로젝트·보드 이동 (빈 값 = 미배정)
+}
 function openCardModal(id) {
   const c = state.cards.find(x => x.id === id);
   if (!c) return;
@@ -2807,6 +2815,10 @@ function openCardModal(id) {
       <label>프로젝트${groupOptions('m-cgroup', gid || null)}</label>
       <label>보드<select id="m-cboard">${cardBoardOptions(gid, c.project || '')}</select></label>
     </div>
+    <label>상태<div class="seg card-status">
+      ${[['todo', '📅 예정'], ['doing', '▶ 진행 중'], ['done', '✓ 완수']].map(([k, lb]) =>
+        `<button type="button" class="seg-btn ${c.status === k ? 'sel' : ''}" data-action="card-status" data-id="${c.id}" data-st="${k}">${lb}</button>`).join('')}
+    </div></label>
     <label>중요도${prioPicker(c.priority || 'med')}</label>
     <label>💬 메모 · FU (별도로 확인·기억할 것)<textarea id="m-note" rows="3" placeholder="예: 팀장 리뷰 후 재확인 / 자료 요청 대기중">${esc(c.note || '')}</textarea></label>
     <label>마감일 (선택)<input type="date" id="m-due" value="${c.due || ''}"></label>
@@ -3245,6 +3257,23 @@ document.addEventListener('click', e => {
   }
   else if (act === 'sched-past-toggle') { pastSchedOpen = !pastSchedOpen; render(); }
   // FU 취소: 직전 완수 상태로 복귀 (fuHistory 마지막 날짜 복원, 회차 -1)
+  else if (act === 'card-status') {
+    const c = state.cards.find(x => x.id === el.dataset.id);
+    if (c) {
+      saveCardModalFields(c);                       // 수정 중이던 내용도 함께 반영
+      const st = el.dataset.st;
+      if (st === 'done') {
+        if (c.status !== 'done') c.prevStatus = c.status;
+        c.status = 'done'; c.doneAt = todayStr();
+      } else {
+        c.status = st; c.doneAt = null;
+      }
+      Object.values(state.timebox || {}).forEach(day => (day.big3 || []).forEach(x => {   // 타임박스 체크와 동기화
+        if (x && x.cardId === c.id) x.done = (st === 'done');
+      }));
+    }
+    closeModal(); render();
+  }
   else if (act === 'card-fu-undo') {
     const c = state.cards.find(x => x.id === el.dataset.id);
     if (c && c.fuCount) {
@@ -3385,15 +3414,7 @@ document.addEventListener('click', e => {
   else if (act === 'unlink') { boardById(el.dataset.id).parent = null; render(); }
   else if (act === 'card-save') {
     const c = state.cards.find(x => x.id === el.dataset.id);
-    if (c) {
-      const t = document.getElementById('m-title').value.trim();
-      if (t) c.title = t;
-      c.priority = document.getElementById('m-prio').dataset.val || 'med';
-      c.note = document.getElementById('m-note').value.trim() || null;
-      c.due = document.getElementById('m-due').value || null;
-      const bs = document.getElementById('m-cboard');
-      if (bs) c.project = bs.value || null;   // 프로젝트·보드 이동 (빈 값 = 미배정)
-    }
+    if (c) saveCardModalFields(c);
     closeModal(); render();
   }
   else if (act === 'card-del') {

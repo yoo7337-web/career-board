@@ -317,6 +317,9 @@ ul.tr-children>li:only-child::after{display:none}
 .seg{display:flex;gap:6px;margin-bottom:12px}
 .seg-btn{flex:1;border:1px solid var(--border);background:var(--surface);color:var(--muted);border-radius:8px;padding:9px;font:inherit;font-size:13px;cursor:pointer}
 .seg-btn.sel{border-color:var(--accent);color:var(--accent);background:var(--accent-soft);font-weight:600}
+/* 카드 모달 상태 전환(예정/진행중/완수) */
+.seg.card-status{margin-top:6px;margin-bottom:0}
+.seg.card-status .seg-btn{padding:7px 6px;font-size:12.5px}
 /* 탭 안 화면 전환 세그먼트(현황↔달력, 일지↔개발일지) — 헤더 탭과 같은 알약 모양으로 통일 */
 .page-seg{display:inline-flex;align-self:flex-start;gap:4px;background:var(--surface);border:1px solid var(--border);border-radius:999px;padding:3px;margin-bottom:12px}
 .page-seg .seg-btn{flex:0 0 auto;border:0;background:transparent;border-radius:999px;padding:6px 16px;font-size:13.5px}
