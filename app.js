@@ -65,10 +65,6 @@ function dday(due) {
 function fmtDate(s) { const [, m, d] = s.split('-'); return `${Number(m)}/${Number(d)}`; }
 function dstr(dt) { return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`; }
 function nextDay(s) { const [y, m, d] = s.split('-').map(Number); return dstr(new Date(y, m - 1, d + 1)); }
-function gcalUrl(title, start, endEx, details) {
-  const f = x => x.replace(/-/g, '');
-  return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&dates=${f(start)}/${f(endEx)}&details=${encodeURIComponent(details || '업무 보드에서 추가')}`;
-}
 
 function load() {
   try {
@@ -415,12 +411,6 @@ function mondayOf(d) {
   dt.setDate(dt.getDate() - ((dt.getDay() + 6) % 7));
   return dt;
 }
-function doneWeekRange(offset) {
-  const start = mondayOf(new Date());
-  start.setDate(start.getDate() + offset * 7);
-  const end = new Date(start); end.setDate(end.getDate() + 6);
-  return { start, end, startStr: dstr(start), endStr: dstr(end) };
-}
 function doneWeekLabel(offset, start, end) {
   const f = dt => `${dt.getMonth() + 1}/${dt.getDate()}`;
   const rel = offset === 0 ? '이번 주' : offset === -1 ? '지난 주' : offset === 1 ? '다음 주'
@@ -598,6 +588,40 @@ function groupById(id) { return (state.groups || []).find(g => g.id === id); }
 /* ---------- 프로젝트 일정(마감) ---------- */
 function schedById(id) { return (state.schedules || []).find(s => s.id === id); }
 function schedulesOf(gid) { return (state.schedules || []).filter(s => (s.group || '') === (gid || '')); }
+// 반복 일정: 마감이 지나면 다음 주기로 날짜를 전진시킨다(과거 회차가 쌓이지 않게)
+const REPEAT_MONTHS = { month: 1, quarter: 3, half: 6, year: 12 };
+function rollRepeats() {
+  const today = todayStr();
+  let changed = false;
+  (state.schedules || []).forEach(s => {
+    const step = REPEAT_MONTHS[s.repeat];
+    if (!step || !s.date) return;
+    let guard = 0;
+    while (s.date < today && guard++ < 60) {
+      const [y, m, d] = s.date.split('-').map(Number);
+      const nx = new Date(y, m - 1 + step, d);
+      s.date = dstr(nx);
+      changed = true;
+    }
+  });
+  return changed;
+}
+// 프로젝트별 투입시간: 타임박스 Big3의 '실제' 시간(없으면 배정 칸 합)을 카드→보드→프로젝트로 귀속
+function projectHours(gid) {
+  let h = 0;
+  Object.values(state.timebox || {}).forEach(day => {
+    (day.big3 || []).forEach((b, i) => {
+      if (!b || !b.cardId) return;
+      const c = state.cards.find(x => x.id === b.cardId);
+      if (!c || !c.project) return;
+      const bd = boardById(c.project);
+      if (!bd || (bd.group || '') !== gid) return;
+      const actual = (b.actual !== undefined && b.actual !== null && b.actual !== '') ? Number(b.actual) : null;
+      h += actual !== null ? actual : tbSum(day, i);
+    });
+  });
+  return Math.round(h * 10) / 10;
+}
 function schedIsStale(s) { return !s.done && s.date && dday(s.date) < -7; }   // 7일 이상 지난 일정 — 현황·D-day에서 제외(달력·패널 기록용 유지)
 function schedSort(a, b) {   // 미완료 먼저 → 마감일 오름차순 → 완료는 뒤(최신 완료 위)
   if (!!a.done !== !!b.done) return a.done ? 1 : -1;
@@ -653,6 +677,10 @@ function openSchedModal(id, groupPrefill) {
     <label>프로젝트<select id="m-sgroup">
       ${(state.groups || []).map(g => `<option value="${g.id}" ${gid === g.id ? 'selected' : ''}>${esc(g.name)}</option>`).join('')}
       <option value="" ${gid === '' ? 'selected' : ''}>미분류</option>
+    </select></label>
+    <label>반복<select id="m-srepeat">
+      ${[['', '반복 없음'], ['month', '매월'], ['quarter', '분기'], ['half', '반기'], ['year', '매년']].map(([v, lb]) =>
+        `<option value="${v}" ${(s && s.repeat || '') === v ? 'selected' : ''}>${lb}</option>`).join('')}
     </select></label>
     <label>메모 (선택)<input type="text" id="m-snote" value="${s ? esc(s.note || '') : ''}" placeholder="예: 팀장 검토 후 제출"></label>
     <div class="m-actions">
@@ -766,6 +794,7 @@ function renderBoardView() {
         <span class="prop-chip" ${g ? `data-action="group-edit" data-id="${g.id}" title="클릭해서 기간 수정"` : ''}>📅 ${periodTxt}</span>
         <span class="prop-chip">🗂 보드 ${gBoards.filter(b => !b.folder).length}</span>
         <span class="prop-chip">✅ 진행 ${doneCnt}/${gCards.length}</span>
+        ${projectHours(sel) ? `<span class="prop-chip" title="타임박스에 기록한 실제 시간(없으면 배정 시간) 누적">⏱ 투입 ${projectHours(sel)}h</span>` : ''}
         ${schedChip}
       </div>` + schedPanel + archivePanelHtml(sel) + groupSecHtml(sel, true);
   }
@@ -1366,7 +1395,6 @@ function byProject(secondary) {
     return secondary(a, b);
   };
 }
-function doneSort(a, b) { return (b.doneAt || '').localeCompare(a.doneAt || ''); }
 function dashRow(c, hidePill) {
   const b = boardById(c.project);
   const g = b && b.group ? groupById(b.group) : null;
@@ -1412,21 +1440,6 @@ function dashSection(title, sub, cards, emptyMsg, limit, opts) {   // limit은 �
     <div class="dash-list slim-scroll">${body}</div>
   </section>`;
 }
-function doneWeekSection(cards, offset, start, end) {
-  const body = cards.length ? dashRowsGrouped(cards, true) : '<div class="empty">이 주에 완료한 업무가 없어요</div>';
-  return `<section class="dash-sec stage-done" id="sec-done">
-    <div class="dash-sec-head">
-      <h2>✓ 최근 완수 <span class="cnt">${cards.length}</span></h2>
-      <span class="dash-sub">${doneWeekLabel(offset, start, end)}</span>
-      <div class="dash-week-nav">
-        <button class="mini-btn" data-action="done-week-prev" title="지난 주">◀</button>
-        ${offset !== 0 ? `<button class="mini-btn" data-action="done-week-today" title="이번 주로">이번 주</button>` : ''}
-        <button class="mini-btn" data-action="done-week-next" title="다음 주">▶</button>
-      </div>
-    </div>
-    <div class="dash-list slim-scroll">${body}</div>
-  </section>`;
-}
 // 탭 안에서 두 화면을 오가는 세그먼트 (헤더 탭 수를 줄이려고 도입 — data-action='view'를 그대로 재사용)
 function pageSeg(cur, items) {
   return `<div class="seg page-seg">${items.map(([v, label]) =>
@@ -1440,9 +1453,6 @@ function renderDash() {
   const todo = cards.filter(c => c.status === 'todo').sort(byProject(dueSort));
   const doing = cards.filter(c => c.status === 'doing').sort(byProject(dueSort));
   const urgent = incomplete.filter(isUrgent).sort(byProject(dueSort));
-  const doneWeekOffset = state.sel.doneWeekOffset || 0;
-  const dw = doneWeekRange(doneWeekOffset);
-  const recentDone = cards.filter(c => c.status === 'done' && c.doneAt && c.doneAt >= dw.startStr && c.doneAt <= dw.endStr).sort(byProject(doneSort));
   const kpi = (label, val, cls, target) => `<div class="kpi ${cls || ''}" data-action="kpi-go" data-target="${target}"><div class="kpi-val">${val}</div><div class="kpi-lbl">${label}</div></div>`;
   // 프로젝트별 진행률 + 다음 마감 D-day
   const nextSchedOf = gid => (state.schedules || []).filter(s => (s.group || '') === gid && !s.done && !schedIsStale(s))
@@ -1500,9 +1510,9 @@ function renderDash() {
     ${big3Strip}
     ${weekStrip}
     <div class="dash-kpis">
-      ${kpi('📅 예정', todo.length, 'k-todo', 'sec-todo')}
+      <div class="kpi k-todo"><div class="kpi-val">${todo.length}</div><div class="kpi-lbl">📅 예정</div></div>
       ${kpi('▶ 진행 중', doing.length, 'k-doing', 'sec-doing')}
-      ${kpi('✓ 이번 주 완수', weekDone(), 'k-done', 'sec-done')}
+      <div class="kpi k-done"><div class="kpi-val">${weekDone()}</div><div class="kpi-lbl">✓ 이번 주 완수</div></div>
       ${kpi('🔥 급한 일', urgent.length, 'k-urgent', 'sec-urgent')}
     </div>
     ${gpRows.length
@@ -1511,11 +1521,7 @@ function renderDash() {
           ${dashSection('🔥 급한 업무', '마감 임박·지남 또는 중요도 높음', urgent, '급한 업무가 없어요 👍', null, { id: 'sec-urgent' })}
         </div>`
       : dashSection('🔥 급한 업무', '마감 임박·지남 또는 중요도 높음', urgent, '급한 업무가 없어요 👍', null, { full: true, id: 'sec-urgent' })}
-    <div class="dash-flow">
-      ${dashSection('📅 예정', '마감 임박순', todo, '예정 업무가 없어요', null, { id: 'sec-todo', stage: 'todo', hidePill: true })}
-      ${dashSection('▶ 진행 중', '지금 하고 있는 일', doing, '진행 중인 업무가 없어요', null, { id: 'sec-doing', stage: 'doing', hidePill: true })}
-      ${doneWeekSection(recentDone, doneWeekOffset, dw.start, dw.end)}
-    </div>
+    ${dashSection('▶ 진행 중', '지금 하고 있는 일', doing, '진행 중인 업무가 없어요', null, { id: 'sec-doing', stage: 'doing', hidePill: true, full: true })}
   </div>`;
 }
 
@@ -2642,6 +2648,34 @@ function openDevlogModal(kind, id) {
     </div>`);
 }
 
+/* ---------- 전체 검색 (할 일·일정·기록) ---------- */
+function openSearchModal(q) {
+  const term = (q || '').trim().toLowerCase();
+  const where = c => { const b = c.project ? boardById(c.project) : null; const g = b && b.group ? groupById(b.group) : null;
+    return [g ? g.name : '', b ? b.name : ''].filter(Boolean).join(' › ') || '미배정'; };
+  let rows = '';
+  if (term) {
+    const cards = state.cards.filter(c => (c.title + ' ' + (c.note || '')).toLowerCase().includes(term)).slice(0, 12);
+    const scheds = (state.schedules || []).filter(x => (x.title + ' ' + (x.note || '')).toLowerCase().includes(term)).slice(0, 8);
+    const notes = (state.notes || []).filter(n => (n.title + ' ' + noteBodyPlain(n.body) + ' ' + (n.who || '')).toLowerCase().includes(term)).slice(0, 8);
+    const stMk = c => c.status === 'done' ? '✓' : c.status === 'doing' ? '▶' : '□';
+    if (cards.length) rows += `<div class="sr-h">✅ 할 일 ${cards.length}</div>` + cards.map(c =>
+      `<div class="sr-row" data-action="search-go" data-kind="card" data-id="${c.id}"><span class="sr-mk">${stMk(c)}</span><span class="sr-t">${esc(c.title)}</span><span class="sr-w">${esc(where(c))}</span></div>`).join('');
+    if (scheds.length) rows += `<div class="sr-h">📌 일정 ${scheds.length}</div>` + scheds.map(x => { const g = x.group ? groupById(x.group) : null;
+      return `<div class="sr-row" data-action="search-go" data-kind="sched" data-id="${x.id}"><span class="sr-mk">📌</span><span class="sr-t">${esc(x.title)}</span><span class="sr-w">${esc(g ? g.name : '미분류')}${x.date ? ' · ' + fmtDate(x.date) : ''}</span></div>`; }).join('');
+    if (notes.length) rows += `<div class="sr-h">📝 기록 ${notes.length}</div>` + notes.map(n => { const g = n.group ? groupById(n.group) : null;
+      return `<div class="sr-row" data-action="search-go" data-kind="note" data-id="${n.id}"><span class="sr-mk">${(NOTE_TYPES[n.type] || NOTE_TYPES.memo).icon}</span><span class="sr-t">${esc(n.title || '(제목 없음)')}</span><span class="sr-w">${esc(g ? g.name : '미분류')}${n.date ? ' · ' + fmtDate(n.date) : ''}</span></div>`; }).join('');
+    if (!rows) rows = '<div class="empty">일치하는 항목이 없어요</div>';
+  } else rows = '<div class="empty">할 일·일정·기록을 한 번에 찾습니다</div>';
+  showModal(`
+    <h3>🔍 전체 검색</h3>
+    <input type="text" id="m-search" value="${esc(q || '')}" placeholder="검색어 입력" autocomplete="off">
+    <div class="search-res slim-scroll">${rows}</div>
+    <div class="m-actions"><button class="ghost" data-action="modal-close">닫기</button></div>`);
+  const i = document.getElementById('m-search');
+  if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); }
+}
+
 /* ---------- 급한 일 알림 토스트 (우하단, 하루 1회) ---------- */
 let alertsShown = false;
 function maybeShowAlerts() {
@@ -2697,6 +2731,7 @@ if (typeof window !== 'undefined') {
 function render() {
   let view = state.sel.view || 'board';
   if (view === 'devlog' && !isAdmin()) view = 'board';
+  rollRepeats();        // 반복 일정은 지난 회차를 다음 주기로 전진
   captureNoteDraft();   // 에디터 작성 중 재렌더(원격 동기화 등) 시 초안 보존
   hideMapPop();         // 구조도 말풍선은 body에 붙어 있어 재렌더로 자동 제거되지 않음
   // 편집 중 포커스·커서 위치 기억 → 재렌더(원격 동기화 등)로 커서가 사라지지 않게 복원
@@ -2717,6 +2752,7 @@ function render() {
     <header>
       <h1>업무 보드</h1>
       <nav class="views">${nav}</nav>
+      <button class="theme-toggle" data-action="search-open" title="전체 검색 (할 일·일정·기록)">🔍</button>
       <span class="week-count">이번 주 ${weekDone()}개 완료</span>
       <button class="theme-toggle" data-action="theme-toggle" title="${document.documentElement.dataset.theme === 'dark' ? '밝은 테마로 전환' : '어두운 테마로 전환'}">${document.documentElement.dataset.theme === 'dark' ? '☀️' : '🌙'}</button>
     </header>
@@ -2726,8 +2762,6 @@ function render() {
       <button data-action="trash-open">🗑 휴지통${(state.trash && state.trash.length) ? ' ' + state.trash.length : ''}</button>
       <button data-action="export">JSON 내보내기</button>
       <button data-action="import">가져오기</button>
-      <button data-action="ics" title="Google Calendar에서 '설정 > 가져오기'로 등록">.ics 내보내기</button>
-      <button data-action="samples">샘플 불러오기</button>
       ${CLOUD && authUser && GCAL_OK ? `<button data-action="gcal-sync" title="마감일 카드·프로젝트 기간을 구글 '업무 보드' 캘린더로 push">📅 구글 캘린더 동기화</button>` : ''}
       ${CLOUD && authUser ? `<span class="sync-badge" title="${esc(authUser.email || '')}">☁ 동기화 중</span><button data-action="logout">로그아웃</button>` : ''}
     </footer>`;
@@ -2801,6 +2835,8 @@ function saveCardModalFields(c) {
   if (du) c.due = du.value || null;
   const bs = document.getElementById('m-cboard');
   if (bs) c.project = bs.value || null;   // 프로젝트·보드 이동 (빈 값 = 미배정)
+  const da = document.getElementById('m-doneat');
+  if (da && c.status === 'done' && da.value) c.doneAt = da.value;   // 어제 한 일을 오늘 체크한 경우 보정
 }
 function openCardModal(id) {
   const c = state.cards.find(x => x.id === id);
@@ -2822,7 +2858,7 @@ function openCardModal(id) {
     <label>중요도${prioPicker(c.priority || 'med')}</label>
     <label>💬 메모 · FU (별도로 확인·기억할 것)<textarea id="m-note" rows="3" placeholder="예: 팀장 리뷰 후 재확인 / 자료 요청 대기중">${esc(c.note || '')}</textarea></label>
     <label>마감일 (선택)<input type="date" id="m-due" value="${c.due || ''}"></label>
-    ${c.due ? `<a class="gcal-link" href="${gcalUrl((boardById(c.project) ? boardById(c.project).name + ' - ' : '') + c.title, c.due, nextDay(c.due))}" target="_blank" rel="noopener">＋ Google Calendar에 등록 (${fmtDate(c.due)} 종일)</a>` : ''}
+    ${c.status === 'done' ? `<label>완수일<input type="date" id="m-doneat" value="${c.doneAt || todayStr()}"></label>` : ''}
     ${c.fuCount ? `<p class="restore-note">↩ ${fuNum(c.fuCount)} 후속 진행 중${(c.fuHistory || []).length ? ` — ${(c.fuHistory || []).map((d, i) => `${i + 1}차 완수 ${fmtDate(d)}`).join(' · ')}` : ''}</p>` : ''}
     <div class="m-actions">
       <button class="danger" data-action="card-del" data-id="${c.id}">삭제</button>
@@ -2848,7 +2884,6 @@ function openBoardModal(id) {
       <label>수행 시작일<input type="date" id="m-start" value="${b.start || ''}"></label>
       <label>수행 종료일<input type="date" id="m-end" value="${b.end || ''}"></label>
     </div>
-    ${b.start && b.end ? `<a class="gcal-link" href="${gcalUrl('[기간] ' + b.name, b.start, nextDay(b.end))}" target="_blank" rel="noopener">＋ Google Calendar에 등록 (${fmtDate(b.start)}~${fmtDate(b.end)})</a>` : ''}
     <label class="folder-check" title="'별도'처럼 하위 보드를 묶는 분류용 보드 — 프로젝트 탭에서 칸반 없이 머리글로만 표시되고 보드 수·할 일 대상에서 빠집니다">
       <input type="checkbox" id="m-folder" ${b.folder ? 'checked' : ''}> 📚 묶음 보드 (할 일 없이 하위 보드를 묶는 용도)
     </label>
@@ -2999,6 +3034,7 @@ function openGroupModal(id) {
     <button type="button" class="ghost addperiod" data-action="period-add">+ 기간 추가</button>
     <div class="m-actions">
       ${g ? `<button class="danger" data-action="group-del" data-id="${g.id}">삭제</button>` : ''}
+      ${g ? `<button class="ghost" data-action="group-dup" data-id="${g.id}" title="보드 계층만 그대로 복제 — 할 일·기록·일정은 복사하지 않음">⧉ 구조 복제</button>` : ''}
       <button class="ghost" data-action="modal-close">취소</button>
       <button class="primary" data-action="group-save" data-id="${g ? g.id : ''}">저장</button>
     </div>`);
@@ -3006,61 +3042,7 @@ function openGroupModal(id) {
 
 /* ---------- ics export & samples ---------- */
 function icsEsc(s) { return String(s).replace(/[\\;,]/g, m => '\\' + m); }
-function icsExport() {
-  const f = x => x.replace(/-/g, '');
-  const ev = [];
-  state.cards.filter(c => c.due).forEach(c => {
-    const b = boardById(c.project);
-    ev.push(`BEGIN:VEVENT\r\nUID:${c.id}@work-board\r\nDTSTART;VALUE=DATE:${f(c.due)}\r\nDTEND;VALUE=DATE:${f(nextDay(c.due))}\r\nSUMMARY:${icsEsc((b ? b.name + ' - ' : '') + c.title)}\r\nEND:VEVENT`);
-  });
-  state.projects.filter(b => b.start && b.end).forEach(b => {
-    ev.push(`BEGIN:VEVENT\r\nUID:${b.id}@work-board\r\nDTSTART;VALUE=DATE:${f(b.start)}\r\nDTEND;VALUE=DATE:${f(nextDay(b.end))}\r\nSUMMARY:${icsEsc('[기간] ' + b.name)}\r\nEND:VEVENT`);
-  });
-  if (!ev.length) { alert('마감일 있는 카드나 기간 있는 보드가 없어 내보낼 일정이 없습니다.'); return; }
-  const ics = `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//work-board//KR\r\n${ev.join('\r\n')}\r\nEND:VCALENDAR\r\n`;
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([ics], { type: 'text/calendar' }));
-  a.download = `work-board-${todayStr()}.ics`;
-  a.click();
-  URL.revokeObjectURL(a.href);
-}
 
-function loadSamples() {
-  const t = new Date();
-  const d = off => { const x = new Date(t); x.setDate(t.getDate() + off); return dstr(x); };
-  const nb = state.projects.length;
-  const mkBoard = (name, color, start, end, i) => {
-    const b = { id: 'p-' + uid(), name, color, parent: null, x: 30 + ((nb + i) % 4) * 180, y: 30 + Math.floor((nb + i) / 4) * 120, start: start || null, end: end || null };
-    state.projects.push(b); return b.id;
-  };
-  const mkCard = (project, title, priority, due, status, doneOff) => {
-    state.cards.push({ id: uid(), project, title, status: status || 'todo', priority, due: due || null, doneAt: status === 'done' ? d(doneOff ?? -1) : null, note: null, createdAt: todayStr() });
-  };
-  const audit = mkBoard('외부감사 (A사)', 'coral', d(-10), d(50), 0);
-  mkCard(audit, '사전 위험평가·감사계획 수립', 'high', d(-3), 'done', -4);
-  mkCard(audit, '중간감사 내부통제 테스트', 'high', d(7), 'doing');
-  mkCard(audit, '기말 재고실사 입회 계획 수립', 'med', d(20));
-  mkCard(audit, '감사조서 작성·리뷰', 'med', d(35));
-  mkCard(audit, '감사보고서 초안 작성', 'high', d(45));
-  const icfr = mkBoard('내부회계 감사 (B사)', 'teal', d(0), d(40), 1);
-  mkCard(icfr, '설계평가(D&I) 테스트', 'med', d(10));
-  mkCard(icfr, '운영평가(TOE) 표본 테스트', 'high', d(21));
-  mkCard(icfr, '미비점 종합 평가', 'med', d(30));
-  mkCard(icfr, 'ICFR 감사보고서 발행', 'high', d(38));
-  const adv = mkBoard('회계 용역', 'purple', null, null, 2);
-  mkCard(adv, '반기 결산 지원', 'med', d(14));
-  mkCard(adv, '회계이슈 검토보고서 작성', 'med', d(9), 'doing');
-  mkCard(adv, '밸류에이션 검토', 'low', d(25));
-  const work = state.projects.find(p => p.name === '회사 업무') || state.projects[0];
-  if (work) {
-    const fri = (5 - t.getDay() + 7) % 7 || 7;
-    mkCard(work.id, '주간 업무보고 작성', 'med', d(fri));
-    mkCard(work.id, '타임시트 입력', 'low', d(1));
-    mkCard(work.id, '보수교육 이수', 'low', d(28));
-    mkCard(work.id, '품질관리 셀프리뷰', 'med', null);
-  }
-  render();
-}
 
 /* ---------- actions ---------- */
 function moveCard(id, status, boardId) {
@@ -3096,9 +3078,6 @@ document.addEventListener('click', e => {
     const sec = document.getElementById(el.dataset.target);
     if (sec) { sec.scrollIntoView({ behavior: 'smooth', block: 'start' }); sec.classList.add('flash'); setTimeout(() => sec.classList.remove('flash'), 1500); }
   }
-  else if (act === 'done-week-prev') { state.sel.doneWeekOffset = (state.sel.doneWeekOffset || 0) - 1; render(); }
-  else if (act === 'done-week-next') { state.sel.doneWeekOffset = (state.sel.doneWeekOffset || 0) + 1; render(); }
-  else if (act === 'done-week-today') { state.sel.doneWeekOffset = 0; render(); }
   else if (act === 'cal-prev') calShift(-1);
   else if (act === 'cal-next') calShift(1);
   else if (act === 'cal-today') { state.sel.calYm = todayStr().slice(0, 7); render(); }
@@ -3118,8 +3097,6 @@ document.addEventListener('click', e => {
     closeModal(); render();
   }
   else if (act === 'gcal-sync') syncGCal();
-  else if (act === 'ics') icsExport();
-  else if (act === 'samples') { if (confirm('회계 업무 샘플 보드 3개와 카드들을 추가할까요? (기존 데이터는 유지)')) loadSamples(); }
   else if (act === 'proj-add') openProjModal(el.dataset.group || null);
   else if (act === 'folder-add') openProjModal(el.dataset.group || null, true);
   else if (act === 'group-add') openGroupModal();
@@ -3147,9 +3124,10 @@ document.addEventListener('click', e => {
       const grp = document.getElementById('m-sgroup').value;
       const time = document.getElementById('m-stime').value || null;
       const note = document.getElementById('m-snote').value.trim() || null;
+      const rp = (document.getElementById('m-srepeat') || {}).value || null;
       const s = el.dataset.id ? schedById(el.dataset.id) : null;
-      if (s) { s.title = t; s.date = date; s.time = time; s.group = grp; s.note = note; }
-      else state.schedules.push({ id: 's-' + uid(), group: grp, title: t, date, time, done: false, doneAt: null, note });
+      if (s) { s.title = t; s.date = date; s.time = time; s.group = grp; s.note = note; s.repeat = rp || undefined; }
+      else state.schedules.push({ id: 's-' + uid(), group: grp, title: t, date, time, done: false, doneAt: null, note, repeat: rp || undefined });
     }
     closeModal(); render();
   }
@@ -3250,6 +3228,15 @@ document.addEventListener('click', e => {
   }
   else if (act === 'lane-toggle') { const bid = el.dataset.board; openDoneLanes.has(bid) ? openDoneLanes.delete(bid) : openDoneLanes.add(bid); render(); }
   else if (act === 'arch-month') { state.sel.archMonth = el.dataset.m; render(); }
+  else if (act === 'search-open') openSearchModal('');
+  else if (act === 'search-go') {
+    const kind = el.dataset.kind, id = el.dataset.id;
+    closeModal();
+    if (kind === 'card') { const c = state.cards.find(x => x.id === id); if (c) { state.sel.view = 'board'; state.sel.boardGroup = (boardById(c.project) || {}).group || ''; render(); openCardModal(id); return; } }
+    if (kind === 'sched') { state.sel.view = 'cal'; render(); openSchedModal(id); return; }
+    if (kind === 'note') { const n = (state.notes || []).find(x => x.id === id); if (n) { state.sel.view = 'notes'; state.sel.noteGroup = n.group || ''; state.sel.noteBoard = ''; noteEditing = n.id; noteDraft = null; render(); return; } }
+    render();
+  }
   else if (act === 'panel-toggle') {
     const k = el.dataset.k;
     openPanels.has(k) ? openPanels.delete(k) : openPanels.add(k);
@@ -3393,6 +3380,31 @@ document.addEventListener('click', e => {
       state.sel.calFilter = f;
     }
     render();
+  }
+  // 프로젝트 구조 복제: 보드 계층·색·묶음 플래그만 (할 일·기록·일정은 새로 시작)
+  else if (act === 'group-dup') {
+    const src = groupById(el.dataset.id);
+    if (src) {
+      const name = prompt('새 프로젝트 이름', src.name + ' 복제');
+      if (name && name.trim()) {
+        const ng = { id: 'g-' + uid(), name: name.trim(), color: RAMP[(state.groups || []).length % RAMP.length], periods: [] };
+        state.groups.push(ng);
+        const idMap = {};
+        const members = state.projects.filter(b => (b.group || '') === src.id);
+        members.forEach((b, i) => {
+          const nb = { id: 'p-' + uid(), name: b.name, color: b.color, parent: null, group: ng.id,
+                       x: 30 + (i % 4) * 180, y: 30 + Math.floor(i / 4) * 120 };
+          if (b.folder) nb.folder = true;
+          idMap[b.id] = nb.id;
+          state.projects.push(nb);
+        });
+        members.forEach(b => { if (b.parent && idMap[b.parent]) boardById(idMap[b.id]).parent = idMap[b.parent]; });   // 상하관계 재연결
+        state.sel.boardGroup = ng.id;
+        closeModal(); render();
+        return;
+      }
+    }
+    closeModal(); render();
   }
   else if (act === 'group-del') {
     const id = el.dataset.id;
@@ -3946,6 +3958,7 @@ document.addEventListener('mouseout', e => {
 
 /* 프로젝트 기간: 시작일 입력 시 종료일은 시작일 다음날부터만 */
 document.addEventListener('input', e => {
+  if (e.target.id === 'm-search') { openSearchModal(e.target.value); return; }   // 타이핑 즉시 결과 갱신
   if (e.target.id === 'note-q') {                 // 기록 검색 — render 없이 필터(포커스 유지)
     const q = e.target.value.trim().toLowerCase();
     document.querySelectorAll('.note-item').forEach(it => {

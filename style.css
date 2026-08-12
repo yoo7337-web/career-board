@@ -317,6 +317,15 @@ ul.tr-children>li:only-child::after{display:none}
 .seg{display:flex;gap:6px;margin-bottom:12px}
 .seg-btn{flex:1;border:1px solid var(--border);background:var(--surface);color:var(--muted);border-radius:8px;padding:9px;font:inherit;font-size:13px;cursor:pointer}
 .seg-btn.sel{border-color:var(--accent);color:var(--accent);background:var(--accent-soft);font-weight:600}
+/* 전체 검색 결과 */
+.search-res{max-height:52vh;overflow-y:auto;margin-top:10px}
+.sr-h{font-size:11.5px;font-weight:700;color:var(--muted);margin:10px 0 4px}
+.sr-h:first-child{margin-top:2px}
+.sr-row{display:flex;align-items:center;gap:8px;padding:6px 9px;border-radius:8px;background:var(--bg);margin-bottom:4px;cursor:pointer;font-size:12.5px}
+.sr-row:hover{background:var(--accent-soft)}
+.sr-mk{flex:none;width:14px;text-align:center;color:var(--muted)}
+.sr-t{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sr-w{flex:none;font-size:10.5px;color:var(--faint);max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 /* 카드 모달 상태 전환(예정/진행중/완수) */
 .seg.card-status{margin-top:6px;margin-bottom:0}
 .seg.card-status .seg-btn{padding:7px 6px;font-size:12.5px}
