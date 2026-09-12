@@ -18,19 +18,19 @@ const NOTE_TEMPLATES = {
   issue: '[이슈]\n\n[영향]\n\n[대응]\n',
   memo: '',
 };
-// Big3 색: 차분한 뮤트 주얼톤(전문적·톤 통일). To-do 중요도(coral/amber/blue)와도 구분
+// 핵심 업무와 시간표는 같은 밝은 블루·청록 중심 팔레트와 우선순위 숫자로 연결한다.
 const TBOX_COLORS = [
-  { bg: '#8592C9', fg: '#262E52' },   // indigo
-  { bg: '#6FB393', fg: '#123A2A' },   // jade
-  { bg: '#CE93A9', fg: '#48212F' },   // rose
-  { bg: '#6FADB8', fg: '#123840' },   // teal
-  { bg: '#AC93C9', fg: '#35244B' },   // amethyst
-  { bg: '#B98BB3', fg: '#3E2440' },   // plum
-  { bg: '#8AA9A0', fg: '#203833' },   // sage
-  { bg: '#9C9AC0', fg: '#2B2A4D' },   // periwinkle
+  { bg: '#D9E5FF', fg: '#284C96' },
+  { bg: '#D9F1E9', fg: '#155F56' },
+  { bg: '#D9EDF8', fg: '#275E80' },
+  { bg: '#E4EAF1', fg: '#485A70' },
+  { bg: '#FFF0CF', fg: '#805918' },
+  { bg: '#E4E6FA', fg: '#4B5092' },
+  { bg: '#D7F0F2', fg: '#226671' },
+  { bg: '#CCDCEC', fg: '#284C6C' },
 ];
 function tbColor(i) { return TBOX_COLORS[((i % TBOX_COLORS.length) + TBOX_COLORS.length) % TBOX_COLORS.length]; }
-const TB_PLAN_DAYS = 5;   // 타임박스 계획 창: 오늘 포함 5일 (오늘 ~ 오늘+4)
+const TB_PLAN_DAYS = 5;   // 하루 계획 계획 창: 오늘 포함 5일 (오늘 ~ 오늘+4)
 const NOTE_TYPES = {
   interview: { label: '인터뷰', icon: '🎤', color: 'purple' },
   meeting: { label: '회의', icon: '📋', color: 'blue' },
@@ -94,13 +94,13 @@ let db = null, authUser = null, applyingRemote = false, writeTimer = null, unsub
 const ADMIN_EMAIL = 'yoo7337@gmail.com';
 function isAdmin() { return !!(authUser && authUser.email && authUser.email.toLowerCase() === ADMIN_EMAIL); }
 const DEVLOG_SEED = [
-  ['2026-07-06', '프로젝트 시작 · 칸반 보드 MVP', 'To-do/Done 드래그 보드, localStorage 저장'],
+  ['2026-07-06', '프로젝트 시작 · 칸반 보드 MVP', '할 일/Done 드래그 보드, localStorage 저장'],
   ['2026-07-06', '회사 업무 전용으로 단순화', '초기 프로젝트 연동·오늘 뷰 제거'],
   ['2026-07-06', '보드 이름 변경·삭제', 'pill 더블클릭으로 편집'],
   ['2026-07-06', '여러 보드 한 화면 + 구조도 탭', '보드 상하관계를 드래그로 연결, 중요도 색상 포스트잇'],
-  ['2026-07-06', '3단 레인 전환', '마일스톤 제거 → To-do / 진행 중 / 완수'],
+  ['2026-07-06', '3단 레인 전환', '마일스톤 제거 할 일 만들기 / 진행 중 / 완료'],
   ['2026-07-06', '달력 탭 + Google Calendar 연동', '월 그리드, 보드 수행기간 막대, 원클릭 등록 링크·.ics 내보내기'],
-  ['2026-07-06', 'UX 개선', '탭 순서 조정, 달력 날짜 클릭으로 추가, 진행 중/완수 시각 표시'],
+  ['2026-07-06', 'UX 개선', '탭 순서 조정, 달력 날짜 클릭으로 추가, 진행 중/완료 시각 표시'],
   ['2026-07-07', '클라우드 동기화 + 로그인', 'Firebase Firestore+Auth, 전 기기 실시간 동기화'],
   ['2026-07-07', '외부 배포', 'GitHub Pages 배포 + git 자동 배포 설정'],
   ['2026-07-07', '개발일지 탭', '관리자 전용 개발 이력·향후 계획 관리'],
@@ -112,15 +112,15 @@ const DEVLOG_BACKFILL = [
   ['2026-07-11', '자동 백업·복원', '변경 시 스냅샷 적재(클라우드+기기 이중), 시점 복원'],
   ['2026-07-12', '보드 탭 노션 스타일 개편', '좌측 프로젝트 사이드바 + 프로젝트 페이지(헤더·속성바)'],
   ['2026-07-12', '기록 탭 (프로젝트별)', '타임라인 피드·유형·핀 고정·본문 템플릿·개요 콜아웃'],
-  ['2026-07-12', '현황(대시보드) 탭', 'KPI·프로젝트 진행률·오늘의 Big3·최근 기록 요약'],
-  ['2026-07-12', '타임박스 탭 (일일 Time Box)', 'Big3 + Brain Dump + 06~24시 시간칸 배정, 실제 소요시간 비교'],
-  ['2026-07-13', '일지 탭 (자동 일일 기록)', '완수·타임박스·기록 기반 자동 요약 + 한 줄 회고 + 선택적 Gemini 윤문'],
-  ['2026-07-13', '타임박스 강화', '5일 계획 창, Big3 순서 드래그·수동 추가, 완수 카드 기준 동기화'],
+  ['2026-07-12', '현황(대시보드) 탭', 'KPI·할 일 완료율·오늘의 Big3·최근 기록 요약'],
+  ['2026-07-12', '하루 계획 탭 (일일 Time Box)', 'Big3 + 배정할 할 일 + 06~24시 시간칸 배정, 실제 소요시간 비교'],
+  ['2026-07-13', '일지 탭 (자동 일일 기록)', '완료·하루 계획·기록 기반 자동 요약 + 한 줄 회고 + 선택적 Gemini 윤문'],
+  ['2026-07-13', '하루 계획 강화', '5일 계획 창, Big3 순서 드래그·수동 추가, 완료 카드 기준 동기화'],
   ['2026-07-13', '구조도 2단 개편', '미배정 할 일 드래그 배정, 자동정렬 2D 줄바꿈, 프로젝트 구역 통째 이동'],
   ['2026-07-14', '멀티기기 데이터 유실 방지', 'union 병합 동기화 + 잠자던 탭 복원 시 재동기화, 백업 판정 강화'],
-  ['2026-07-15', '프로젝트 일정(마감) 기능', '프로젝트별 마감일·시간, 달력·타임박스·현황·D-day 연동'],
+  ['2026-07-15', '프로젝트 일정(마감) 기능', '프로젝트별 마감일·시간, 달력·하루 계획·현황·D-day 연동'],
   ['2026-07-15', '현황 탭 전면 정돈', '이번 주 스트립·프로젝트 D-day 배지·구역 높이/스크롤/디자인 통일'],
-  ['2026-07-16', '완수 아카이브', '프로젝트·보드별 완수 내역 관리 + FU 원클릭 생성 + 완수 레인 접기'],
+  ['2026-07-16', '완료 내역', '프로젝트·보드별 완료 내역 관리 + FU 원클릭 생성 + 완료 레인 접기'],
   ['2026-07-16', '라이트/다크 테마 토글', '헤더 스위치로 전환·기기별 저장'],
   ['2026-07-17', '안정화 (버그 수정)', '복원 크래시 방지·백업 용량 상한·지난 일정 자동 정리 등'],
   ['2026-07-18', '휴지통', '삭제한 할 일·보드·일정·기록 보관 후 복원(30일·50개)'],
@@ -129,9 +129,9 @@ const DEVLOG_BACKFILL = [
   ['2026-07-22', '메뉴 개편 + 상단 고정', '용도별 그룹 구분선, 현황→대시보드·달력 독립 탭, 스크롤해도 메뉴바 고정'],
   ['2026-07-22', '달력 개선', '일정/할 일 타입 필터 + 날짜 클릭 시 할 일·일정 선택 추가(프로젝트 지정)'],
   ['2026-07-22', '트리 탭 신설', '프로젝트→보드→할 일·기록 가로 트리, 기록 본문 인라인 확장'],
-  ['2026-07-22', 'FU 개편', '완수 카드를 다시 진행중으로 — 회차 배지(↩ FU ①②③)와 완수 이력 누적'],
-  ['2026-07-22', '구조도 개선', '보드 hover 말풍선(진행·완수 목록) + 보드 완료 시 구역 오른쪽 선반에 모음'],
-  ['2026-07-22', '사이드바·가독성 개선', '프로젝트 트리 누적 펼침, 미완료 To-do 수 표시, 기록 전체 보기, 밝은 테마 대비 강화'],
+  ['2026-07-22', 'FU 개편', '완료 카드를 다시 진행중으로 — 회차 배지(↩ 다시 진행 ①②③)와 완료 이력 누적'],
+  ['2026-07-22', '구조도 개선', '보드 hover 말풍선(진행·완료 목록) + 보드 완료 시 구역 오른쪽 선반에 모음'],
+  ['2026-07-22', '사이드바·가독성 개선', '프로젝트 트리 누적 펼침, 미완료 할 일 수 표시, 기록 전체 보기, 밝은 테마 대비 강화'],
 ];
 function seedDevlogDone() { return DEVLOG_SEED.concat(DEVLOG_BACKFILL).map(([date, title, desc]) => ({ id: uid(), date, title, desc })); }
 function ensureDevlog() {
@@ -217,7 +217,7 @@ function mergeById(local, cloud) {
   (local || []).forEach(x => { if (x && x.id) byId.set(x.id, x); });   // 같은 id는 로컬(최신) 우선, 한쪽에만 있는 항목은 모두 보존
   return [...byId.values()];
 }
-// 타임박스 하루 병합: 빈(방금 열어서 생긴) 항목이 채워진 항목을 덮지 않도록 항목별·칸별 병합
+// 하루 계획 하루 병합: 빈(방금 열어서 생긴) 항목이 채워진 항목을 덮지 않도록 항목별·칸별 병합
 function mergeTimeboxDay(loc, cld) {
   if (!loc) return cld;
   if (!cld) return loc;
@@ -469,33 +469,34 @@ function dueBadge(due) {
 }
 const CIRCLED = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩'];
 const fuNum = n => CIRCLED[n - 1] || String(n);
-// FU 뱃지: 완수 후 다시 꺼낸 카드에 몇 차 후속인지 + 지난 완수 이력을 툴팁으로
+// FU 뱃지: 완료 후 다시 꺼낸 카드에 몇 차 후속인지 + 지난 완료 이력을 툴팁으로
 function fuBadgeHtml(c) {
   if (!c.fuCount) return '';
-  const hist = (c.fuHistory || []).map((d, i) => `${i + 1}차 완수 ${fmtDate(d)}`).join(' · ');
-  return `<span class="fu-badge" title="${esc(hist ? hist + ' → 재개' : '완수 후 다시 진행')}">↩ FU ${fuNum(c.fuCount)}</span>`;
+  const hist = (c.fuHistory || []).map((d, i) => `${i + 1}차 완료 ${fmtDate(d)}`).join(' · ');
+  return `<span class="fu-badge" title="${esc(hist ? hist + ' → 재개' : '완료 후 다시 진행')}">↩ 다시 진행 ${fuNum(c.fuCount)}</span>`;
 }
 function cardHtml(c) {
   const pr = PRIORITIES[c.priority] || PRIORITIES.none;
-  const style = pr.bg ? `style="background:${pr.bg};color:${pr.fg};border-color:transparent"` : '';
+  const style = pr.bg ? `style="--priority-color:${pr.bg}"` : '';
   const tags = [];
   if (c.status !== 'done' && c.due) tags.push(dueBadge(c.due));
   if (c.status === 'done' && c.doneAt) tags.push(`<span class="tag">${fmtDate(c.doneAt)} 완료</span>`);
-  // 진행중은 인라인 칩(카드 밖으로 튀어나오면 레인 스크롤에 잘림), 완수만 워터마크 스탬프
+  // 진행중은 인라인 칩(카드 밖으로 튀어나오면 레인 스크롤에 잘림), 완료만 워터마크 스탬프
   const overlay = c.status === 'done' ? '<span class="stamp">완료</span>' : '';
   if (c.status === 'doing') tags.unshift('<span class="doing-chip">진행중</span>');
   const note = c.note ? `<span class="card-note" data-note="${esc(c.note)}">💬</span>` : '';
   // 제목과 배지를 한 줄에 (2단 → 1단, 높이 절반)
   return `<div class="card ${c.status} ${c.fuCount ? 'is-fu' : ''}" ${style} draggable="true" data-id="${c.id}" data-action="card" title="${esc(c.title)}">
     ${overlay}<div class="t">${fuBadgeHtml(c)}<span class="ct">${esc(c.title)}</span>${note}</div>
+    ${pr.bg ? `<span class="priority-label" style="background:${pr.bg};color:${pr.fg}">중요도 ${pr.label}</span>` : ''}
     ${tags.length ? `<div class="meta">${tags.join('')}</div>` : ''}
   </div>`;
 }
 
-const openDoneLanes = new Set();   // 완수 레인 펼침 상태 (세션 한정 — 기본 접힘)
+const openDoneLanes = new Set();   // 완료 레인 펼침 상태 (세션 한정 — 기본 접힘)
 const openSideGroups = new Set();  // 보드 탭 사이드바에서 보드 목록 펼친 프로젝트 (세션 한정)
 let pastSchedOpen = false;         // 일정 패널 '지난 일정' 그룹 펼침 (세션 한정)
-const openPanels = new Set();      // 일정·완수 아카이브 패널 펼침 (세션 한정, 기본 접힘 — 화면 점유 축소)
+const openPanels = new Set();      // 일정·완료 내역 패널 펼침 (세션 한정, 기본 접힘 — 화면 점유 축소)
 const panelOpen = k => openPanels.has(k);
 const panelCaret = k => `<span class="pn-caret">${panelOpen(k) ? '▾' : '▸'}</span>`;
 function panelHtml(b, depth) {
@@ -516,7 +517,7 @@ function panelHtml(b, depth) {
     return `<section class="board-panel compact-panel" data-board="${b.id}" style="margin-left:${depth * 22}px">
       <span class="bname board-drag c-${b.color}" draggable="true" data-action="board-edit" data-id="${b.id}" title="클릭=설정 · 끌어서 상하 구조">${esc(b.name)}</span>
       ${parent ? `<span class="bcrumb">▸ ${esc(parent.name)}</span>` : ''}
-      ${done.length ? `<button class="mini-btn" data-action="lane-toggle" data-board="${b.id}" title="완수 내역 펼치기">✓ 완수 ${done.length} ▸</button>` : '<span class="cp-empty">할 일 없음</span>'}
+      ${done.length ? `<button class="mini-btn" data-action="lane-toggle" data-board="${b.id}" title="완료 내역 펼치기">✓ 완료 ${done.length} ▸</button>` : '<span class="cp-empty">할 일 없음</span>'}
       <form class="quick cp-quick" data-project="${b.id}"><input name="t" placeholder="+ 할 일 추가하고 Enter" autocomplete="off"></form>
     </section>`;
   }
@@ -527,9 +528,9 @@ function panelHtml(b, depth) {
     </div>
     <div class="panel-cols">
       <div class="col" data-status="todo">
-        <h3>To-do <span class="cnt">${todo.length}</span></h3>
+        <h3>할 일 <span class="cnt">${todo.length}</span></h3>
         <div class="col-body slim-scroll">${todo.map(cardHtml).join('')}</div>
-        <form class="quick" data-project="${b.id}"><input name="t" placeholder="+ 포스트잇 추가하고 Enter" autocomplete="off"></form>
+        <form class="quick" data-project="${b.id}"><input name="t" placeholder="+ 할 일 추가하고 Enter" autocomplete="off"></form>
       </div>
       <div class="col doing-col" data-status="doing">
         <h3>진행 중 <span class="cnt">${doing.length}</span></h3>
@@ -537,17 +538,17 @@ function panelHtml(b, depth) {
       </div>
       ${doneOpen
         ? `<div class="col done-col" data-status="done">
-        <h3 data-action="lane-toggle" data-board="${b.id}" title="접기">완수 <span class="cnt">${done.length}</span> <span class="lane-arrow">▾</span></h3>
+        <h3 data-action="lane-toggle" data-board="${b.id}" title="접기">완료 <span class="cnt">${done.length}</span> <span class="lane-arrow">▾</span></h3>
         <div class="col-body slim-scroll">${done.slice(0, 20).map(cardHtml).join('') || '<div class="empty">끝내면 여기로!</div>'}</div>
       </div>`
         : `<div class="col done-col col-collapsed" data-status="done">
-        <h3 data-action="lane-toggle" data-board="${b.id}" title="펼치기">완수 <span class="cnt">${done.length}</span> <span class="lane-arrow">▸</span></h3>
-        <div class="drop-strip">카드를 여기로 끌면 완수</div>
+        <h3 data-action="lane-toggle" data-board="${b.id}" title="펼치기">완료 <span class="cnt">${done.length}</span> <span class="lane-arrow">▸</span></h3>
+        <div class="drop-strip">카드를 여기로 끌면 완료</div>
       </div>`}
     </div>
   </section>`;
 }
-/* ✅ 완수 아카이브 (프로젝트 페이지): 보드별 그룹핑 + 월 필터 + 검색 + FU */
+/* ✅ 완료 내역 (프로젝트 페이지): 보드별 그룹핑 + 월 필터 + 검색 + FU */
 function archivePanelHtml(gid) {
   const gBoards = orderedBoardsIn(gid || null).map(x => x.board);
   const mSel = state.sel.archMonth || '';
@@ -565,17 +566,17 @@ function archivePanelHtml(gid) {
         <span class="arch-date">✓ ${fmtDate(c.doneAt)}</span>
         <span class="arch-t">${fuBadgeHtml(c)}${esc(c.title)}${(c.fuHistory || []).length ? `<span class="arch-fu">↩ ${(c.fuHistory || []).map(d => fmtDate(d)).join(' → ')} → ${fmtDate(c.doneAt)}</span>` : ''}</span>
         ${c.note ? `<span class="card-note" data-note="${esc(c.note)}">💬</span>` : ''}
-        <button class="mini-btn fu-btn" data-action="card-fu" data-id="${c.id}" title="완수 이력을 남기고 다시 진행중으로">↩ FU</button>
+        <button class="mini-btn fu-btn" data-action="card-fu" data-id="${c.id}" title="완료 이력을 남기고 다시 진행중으로">↩ 다시 진행</button>
       </div>`).join('');
   });
   const pill = (v, label) => `<button class="fpill ${mSel === v ? 'on' : ''}" data-action="arch-month" data-m="${v}">${label}</button>`;
   const aOpen = panelOpen('arch');
   return `<section class="sched-panel arch-panel ${aOpen ? '' : 'collapsed'}">
-    <div class="group-head" data-action="panel-toggle" data-k="arch" title="${aOpen ? '접기' : '펼치기'}">${panelCaret('arch')}<span class="gname">✅ 완수 아카이브</span><span class="gcnt">${total}</span>
+    <div class="group-head" data-action="panel-toggle" data-k="arch" title="${aOpen ? '접기' : '펼치기'}">${panelCaret('arch')}<span class="gname">✅ 완료 내역</span><span class="gcnt">${total}</span>
       ${!aOpen ? '' : `<span class="arch-filter">${pill('', '전체')}${pill(ym, '이번 달')}${pill(lastYm, '지난 달')}</span>
-      <input type="search" id="arch-q" placeholder="🔍 완수 내역 검색" autocomplete="off">`}
+      <input type="search" id="arch-q" placeholder="🔍 완료 내역 검색" autocomplete="off">`}
     </div>
-    ${!aOpen ? '' : (total ? `<div class="arch-list slim-scroll">${body}</div>` : `<div class="empty">${mSel ? '이 달에 완수한 내역이 없어요' : '아직 완수한 내역이 없어요'}</div>`)}
+    ${!aOpen ? '' : (total ? `<div class="arch-list slim-scroll">${body}</div>` : `<div class="empty">${mSel ? '이 달에 완료한 내역이 없어요' : '아직 완료한 내역이 없어요'}</div>`)}
   </section>`;
 }
 
@@ -606,7 +607,7 @@ function rollRepeats() {
   });
   return changed;
 }
-// 프로젝트별 투입시간: 타임박스 Big3의 '실제' 시간(없으면 배정 칸 합)을 카드→보드→프로젝트로 귀속
+// 프로젝트별 투입시간: 하루 계획 Big3의 '실제' 시간(없으면 배정 칸 합)을 카드→보드→프로젝트로 귀속
 function projectHours(gid) {
   let h = 0;
   Object.values(state.timebox || {}).forEach(day => {
@@ -672,7 +673,7 @@ function openSchedModal(id, groupPrefill) {
     <label>내용<input type="text" id="m-stitle" value="${s ? esc(s.title) : ''}" placeholder="예: 반기검토 보고서 제출 / 감사보고서 마감"></label>
     <div class="two">
       <label>마감일<input type="date" id="m-sdate" value="${s ? (s.date || '') : todayStr()}"></label>
-      <label title="입력하면 타임박스 해당 시간칸에 표시됩니다">시간 (선택)<input type="time" id="m-stime" value="${s ? (s.time || '') : ''}"></label>
+      <label title="입력하면 하루 계획 해당 시간칸에 표시됩니다">시간 (선택)<input type="time" id="m-stime" value="${s ? (s.time || '') : ''}"></label>
     </div>
     <label>프로젝트<select id="m-sgroup">
       ${(state.groups || []).map(g => `<option value="${g.id}" ${gid === g.id ? 'selected' : ''}>${esc(g.name)}</option>`).join('')}
@@ -719,7 +720,7 @@ function renderBoardView() {
   if (sel === undefined || (sel !== '__all' && sel !== '' && !groupById(sel))) sel = '__all';
   state.sel.boardGroup = sel;
   const bCount = gid => state.projects.filter(b => (b.group || '') === gid && !b.folder).length;
-  // 사이드바 숫자 = 미완료 To-do 수 (보드 개수 대신)
+  // 사이드바 숫자 = 미완료 할 일 수 (보드 개수 대신)
   const openTodos = bid => state.cards.filter(c => c.project === bid && c.status !== 'done').length;
   const openTodosGroup = gid => state.projects.filter(b => (b.group || '') === gid).reduce((s, b) => s + openTodos(b.id), 0);
   const openTodosAll = state.cards.filter(c => c.project && c.status !== 'done').length;
@@ -728,17 +729,18 @@ function renderBoardView() {
     const boards = orderedBoardsIn(gid || null);
     const expanded = openSideGroups.has(gid);   // 펼침은 오직 openSideGroups로 — 선택과 무관하게 독립 토글·누적
     const caret = boards.length ? `<button class="side-caret" data-action="side-toggle" data-gid="${gid}" title="보드 ${expanded ? '접기' : '펼치기'}">${expanded ? '▾' : '▸'}</button>` : '<span class="side-caret sp"></span>';
-    let html = `<div class="side-item ${sel === gid ? 'on c-' + color : ''}" data-action="board-group" data-gid="${gid}">${caret}<span class="side-dot c-${dot || color}"></span><span class="side-name">${esc(name)}</span><span class="side-cnt" title="미완료 To-do">${openTodosGroup(gid) || ''}</span></div>`;
+    let html = `<div class="side-item ${sel === gid ? 'on c-' + color : ''}" data-action="board-group" data-gid="${gid}">${caret}<span class="side-dot c-${dot || color}"></span><span class="side-name">${esc(name)}</span><span class="side-cnt" title="미완료 할 일">${openTodosGroup(gid) || ''}</span></div>`;
     if (expanded && boards.length) {
-      html += `<div class="side-sub">` + boards.map(({ board, depth }) => `<div class="side-sub-item ${focusBoard === board.id ? 'on' : ''} ${board.folder ? 'is-folder' : ''}" data-action="side-board" data-bid="${board.id}" style="padding-left:${8 + depth * 13}px" title="${board.folder ? '묶음 보드' : '이 보드로 이동'}"><span class="side-dot c-${board.color}"></span><span class="side-name">${board.folder ? '📚 ' : ''}${esc(board.name)}</span><span class="side-cnt" title="미완료 To-do">${openTodos(board.id) || ''}</span></div>`).join('') + `</div>`;
+      html += `<div class="side-sub">` + boards.map(({ board, depth }) => `<div class="side-sub-item ${focusBoard === board.id ? 'on' : ''} ${board.folder ? 'is-folder' : ''}" data-action="side-board" data-bid="${board.id}" style="padding-left:${8 + depth * 13}px" title="${board.folder ? '묶음 보드' : '이 보드로 이동'}"><span class="side-dot c-${board.color}"></span><span class="side-name">${board.folder ? '📚 ' : ''}${esc(board.name)}</span><span class="side-cnt" title="미완료 할 일">${openTodos(board.id) || ''}</span></div>`).join('') + `</div>`;
     }
     return html;
   };
   const side = `<aside class="notes-side">
-    <div class="side-h">프로젝트</div>
-    <div class="side-item ${sel === '__all' ? 'on c-gray' : ''}" data-action="board-group" data-gid="__all"><span class="side-caret sp"></span><span class="side-dot c-gray"></span><span class="side-name">전체</span><span class="side-cnt" title="미완료 To-do">${openTodosAll || ''}</span></div>
+    <div class="side-h">프로젝트 <span class="side-explain">숫자 = 남은 할 일</span></div>
+    <div class="side-item ${sel === '__all' ? 'on c-gray' : ''}" data-action="board-group" data-gid="__all"><span class="side-caret sp"></span><span class="side-dot c-gray"></span><span class="side-name">전체</span><span class="side-cnt" title="미완료 할 일">${openTodosAll || ''}</span></div>
     ${groups.map(g => sideGroupRow(g.id, g.name, g.color, g.color)).join('')}
     ${sideGroupRow('', '미분류', 'gray', 'gray')}
+    <p class="side-explain">미분류: 프로젝트에 속하지 않은 보드<br>미배정: 보드에 넣기 전의 할 일</p>
     <div class="side-actions">
       <button class="pill" data-action="group-add">📁 + 프로젝트</button>
       <button class="pill" data-action="folder-add" ${sel !== '__all' && sel !== '' ? `data-group="${sel}"` : ''} title="하위 보드를 묶는 분류용 보드">📚 + 묶음</button>
@@ -747,11 +749,11 @@ function renderBoardView() {
   </aside>`;
   const inbox = state.cards.filter(c => !c.project && c.status !== 'done');
   const inboxHtml = `<section class="inbox top-panel">
-    <div class="tp-head"><span class="tp-title">📥 미배정 · 예정</span><span class="tp-cnt">${inbox.length}</span></div>
+    <div class="tp-head"><span class="tp-title">📥 미배정 할 일</span><span class="tp-cnt">${inbox.length}</span></div>
     <p class="tp-sub">보드에 넣기 전 임시 보관 · 카드를 보드로 드래그</p>
     <div class="col inbox-col" data-status="todo" data-inbox="1">
       ${inbox.map(cardHtml).join('')}
-      <form class="quick" data-project="__inbox"><input name="t" placeholder="+ 예정 할 일 추가" autocomplete="off"></form>
+      <form class="quick" data-project="__inbox"><input name="t" placeholder="+ 미배정 할 일 추가" autocomplete="off"></form>
     </div>
   </section>`;
   // 상단 영역(미배정·예정 / 미분류 보드)은 사이드바 '미분류'에서만 — 다른 화면에선 자리만 차지해서 숨김
@@ -765,7 +767,9 @@ function renderBoardView() {
         ${!sOpen ? '' : (allScheds.length ? `<div class="sched-list">${schedRowsGrouped(allScheds)}</div>` : '<div class="empty">보고서 제출·마감 등 프로젝트 일정을 추가하세요 (추가 시 프로젝트 선택)</div>')}
       </section>`;
     // 상단 패널을 숨긴 대신, 전체 보기에선 미분류 보드를 본문 맨 아래에 붙여 접근성 유지
-    page = schedPanel + groups.map(g => groupSecHtml(g.id)).join('') + (bCount('') ? groupSecHtml('') : '');
+    page = `<div class="workspace-heading"><div><span class="workspace-eyebrow">PROJECTS</span><h2>모든 프로젝트</h2><p>흩어진 업무를 한곳에서, 다음 할 일을 명확하게.</p></div><button class="pill primary-pill" data-action="group-add">+ 프로젝트 만들기</button></div>
+      <div class="workspace-summary"><span><i class="summary-dot"></i>프로젝트 <b>${groups.length}</b></span><span>보드 <b>${state.projects.filter(b => !b.folder).length}</b></span><span>남은 할 일 <b>${state.cards.filter(c => c.status !== 'done').length}</b></span></div>`
+      + schedPanel + groups.map(g => groupSecHtml(g.id)).join('') + (bCount('') ? groupSecHtml('') : '');
   } else {
     const g = sel ? groupById(sel) : null;
     const gname = g ? g.name : '미분류';
@@ -787,22 +791,21 @@ function renderBoardView() {
         ${!sOpen ? '' : `${scheds.length ? `<div class="sched-list">${scheds.map(s => schedRow(s, true)).join('')}</div>` : '<div class="empty">보고서 제출·마감 등 이 프로젝트의 일정을 추가하세요</div>'}
         ${pastScheds.length ? `<button class="mini-btn past-toggle" data-action="sched-past-toggle">지난 일정 ${pastScheds.length} ${pastSchedOpen ? '▾' : '▸'}</button>${pastSchedOpen ? `<div class="sched-list sched-past">${pastScheds.map(s => schedRow(s, true)).join('')}</div>` : ''}` : ''}`}
       </section>`;
-    page = `<div class="page-head"><span class="page-icon c-${g ? g.color : 'gray'}">📁</span><h2 class="page-title">${esc(gname)}</h2>
+    page = `<div class="page-head"><span class="page-icon c-${g ? g.color : 'gray'}">${workspaceIcon('project')}</span><h2 class="page-title">${esc(gname)}</h2>
         ${g ? `<button class="mini-btn" data-action="group-edit" data-id="${g.id}">설정</button>` : ''}
         <button class="mini-btn" data-action="proj-add" ${sel ? `data-group="${sel}"` : ''}>+ 보드</button></div>
       <div class="prop-bar">
         <span class="prop-chip" ${g ? `data-action="group-edit" data-id="${g.id}" title="클릭해서 기간 수정"` : ''}>📅 ${periodTxt}</span>
         <span class="prop-chip">🗂 보드 ${gBoards.filter(b => !b.folder).length}</span>
-        <span class="prop-chip">✅ 진행 ${doneCnt}/${gCards.length}</span>
-        ${projectHours(sel) ? `<span class="prop-chip" title="타임박스에 기록한 실제 시간(없으면 배정 시간) 누적">⏱ 투입 ${projectHours(sel)}h</span>` : ''}
+        <span class="prop-chip">✅ 완료 ${doneCnt}/${gCards.length}</span>
+        ${projectHours(sel) ? `<span class="prop-chip" title="하루 계획에 기록한 실제 시간(없으면 배정 시간) 누적">⏱ 투입 ${projectHours(sel)}h</span>` : ''}
         ${schedChip}
       </div>` + schedPanel + archivePanelHtml(sel) + groupSecHtml(sel, true);
   }
-  return legendHtml()
-    + `<div class="board-wrap">${side}<div class="board-page">
-        <div class="addbar"><span class="board-hint">보드 드래그: 다른 보드 위=앞 순서 / 가운데=하위로 / 아래=뒤 순서 · 왼쪽 사이드바 프로젝트=편입 · 왼쪽 끝=분리 · 오른쪽 끝=삭제</span></div>
+  return `<div class="board-wrap">${side}<div class="board-page">
         ${topArea}
         ${page}
+        <div class="board-guide">${legendHtml()}<details><summary>보드 이동 방법</summary><p class="board-hint">보드 드래그: 다른 보드 위=앞 순서 / 가운데=하위로 / 아래=뒤 순서 · 왼쪽 사이드바 프로젝트=편입 · 왼쪽 끝=분리 · 오른쪽 끝=삭제</p></details></div>
       </div></div>`
     + `<div class="unassign-hint">📥 보드 밖에 놓으면 <b>미배정</b>으로 이동</div>`
     + `<div class="detach-lane"><span>◀<br>여기에 놓으면<br>보드 분리<br>(독립)</span></div>`
@@ -810,6 +813,20 @@ function renderBoardView() {
 }
 
 /* ---------- structure map ---------- */
+const MAP_NODE_W = 160, MAP_NODE_H = 104;
+function workspaceIcon(name) {
+  const paths = {
+    project: '<rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><path d="M14 17.5h7m-3.5-3.5v7"/>',
+    check: '<circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/>',
+    clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+    alert: '<path d="m10.3 4-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3l-8-14a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4m0 4h.01"/>',
+    calendar: '<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M7 3v4m10-4v4M3 11h18m-14 5h3"/>',
+    folder: '<path d="M3 7a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/>',
+    inbox: '<path d="m3 13 3-9h12l3 9v7H3Zm0 0h5l2 3h4l2-3h5"/>',
+    note: '<path d="M14 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V10ZM14 3v7h7M7 14h10m-10 3h7"/>'
+  };
+  return `<svg class="workspace-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.project}</svg>`;
+}
 function ensurePositions() {
   let i = 0;
   state.projects.forEach(b => {
@@ -820,7 +837,7 @@ function ensurePositions() {
   });
 }
 function autoLayout() {
-  const COLW = 175, ROWH = 110, GAPX = 50, GAPY = 80, STARTX = 30, STARTY = 46;
+  const COLW = MAP_NODE_W + 32, ROWH = MAP_NODE_H + 28, GAPX = 50, GAPY = 80, STARTX = 30, STARTY = 46;
   const mapEl = document.getElementById('map');
   const MAXW = Math.max(700, (mapEl ? mapEl.clientWidth : 1100) - 30);
   let curX = STARTX, curY = STARTY, rowH = 0, placedAny = false;
@@ -863,7 +880,7 @@ function autoLayout() {
 let focusBoard = null;   // board to scroll to in board view after nav
 let pendingMapPos = null; // {x,y,group} for add-board-at-click
 // 완료 보드 선반(구역 오른쪽에 작게 모아두는 영역) 치수
-const SHELF_W = 132, CHIP_H = 22, CHIP_GAP = 4, SHELF_TOP = 34;
+const SHELF_W = 132, CHIP_H = 22, CHIP_GAP = 4, SHELF_TOP = 58;
 const SHELF_MAX = 8;                     // 이보다 많으면 '+N개 더'로 접음(구역이 세로로 길어지는 것 방지)
 const shelfExpanded = new Set();          // 선반을 펼쳐 본 프로젝트(세션 한정)
 const shelfH = (n, gid) => {
@@ -889,7 +906,7 @@ function regionRects() {
     }
     const xs = ms.map(b => b.x), ys = ms.map(b => b.y);
     const x = Math.min(...xs) - 18, y = Math.min(...ys) - 36;
-    let w = Math.max(...xs) + 150 - x + 18, h = Math.max(...ys) + 44 - y + 18;
+    let w = Math.max(...xs) + MAP_NODE_W - x + 18, h = Math.max(...ys) + MAP_NODE_H - y + 18;
     if (dn.length) { w += SHELF_W; h = Math.max(h, shelfH(dn.length, g.id)); }
     return { gid: g.id, name: g.name, color: g.color, x, y, w, h, done: dn };
   }).filter(Boolean);
@@ -900,35 +917,47 @@ function doneChipsHtml(r) {
   const left = r.x + r.w - SHELF_W + 6;
   const shown = shelfExpanded.has(r.gid) ? r.done : r.done.slice(0, SHELF_MAX);
   const rest = r.done.length - shown.length;
-  const label = `<div class="map-shelf-label" style="left:${left}px;top:${r.y + 12}px">✓ 완료 ${r.done.length}</div>`;
+  const label = `<div class="map-shelf-label" style="left:${left}px;top:${r.y + 38}px">✓ 완료 ${r.done.length}</div>`;
   const chips = shown.map((b, i) =>
-    `<div class="mapdone c-${b.color}" data-id="${b.id}" style="left:${left}px;top:${r.y + SHELF_TOP + i * (CHIP_H + CHIP_GAP)}px"
+    `<div class="mapdone" data-id="${b.id}" style="left:${left}px;top:${r.y + SHELF_TOP + i * (CHIP_H + CHIP_GAP)}px"
       title="${esc(b.name)}${b.doneAt ? ' · 완료 ' + fmtDate(b.doneAt) : ''} — 클릭하면 보드 설정">${esc(b.name)}</div>`).join('');
   const more = (rest > 0 || shelfExpanded.has(r.gid))
     ? `<div class="mapdone more" data-gid="${r.gid}" style="left:${left}px;top:${r.y + SHELF_TOP + shown.length * (CHIP_H + CHIP_GAP)}px"
         title="완료 보드 ${rest > 0 ? '더 보기' : '접기'}">${rest > 0 ? `+${rest}개 더` : '접기'}</div>` : '';
   return label + chips + more;
 }
+function mapBoardDepth(board) {
+  const seen = new Set([board.id]);
+  let depth = 0, parent = boardById(board.parent);
+  while (parent && !seen.has(parent.id)) {
+    seen.add(parent.id); depth++;
+    parent = boardById(parent.parent);
+  }
+  return depth;
+}
 function renderMap() {
   ensurePositions();
   const rects = regionRects();
   const regions = rects.map(r =>
-    `<div class="map-region c-${r.color} ${r.empty ? 'empty' : ''}" data-gid="${r.gid}" style="left:${r.x}px;top:${r.y}px;width:${r.w}px;height:${r.h}px"><span class="map-region-label" data-gid="${r.gid}" title="드래그하면 프로젝트 전체 이동">📁 ${esc(r.name)}</span>${r.empty ? '<span class="region-empty-hint">빈 곳 클릭 → 보드 추가</span>' : ''}</div>`).join('');
+    `<div class="map-region ${r.empty ? 'empty' : ''}" data-gid="${r.gid}" style="left:${r.x}px;top:${r.y}px;width:${r.w}px;height:${r.h}px"><span class="map-region-label" data-gid="${r.gid}" title="${esc(r.name)} — 드래그하면 프로젝트 전체 이동">${workspaceIcon('project')}<span class="map-project-name">${esc(r.name)}</span></span>${r.empty ? '<span class="region-empty-hint">빈 곳 클릭 → 보드 추가</span>' : ''}</div>`).join('');
   const doneChips = rects.map(doneChipsHtml).join('')
     + state.projects.filter(b => b.done && !b.group).map(b =>   // 미분류 완료 보드는 제자리에 칩으로
-      `<div class="mapdone c-${b.color}" data-id="${b.id}" style="left:${b.x}px;top:${b.y}px" title="${esc(b.name)}${b.doneAt ? ' · 완료 ' + fmtDate(b.doneAt) : ''} — 클릭하면 보드 설정">${esc(b.name)}</div>`).join('');
+      `<div class="mapdone" data-id="${b.id}" style="left:${b.x}px;top:${b.y}px" title="${esc(b.name)}${b.doneAt ? ' · 완료 ' + fmtDate(b.doneAt) : ''} — 클릭하면 보드 설정">${esc(b.name)}</div>`).join('');
   const nodes = state.projects.filter(b => !b.done).map(b => {
     const cs = state.cards.filter(c => c.project === b.id);
     const done = cs.filter(c => c.status === 'done').length;
     const doing = cs.filter(c => c.status === 'doing').length;
-    const badge = doing > 0 ? `<span class="node-badge doing">▶${doing}</span>`
-      : (cs.length && done === cs.length) ? '<span class="node-badge done">✓</span>' : '';
+    const depth = mapBoardDepth(b);
+    const badge = doing > 0 ? `<span class="node-badge doing">▶ ${doing}</span>`
+      : (cs.length && done === cs.length) ? '<span class="node-badge done">✓ 완료</span>' : '';
     const prog = cs.length ? `<div class="node-prog"><div class="node-prog-fill" style="width:${Math.round(done / cs.length * 100)}%"></div></div>` : '';
-    const stat = cs.length ? ` — 완수 ${done}/${cs.length}${doing ? ` · 진행중 ${doing}` : ''}` : '';
+    const stat = cs.length ? ` — 완료 ${done}/${cs.length}${doing ? ` · 진행중 ${doing}` : ''}` : '';
     return `
-    <div class="mapnode c-${b.color} ${b.folder ? 'folder' : ''}" data-id="${b.id}" style="left:${b.x}px;top:${b.y}px" data-stat="${esc(b.name)}${b.folder ? ' — 묶음 보드' : stat}">
+    <div class="mapnode ${depth ? 'map-child' : 'map-top'} ${b.folder ? 'folder' : ''}" data-id="${b.id}" style="left:${b.x}px;top:${b.y}px" data-stat="${esc(b.name)}${b.folder ? ' — 묶음 보드' : stat}">
       <div class="mp mp-top" data-id="${b.id}" data-role="top" title="상위 연결점 — 여기서 부모 보드로 끌기"></div>
-      ${badge}<div class="mapnode-name">${b.folder ? '📚 ' : ''}${esc(b.name)}</div>${b.folder ? '' : prog}
+      <div class="map-level">${depth ? `하위 보드 · ${depth}단계` : '상위 보드'}${b.folder ? ' · 묶음' : ''}</div>
+      ${badge}<div class="mapnode-name">${esc(b.name)}</div>${b.folder ? '' : prog}
+      <div class="map-node-meta"><span>${b.folder ? '보드 묶음' : `완료 ${done}/${cs.length}`}</span><button class="map-open" data-action="tree-goboard" data-bid="${b.id}">열기 ↗</button></div>
       <div class="mp mp-bot" data-id="${b.id}" data-role="bot" title="하위 연결점 — 여기서 자식 보드로 끌기"></div>
     </div>`;
   }).join('');
@@ -943,21 +972,23 @@ function renderMap() {
       <span class="mt-t">${esc(c.title)}</span>
     </div>`;
   }).join('') || '<div class="empty">미배정 할 일이 없어요 👍</div>';
-  return `<div class="map-split">
+  return `<div class="view-heading"><h2>업무 구조도</h2><p>프로젝트의 상위·하위 소속 관계를 편집하세요. 연결선은 업무 실행 순서가 아닙니다.</p></div><div class="map-split">
     <div class="map-toolbar">
       <button class="pill" data-action="map-arrange" title="프로젝트별 구역으로 나눠 상위→하위 자동 배치">⟲ 자동정렬</button>
-      <span class="maphint">색 구역 = 프로젝트 · 노드를 구역 안으로 끌면 소속 · 빈 곳 클릭 = 보드 추가 · 더블클릭 = 보드로 이동</span>
+      <button class="pill primary-pill" data-action="map-add-open">+ 추가</button>
+      <span class="maphint">노드를 프로젝트 구역 안으로 끌면 소속 · 빈 곳 클릭 = 보드 추가 · 더블클릭 = 보드로 이동</span>
+      <div class="map-legend" aria-label="구조도 색상 안내"><span><i class="map-key-project"></i>프로젝트</span><span><i class="map-key-top"></i>상위 보드</span><span><i class="map-key-child"></i>하위 보드</span><small>하위 단계는 연결선과 숫자로 구분합니다.</small></div>
     </div>
-    <div class="map" id="map" style="height:${h}px">${regions}${doneChips}<svg class="maplines" id="maplines"></svg>${nodes}</div>
-    <aside class="map-todos">
-      <div class="side-h">📥 미배정 할 일 <span class="gcnt">${unassigned.length}</span></div>
+    <div class="map" id="map" style="height:${h}px;--map-node-w:${MAP_NODE_W}px;--map-node-h:${MAP_NODE_H}px">${regions}${doneChips}<svg class="maplines" id="maplines"></svg>${nodes}</div>
+    <aside class="map-todos ${unassigned.length ? '' : 'is-empty'}">
+      <div class="side-h">${workspaceIcon('inbox')} 미배정 할 일 <span class="gcnt">${unassigned.length}</span></div>
       <p class="maphint2">할 일을 왼쪽 보드로 끌어 배정 · 클릭해 수정</p>
       <div class="map-todo-list">${todoItems}</div>
       <form class="quick" data-project="__inbox"><input name="t" placeholder="+ 할 일 추가하고 Enter" autocomplete="off"></form>
     </aside>
   </div>`;
 }
-// 구조도 노드 hover 말풍선: 그 보드의 진행 중·완수 항목을 실제 제목으로 보여줌
+// 구조도 노드 hover 말풍선: 그 보드의 진행 중·완료 항목을 실제 제목으로 보여줌
 const MAP_POP_MAX = 6;   // 구역별 최대 표시 건수 (넘치면 '+N건 더')
 function mapPopHtml(bid) {
   const b = boardById(bid);
@@ -977,10 +1008,10 @@ function mapPopHtml(bid) {
   };
   const body =
     sec('doing', '▶', '진행 중', doing, c => c.due ? `<span class="mpop-d">${fmtDate(c.due)}</span>` : '') +
-    sec('done', '✓', '완수', done, c => c.doneAt ? `<span class="mpop-d">${fmtDate(c.doneAt)}</span>` : '');
-  const foot = todo.length ? `<div class="mpop-foot">📅 예정 ${todo.length}건</div>` : '';
-  return `<div class="mpop-head">${g ? `<span class="mpop-proj c-${g.color}">${esc(g.name)}</span>` : ''}<span class="mpop-name">${esc(b.name)}</span></div>
-    ${body || '<div class="mpop-empty">진행 중·완수한 할 일이 아직 없어요</div>'}${foot}`;
+    sec('done', '✓', '완료', done, c => c.doneAt ? `<span class="mpop-d">${fmtDate(c.doneAt)}</span>` : '');
+  const foot = todo.length ? `<div class="mpop-foot">□ 할 일 ${todo.length}건</div>` : '';
+  return `<div class="mpop-head">${g ? `<span class="mpop-proj">${esc(g.name)}</span>` : ''}<span class="mpop-name">${esc(b.name)}</span></div>
+    ${body || '<div class="mpop-empty">진행 중·완료한 할 일이 아직 없어요</div>'}${foot}`;
 }
 function mapPopEl() {
   let el = document.getElementById('map-pop');
@@ -1052,6 +1083,7 @@ function initMap() {
   map.addEventListener('mouseleave', popCancel);
 
   map.addEventListener('pointerdown', e => {
+    if (e.target.closest('button[data-action]')) return;
     popCancel();
     const cut = e.target.closest('.mapcut');
     if (cut) { mode = 'cut'; cutId = cut.dataset.child; e.preventDefault(); return; }
@@ -1194,14 +1226,15 @@ function chipHtml(c) {
   const pr = PRIORITIES[c.priority] || PRIORITIES.none;
   const b = boardById(c.project);
   const g = b && b.group ? groupById(b.group) : null;
-  const style = pr.bg ? `background:${pr.bg};color:${pr.fg}` : 'background:var(--bg);color:var(--muted)';
+  const style = pr.bg ? `--chip-priority:${pr.bg}` : '';
   const mark = c.status === 'done' ? '<i class="chip-mk done">✓</i>'
     : c.status === 'doing' ? '<i class="chip-mk doing">▶</i>'
       : '<i class="bdot" style="background:currentColor;opacity:.55"></i>';
-  const stName = c.status === 'done' ? '완수' : c.status === 'doing' ? '진행 중' : '계획';
+  const stName = c.status === 'done' ? '완료' : c.status === 'doing' ? '진행 중' : '할 일';
   const projTop = g ? `<span class="chip-proj-top c-${g.color}">${esc(g.name)}</span>` : '';
   const title = (g ? '📁' + g.name + ' · ' : '') + (b ? b.name + ' · ' : '') + `[${stName}] ` + c.title + (c.note ? '\n💬 ' + c.note : '');
-  return `<span class="chip ${c.status}" style="${style}" draggable="true" data-action="card" data-id="${c.id}" title="${esc(title)}">${projTop}<span class="chip-task">${mark}${esc(c.title)}</span></span>`;
+  const dateKind = c.due ? '마감일' : '완료일';
+  return `<span class="chip ${c.status}" style="${style}" draggable="true" data-action="card" data-id="${c.id}" title="${esc(title)} · ${dateKind}">${projTop}<span class="chip-task">${mark}${esc(c.title)}</span><span class="chip-date-kind">${dateKind} · ${stName}${pr.bg ? ' · 중요도 ' + pr.label : ''}</span></span>`;
 }
 function schedChipHtml(s) {
   const g = s.group ? groupById(s.group) : null;
@@ -1226,7 +1259,7 @@ function calFilterBar() {
   const t = state.sel.calType || 'all';
   const tpill = (v, label, title) => `<button class="fpill ${t === v ? 'on' : ''}" data-action="cal-type" data-t="${v}" title="${title}">${label}</button>`;
   const typeRow = `<div class="cal-filter"><span class="fl-label">표시</span>
-    ${tpill('all', '전체', '일정 · 할 일 모두 표시')}${tpill('sched', '📌 일정', '프로젝트 일정·마감만')}${tpill('todo', '✅ 할 일', 'To-do 카드만')}<span class="fl-note">프로젝트 수행기간 막대는 항상 표시</span>
+    ${tpill('all', '전체', '일정 · 할 일 모두 표시')}${tpill('sched', '📌 일정', '프로젝트 일정·마감만')}${tpill('todo', '✅ 할 일', '할 일 카드만')}<span class="fl-note">프로젝트 수행기간 막대는 항상 표시</span>
   </div>`;
   if (!groups.length) return typeRow;
   const sel = state.sel.calFilter, active = calFilterActive();
@@ -1314,14 +1347,14 @@ function renderCal() {
       <div class="cal-days">${cells}</div>
     </div>`;
   }
-  return `<div class="cal-sticky">
+  return `<div class="view-heading"><h2>일정·마감</h2><p>프로젝트 일정과 할 일의 마감을 함께 확인하세요.</p></div><div class="cal-sticky">
     <div class="cal-head">
       <span class="cal-title">${y}년 ${m}월</span>
       <button class="pill" data-action="cal-prev">◀</button>
       <button class="pill" data-action="cal-today">오늘</button>
       <button class="pill" data-action="cal-next">▶</button>
-      <span class="cal-hint">날짜 클릭 = 할 일 추가 · 칩 드래그 = 날짜 변경 · 막대 = 수행기간 · <b>맨 아래/위에서 휠 = 다음·이전 달</b></span>
-      <span class="cal-status-legend"><span class="sl"><i class="bdot"></i>계획</span><span class="sl"><i class="chip-mk doing">▶</i>진행 중</span><span class="sl done"><i class="chip-mk done">✓</i>완수</span></span>
+      <span class="cal-hint">가로 막대: 수행기간 · 📌 일정 · 업무 행: 마감일(없으면 완료일)<br>날짜 클릭으로 추가 · 드래그로 날짜 변경 · <b>스크롤 끝에서 휠을 돌리면 월이 바뀝니다</b></span>
+      <span class="cal-status-legend"><span class="sl"><i class="bdot"></i>할 일</span><span class="sl"><i class="chip-mk doing">▶</i>진행 중</span><span class="sl done"><i class="chip-mk done">✓</i>완료</span></span>
     </div>
     ${calFilterBar()}
     </div>
@@ -1395,20 +1428,25 @@ function byProject(secondary) {
     return secondary(a, b);
   };
 }
-function dashRow(c, hidePill) {
+function dashRow(c, hidePill, showReason) {
   const b = boardById(c.project);
   const g = b && b.group ? groupById(b.group) : null;
   const pr = PRIORITIES[c.priority] || PRIORITIES.none;
   const board = b ? `<span class="drow-board">${esc(b.name)}</span>` : '';   // 프로젝트는 그룹 헤더에 있으므로 행에는 보드명만
   const note = c.note ? `<span class="card-note" data-note="${esc(c.note)}">💬</span>` : '';
   const tag = c.status === 'done'
-    ? (c.doneAt ? `<span class="tag">${fmtDate(c.doneAt)} 완수</span>` : '')
+    ? (c.doneAt ? `<span class="tag">${fmtDate(c.doneAt)} 완료</span>` : '')
     : (c.due ? dueBadge(c.due) : '');
   const stPill = hidePill ? '' : (c.status === 'doing' ? '<span class="st-pill doing">진행중</span>'
-    : c.status === 'done' ? '<span class="st-pill done">완수</span>'
-      : '<span class="st-pill todo">예정</span>');
+    : c.status === 'done' ? '<span class="st-pill done">완료</span>'
+      : '<span class="st-pill todo">할 일</span>');
   const overdue = c.status !== 'done' && c.due && dday(c.due) < 0 ? ' overdue' : '';
-  const metaInner = `${board}${tag}`;
+  const reasons = [];
+  if (showReason) {
+    if (c.due && dday(c.due) <= 3) reasons.push(dday(c.due) < 0 ? '기한 지남' : dday(c.due) === 0 ? '오늘 마감' : '3일 이내 마감');
+    if (c.priority === 'high') reasons.push('중요도 높음');
+  }
+  const metaInner = `${board}${tag}${reasons.map(r => `<span class="attention-reason">${r}</span>`).join('')}`;
   const meta = metaInner ? `<div class="drow-meta">${metaInner}</div>` : '';
   return `<div class="drow${overdue}" data-kind="card" data-id="${c.id}" title="클릭=수정 · 더블클릭=보드로 이동">
     <span class="drow-prio" style="${pr.bg ? `background:${pr.bg}` : ''}"></span>
@@ -1423,18 +1461,18 @@ function dashGroupHeader(key) {
   const label = g ? `<span class="drow-proj c-${g.color}">${esc(g.name)}</span>` : (key === '' ? '📄 미분류 보드' : '📥 미배정');
   return `<div class="dash-grp">${label}</div>`;
 }
-function dashRowsGrouped(cards, hidePill) {   // 프로젝트별 그룹 헤더 + 행 (Brain Dump 방식)
+function dashRowsGrouped(cards, hidePill, showReason) {   // 프로젝트별 그룹 헤더 + 행
   let html = '', last = '__init';
   cards.forEach(c => {
     const k = cardProjKey(c);
     if (k !== last) { last = k; html += dashGroupHeader(k); }
-    html += dashRow(c, hidePill);
+    html += dashRow(c, hidePill, showReason);
   });
   return html;
 }
 function dashSection(title, sub, cards, emptyMsg, limit, opts) {   // limit은 폐기 — 전량 렌더+내부 스크롤
   const o = opts || {};
-  const body = o.rowsHtml !== undefined ? o.rowsHtml : (cards.length ? dashRowsGrouped(cards, o.hidePill) : `<div class="empty">${emptyMsg}</div>`);
+  const body = o.rowsHtml !== undefined ? o.rowsHtml : (cards.length ? dashRowsGrouped(cards, o.hidePill, o.showReason) : `<div class="empty">${emptyMsg}</div>`);
   return `<section class="dash-sec ${o.full ? 'full' : ''} ${o.stage ? 'stage-' + o.stage : ''}" ${o.id ? `id="${o.id}"` : ''}>
     <div class="dash-sec-head"><h2>${title} <span class="cnt">${cards.length}</span></h2><span class="dash-sub">${sub}</span></div>
     <div class="dash-list slim-scroll">${body}</div>
@@ -1445,7 +1483,7 @@ function pageSeg(cur, items) {
   return `<div class="seg page-seg">${items.map(([v, label]) =>
     `<button type="button" class="seg-btn ${cur === v ? 'sel' : ''}" data-action="view" data-view="${v}">${label}</button>`).join('')}</div>`;
 }
-function journalSeg(cur) { return isAdmin() ? pageSeg(cur, [['journal', '📔 일지'], ['devlog', '🛠 개발일지']]) : ''; }
+function journalSeg(cur) { return isAdmin() ? pageSeg(cur, [['journal', '📔 자동 업무일지'], ['devlog', '🛠 앱 개발 이력']]) : ''; }
 function renderDash() {
   const today = todayStr();
   const cards = state.cards;
@@ -1453,7 +1491,7 @@ function renderDash() {
   const todo = cards.filter(c => c.status === 'todo').sort(byProject(dueSort));
   const doing = cards.filter(c => c.status === 'doing').sort(byProject(dueSort));
   const urgent = incomplete.filter(isUrgent).sort(byProject(dueSort));
-  const kpi = (label, val, cls, target) => `<div class="kpi ${cls || ''}" data-action="kpi-go" data-target="${target}"><div class="kpi-val">${val}</div><div class="kpi-lbl">${label}</div></div>`;
+  const kpi = (label, val, cls, target, icon) => `<${target ? 'button' : 'div'} class="kpi ${target ? 'kpi-link' : ''} ${cls}" ${target ? `data-action="kpi-go" data-target="${target}"` : ''}><span class="kpi-lbl">${workspaceIcon(icon)}${label}${target ? ' ↗' : ''}</span><span class="kpi-val">${val}</span></${target ? 'button' : 'div'}>`;
   // 프로젝트별 진행률 + 다음 마감 D-day
   const nextSchedOf = gid => (state.schedules || []).filter(s => (s.group || '') === gid && !s.done && !schedIsStale(s))
     .sort((a, b) => (a.date || '').localeCompare(b.date || ''))[0] || null;
@@ -1498,30 +1536,28 @@ function renderDash() {
   const weekStrip = `<div class="dash-week">${weekCells.join('')}</div>`;
   const td = (state.timebox || {})[today];
   const hasBig3 = td && td.big3 && td.big3.some(Boolean);
-  const big3Strip = `<div class="dash-big3" data-action="dash-big3-go" title="타임박스로 이동">
-    <span class="db3-label">🎯 오늘의 Big 3</span>
+  const big3Strip = `<div class="dash-big3" data-action="dash-big3-go" title="하루 계획로 이동">
+    <span class="db3-label">🎯 오늘의 핵심 업무 · 상위 3개</span>
     ${hasBig3
       ? [0, 1, 2].map(i => { const b = td.big3[i], c = tbColor(i), bd = tbDone(b);
           return b ? `<span class="db3 ${bd ? 'done' : ''}" style="background:${c.bg};color:${c.fg}">${bd ? '✓ ' : ''}${esc(tbTitle(b))}</span>`
-                   : `<span class="db3 empty">Big ${i + 1}</span>`; }).join('')
-      : '<span class="db3 empty">타임박스에서 오늘의 Big 3를 정해보세요 →</span>'}
+                   : `<span class="db3 empty">우선순위 ${i + 1}</span>`; }).join('')
+      : '<span class="db3 empty">하루 계획에서 핵심 업무를 정해보세요 →</span>'}
   </div>`;
   return `<div class="dash">
+    <div class="view-heading"><h2>대시보드</h2><p>지금 집중할 업무와 챙겨야 할 마감을 확인하세요.</p></div>
     ${big3Strip}
+    ${dashSection('주의가 필요한 업무', '기한 지남 · 3일 이내 마감 · 중요도 높음', urgent, '주의가 필요한 업무가 없어요', null, { id: 'sec-urgent', full: true, showReason: true })}
+    ${dashSection('진행 중', '지금 하고 있는 일', doing, '진행 중인 업무가 없어요', null, { id: 'sec-doing', stage: 'doing', hidePill: true, full: true })}
+    <div class="section-caption">이번 주 일정과 전체 현황</div>
     ${weekStrip}
     <div class="dash-kpis">
-      <div class="kpi k-todo"><div class="kpi-val">${todo.length}</div><div class="kpi-lbl">📅 예정</div></div>
-      ${kpi('▶ 진행 중', doing.length, 'k-doing', 'sec-doing')}
-      <div class="kpi k-done"><div class="kpi-val">${weekDone()}</div><div class="kpi-lbl">✓ 이번 주 완수</div></div>
-      ${kpi('🔥 급한 일', urgent.length, 'k-urgent', 'sec-urgent')}
+      ${kpi('할 일', todo.length, 'k-todo', null, 'folder')}
+      ${kpi('진행 중', doing.length, 'k-doing', 'sec-doing', 'clock')}
+      ${kpi('이번 주 완료', weekDone(), 'k-done', null, 'check')}
+      ${kpi('주의 필요', urgent.length, 'k-urgent', 'sec-urgent', 'alert')}
     </div>
-    ${gpRows.length
-      ? `<div class="dash-top">
-          <section class="dash-sec"><div class="dash-sec-head"><h2>📊 프로젝트 진행률 <span class="cnt">${gpRows.length}</span></h2><span class="dash-sub">완수/전체 · 📌 다음 마감</span></div><div class="dash-list slim-scroll gp-list">${gpRows.join('')}</div></section>
-          ${dashSection('🔥 급한 업무', '마감 임박·지남 또는 중요도 높음', urgent, '급한 업무가 없어요 👍', null, { id: 'sec-urgent' })}
-        </div>`
-      : dashSection('🔥 급한 업무', '마감 임박·지남 또는 중요도 높음', urgent, '급한 업무가 없어요 👍', null, { full: true, id: 'sec-urgent' })}
-    ${dashSection('▶ 진행 중', '지금 하고 있는 일', doing, '진행 중인 업무가 없어요', null, { id: 'sec-doing', stage: 'doing', hidePill: true, full: true })}
+    ${gpRows.length ? `<section class="dash-sec"><div class="dash-sec-head"><h2>프로젝트별 할 일 완료율</h2><span class="dash-sub">완료 건수 / 전체 건수 · 작업량 기준이 아닙니다</span></div><div class="dash-list slim-scroll gp-list">${gpRows.join('')}</div></section>` : ''}
   </div>`;
 }
 
@@ -1558,8 +1594,8 @@ function noteItemHtml(n) {
       <span class="note-date">${n.date ? fmtDate(n.date) : ''}</span>
       <span class="note-title">${esc(n.title)}</span>
       ${n.who ? `<span class="note-who">🎤 ${esc(n.who)}</span>` : ''}
-      <button class="note-pin-btn ${n.pinned ? 'on' : ''}" data-action="note-pin" data-id="${n.id}" title="${n.pinned ? '고정 해제' : '상단에 고정'}">📌</button>
-      <button class="mini-btn note-todo-btn" data-action="note-todo" data-id="${n.id}" title="이 기록에서 할 일 만들기">→ To-do</button>
+      <button class="note-pin-btn ${n.pinned ? 'on' : ''}" data-action="note-pin" data-id="${n.id}" title="${n.pinned ? '고정 해제' : '상단에 고정'}">${n.pinned ? '📌 고정됨' : '고정'}</button>
+      <button class="mini-btn note-todo-btn" data-action="note-todo" data-id="${n.id}" title="이 기록에서 할 일 만들기">할 일 만들기</button>
     </div>
     ${n.body ? `<div class="note-body clamp rich">${noteBodyForFeed(n.body)}</div><button class="note-more" data-action="note-expand" style="display:none">더보기 ▾</button>` : ''}
   </div>`;
@@ -1617,7 +1653,7 @@ function renderNotes() {
   if (isAll) {
     const last = gNotes.slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''))[0];
     const withNotes = new Set(gNotes.map(n => n.group || ''));
-    pageHead = `<div class="page-head"><span class="page-icon c-gray">📚</span><h2 class="page-title">전체 기록</h2></div>`;
+    pageHead = `<div class="page-head"><span class="page-icon c-gray">${workspaceIcon('note')}</span><h2 class="page-title">전체 기록</h2></div>`;
     propBar = `<div class="prop-bar">
       <span class="prop-chip">📁 프로젝트 ${withNotes.size}</span>
       <span class="prop-chip">📝 기록 ${gNotes.length}</span>
@@ -1627,10 +1663,10 @@ function renderNotes() {
     const bCards = state.cards.filter(c => c.project === selBoard.id);
     const bDone = bCards.filter(c => c.status === 'done').length;
     const bPeriod = (selBoard.start && selBoard.end) ? `${fmtDate(selBoard.start)} ~ ${fmtDate(selBoard.end)}` : null;
-    pageHead = `<div class="page-head"><span class="page-icon c-${g ? g.color : 'gray'}">📁</span><h2 class="page-title"><span class="pt-parent">${esc(gname)}</span> <span class="pt-sep">›</span> 🗂 ${esc(selBoard.name)}</h2></div>`;
+    pageHead = `<div class="page-head"><span class="page-icon c-${g ? g.color : 'gray'}">${workspaceIcon('project')}</span><h2 class="page-title"><span class="pt-parent">${esc(gname)}</span> <span class="pt-sep">›</span> 🗂 ${esc(selBoard.name)}</h2></div>`;
     propBar = `<div class="prop-bar">
       ${bPeriod ? `<span class="prop-chip">📅 ${bPeriod}</span>` : ''}
-      <span class="prop-chip">✅ 진행 ${bDone}/${bCards.length}</span>
+      <span class="prop-chip">✅ 완료 ${bDone}/${bCards.length}</span>
       <span class="prop-chip">📝 기록 ${cntBoard(selBoard.id)}</span>
     </div>`;
   } else {
@@ -1646,11 +1682,11 @@ function renderNotes() {
       const n = dday(ns.date);
       nsChip = `<span class="prop-chip sched-chip ${n < 0 ? 'over' : ''}" data-action="sched-edit" data-id="${ns.id}" title="${esc(ns.title)}">📌 ${esc(ns.title)} · ${n < 0 ? -n + '일 지남' : n === 0 ? 'D-day' : 'D-' + n}</span>`;
     }
-    pageHead = `<div class="page-head"><span class="page-icon c-${g ? g.color : 'gray'}">📁</span><h2 class="page-title">${esc(gname)}</h2></div>`;
+    pageHead = `<div class="page-head"><span class="page-icon c-${g ? g.color : 'gray'}">${workspaceIcon('project')}</span><h2 class="page-title">${esc(gname)}</h2></div>`;
     propBar = `<div class="prop-bar">
       <span class="prop-chip" ${g ? `data-action="group-edit" data-id="${g.id}" title="클릭해서 기간 수정"` : ''}>📅 ${periodTxt}</span>
       <span class="prop-chip">🗂 보드 ${gBoards.filter(b => !b.folder).length}</span>
-      <span class="prop-chip">✅ 진행 ${doneCnt}/${gCards.length}</span>
+      <span class="prop-chip">✅ 완료 ${doneCnt}/${gCards.length}</span>
       <span class="prop-chip">🕐 최근 기록 ${lastNote && lastNote.date ? fmtDate(lastNote.date) : '없음'}</span>
       ${nsChip}
     </div>`;
@@ -1861,7 +1897,7 @@ function openNoteTodoModal(noteId) {
   const opts = boards.map(b => `<option value="${b.id}">${esc(b.name)}</option>`).join('') + `<option value="__inbox">📥 미배정</option>`;
   showModal(`
     <h3>기록에서 할 일 만들기</h3>
-    <p class="restore-note">"${esc(n.title)}" 기록을 바탕으로 To-do를 만듭니다.</p>
+    <p class="restore-note">"${esc(n.title)}" 기록을 바탕으로 할 일을 만듭니다.</p>
     <label>할 일 내용<input type="text" id="m-ttitle" value="${esc(n.title)}"></label>
     <label>보드<select id="m-tboard">${opts}</select></label>
     <label>중요도${prioPicker('med')}</label>
@@ -1870,8 +1906,7 @@ function openNoteTodoModal(noteId) {
       <button class="primary" data-action="note-todo-save">만들기</button>
     </div>`);
 }
-function openOverviewModal() {
-  const gid = currentNoteGroup();
+function openOverviewModal(gid = currentNoteGroup()) {
   const g = gid ? groupById(gid) : null;
   const cur = g ? (g.overview || '') : (state.unGroupOverview || '');
   showModal(`
@@ -1879,11 +1914,11 @@ function openOverviewModal() {
     <label>프로젝트 핵심 현황·컨택포인트·주의사항<textarea id="m-overview" rows="7" placeholder="예: 감사반: 나+A매니저 / 회사 담당: 경리팀장 김OO (내선 1234)&#10;7월 말까지 중간감사, 재고실사 8/20 예정&#10;⚠ 전기 감사인 의견 확인 필요">${esc(cur)}</textarea></label>
     <div class="m-actions">
       <button class="ghost" data-action="modal-close">취소</button>
-      <button class="primary" data-action="overview-save">저장</button>
+      <button class="primary" data-action="overview-save" data-gid="${esc(gid)}">저장</button>
     </div>`);
 }
 
-/* ---------- 타임박스 (일론 머스크식 Time Box) ---------- */
+/* ---------- 하루 계획 (일론 머스크식 Time Box) ---------- */
 let tbSel = null;    // 선택된 Big3 인덱스 (칠하기 대상)
 let tbPaint = null;  // { erase } — 드래그 칠하기 진행 중
 function tbData(date) {
@@ -1895,6 +1930,16 @@ function tbData(date) {
   return d;
 }
 function tbSum(d, idx) { return Object.values(d.slots).filter(v => v === idx).length * 0.5; }
+function openTimeRange() {
+  const d = tbData(state.sel.tboxDate || todayStr());
+  const items = d.big3.map((b, i) => b ? `<option value="${i}" ${tbSel === i ? 'selected' : ''}>${i + 1}. ${esc(tbTitle(b))}</option>` : '').join('');
+  const times = Array.from({length:37}, (_, i) => { const h = 6 + Math.floor(i / 2); return `${String(h).padStart(2, '0')}:${i % 2 ? '30' : '00'}`; });
+  const options = (value, end) => times.filter(t => end || t !== '24:00').map(t => `<option ${t === value ? 'selected' : ''}>${t}</option>`).join('');
+  showModal(`<h3>시간 배정</h3><p class="restore-note">30분 단위로 배정합니다. 선택한 구간에 기존 배정이 있으면 바뀝니다.</p>
+    <label>핵심 업무<select id="m-time-task">${items}</select></label>
+    <div class="two"><label>시작<select id="m-time-start">${options('09:00', false)}</select></label><label>종료<select id="m-time-end">${options('10:00', true)}</select></label></div>
+    <p class="restore-note" id="m-time-error" role="alert"></p><div class="m-actions"><button class="ghost" data-action="modal-close">취소</button><button class="ghost" data-action="tb-time-clear">구간 비우기</button><button class="primary" data-action="tb-time-save" ${items ? '' : 'disabled'}>배정</button></div>`);
+}
 // 카드가 삭제되면(보드 삭제 포함) 모든 날짜의 Big3에서도 제거 + 배정 시간칸 정리
 function purgeTimeboxCards(cardIds) {
   const ids = new Set(cardIds);
@@ -1910,7 +1955,7 @@ function purgeTimeboxCards(cardIds) {
   });
   tbSel = null;
 }
-// Big3 항목의 완수 여부는 실제 카드 상태를 진실의 원천으로 사용 → 어느 날짜에서 완료해도 모든 날에 반영
+// Big3 항목의 완료 여부는 실제 카드 상태를 진실의 원천으로 사용 → 어느 날짜에서 완료해도 모든 날에 반영
 function tbDone(b) {
   if (!b) return false;
   if (b.cardId) { const c = state.cards.find(x => x.id === b.cardId); if (c) return c.status === 'done'; }
@@ -1946,8 +1991,10 @@ function tbMoveBig3(from, to) {
 }
 /* ---------- 트리 (프로젝트 세부 내역: 보드 › 할일·기록) ---------- */
 const treeClosed = new Set();     // 접은 노드 키 (기본은 펼침)
-const treeSeeded = new Set();     // 기본 접힘으로 시드한 키(완수 묶음)
+const treeSeeded = new Set();     // 기본 접힘으로 시드한 키(완료 묶음)
 const treeNoteOpen = new Set();   // 본문을 펼친 기록
+let treeAreaId = null;
+let treeDetailTab = 'tasks';
 function treeOpen(key, defClosed) {
   if (defClosed && !treeSeeded.has(key)) { treeSeeded.add(key); treeClosed.add(key); }
   return !treeClosed.has(key);
@@ -1961,31 +2008,127 @@ function treeGroupId() {
 }
 function trCaret(key, has, open) {
   if (!has) return '<span class="tr-caret sp"></span>';
-  return `<button class="tr-caret" data-action="tree-toggle" data-key="${esc(key)}" title="${open ? '접기' : '펼치기'}">${open ? '▾' : '▸'}</button>`;
+  return `<button class="tr-caret" data-action="tree-toggle" data-key="${esc(key)}" aria-expanded="${open}" title="${open ? '접기' : '펼치기'}">${open ? '▾' : '▸'}</button>`;
 }
 function trLi(node, children) {
   return `<li>${node}${children ? `<ul class="tr-children">${children}</ul>` : ''}</li>`;
 }
+function projectBriefingHeading() {
+  const all = state.sel.treeMode === 'all';
+  return `<div class="brief-page-head"><div class="view-heading"><h2>프로젝트 개관</h2><p>전체 맥락을 읽고, 업무 영역별 상황과 다음 일정을 확인하세요.</p></div>
+    <div class="brief-mode" aria-label="프로젝트 보기 방식"><button data-action="tree-mode" data-mode="summary" aria-pressed="${!all}">프로젝트 요약</button><button data-action="tree-mode" data-mode="all" aria-pressed="${all}">전체 항목</button></div></div>`;
+}
+function projectBriefingSelector(gid) {
+  const select = (id, name) => `<button class="fpill ${gid === id ? 'on' : ''}" data-action="tree-group" data-gid="${esc(id)}" aria-pressed="${gid === id}">${esc(name)}</button>`;
+  return `<div class="brief-projects" aria-label="프로젝트 선택">${(state.groups || []).map(g => select(g.id, g.name)).join('')}${select('', '미분류')}</div>`;
+}
+function projectBriefingIdentity(g) {
+  const periods = (g?.periods || []).filter(p => p.start || p.end);
+  const periodText = periods.length ? periods.map(p => `${p.start || '시작 미정'} ~ ${p.end || '종료 미정'}`).join(' / ') : '수행기간 미설정';
+  return `<div class="brief-hero-title"><div class="brief-project-identity"><span class="brief-project-icon">${workspaceIcon('project')}</span><div><span class="brief-eyebrow">PROJECT BRIEFING</span><h3>${esc(g ? g.name : '미분류 보드')}</h3></div></div><span class="brief-period">${workspaceIcon('calendar')}${esc(periodText)}</span></div>`;
+}
+// 각 보드를 한 영역에만 포함한다. 부모가 없거나 프로젝트 밖인 보드는 영역의 시작점이다.
+function projectBriefingAreas(boards) {
+  const ids = new Set(boards.map(b => b.id)), children = new Map(), visited = new Set();
+  boards.forEach(b => { if (!children.has(b.parent)) children.set(b.parent, []); children.get(b.parent).push(b); });
+  const areas = [];
+  const visit = (b, depth, members) => {
+    if (visited.has(b.id)) return;
+    visited.add(b.id); members.push({ board: b, depth });
+    (children.get(b.id) || []).forEach(child => visit(child, depth + 1, members));
+  };
+  const add = root => { if (visited.has(root.id)) return; const members = []; visit(root, 0, members); areas.push({ root, members, ids: new Set(members.map(m => m.board.id)) }); };
+  boards.filter(b => !ids.has(b.parent)).forEach(add);
+  boards.forEach(add); // 잘못된 순환 관계가 있어도 누락하거나 무한 재귀하지 않는다.
+  return areas;
+}
+function briefingStats(cards) {
+  const done = cards.filter(c => c.status === 'done').length;
+  return { total: cards.length, done, doing: cards.filter(c => c.status === 'doing').length,
+    overdue: cards.filter(c => c.status !== 'done' && c.due && dday(c.due) < 0).length,
+    pct: cards.length ? Math.round(done / cards.length * 100) : 0 };
+}
+function briefingProgress(s) {
+  return `<div class="brief-progress" role="progressbar" aria-label="할 일 완료율" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${s.pct}" aria-valuetext="${s.total ? `${s.total}건 중 ${s.done}건 완료` : '등록된 할 일 없음'}"><span style="width:${s.pct}%"></span></div>`;
+}
+function briefingNote(n, detail = false) {
+  const open = detail && treeNoteOpen.has(n.id);
+  const text = noteBodyPlain(n.body).replace(/\s+/g, ' ').trim();
+  const b = boardById(n.board);
+  return `<article class="brief-note">
+    <button class="brief-note-link" data-action="${detail ? 'tree-note' : 'tree-gonote'}" data-id="${esc(n.id)}" ${detail ? `aria-expanded="${open}"` : ''}>
+      <span class="brief-note-meta">${esc(NOTE_TYPES[n.type]?.label || '업무 기록')} · ${esc(n.date || '날짜 미지정')} · ${esc(b ? b.name : '프로젝트 공통')}</span>
+      <strong>${esc(n.title || '(제목 없음)')}</strong>${!open && text ? `<span class="brief-note-excerpt">${esc(text.slice(0, 180))}</span>` : ''}</button>
+    ${open ? `<div class="brief-note-body">${noteBodyForFeed(n.body)}</div><button class="mini-btn" data-action="tree-gonote" data-id="${esc(n.id)}">기록 편집 ↗</button>` : ''}</article>`;
+}
+function renderBriefingDetail(area, cards, notes) {
+  const stats = briefingStats(cards);
+  const order = { doing: 0, todo: 1, done: 2 };
+  const status = { doing: '진행 중', todo: '할 일', done: '완료' };
+  const rows = cards.slice().sort((a, b) => (order[a.status] ?? 1) - (order[b.status] ?? 1) || dueSort(a, b));
+  let body;
+  if (treeDetailTab === 'notes') body = notes.map(n => briefingNote(n, true)).join('') || '<p class="brief-empty">이 업무 영역에 연결된 기록이 없습니다.</p>';
+  else if (treeDetailTab === 'boards') body = area.members.map(({ board: b, depth }) => `<button class="brief-board-row" data-action="tree-goboard" data-bid="${esc(b.id)}" style="--brief-depth:${Math.min(depth, 4)}"><span>${depth ? `하위 ${depth}단계` : '상위 보드'}${b.folder ? ' · 묶음' : ''}${b.done ? ' · 완료' : ''}</span><strong>${esc(b.name)}</strong><span>보드 열기 ↗</span></button>`).join('');
+  else body = rows.map(c => `<button class="brief-task ${c.status === 'done' ? 'is-done' : c.due && dday(c.due) < 0 ? 'is-overdue' : ''}" data-action="card" data-id="${esc(c.id)}"><span class="brief-task-status">${status[c.status] || '할 일'}${c.status !== 'done' && c.due && dday(c.due) < 0 ? ' · 기한 지남' : ''}</span><strong>${esc(c.title)}</strong><span class="brief-task-meta">${esc(boardById(c.project)?.name || '')}${c.due ? ` · 마감 ${esc(c.due)}` : ''}</span></button>`).join('') || '<p class="brief-empty">등록된 할 일이 없습니다.</p>';
+  const tab = (key, label, count) => `<button data-action="tree-detail-tab" data-tab="${key}" aria-pressed="${treeDetailTab === key}">${label} <span>${count}</span></button>`;
+  return `<aside class="brief-detail" id="brief-detail" tabindex="-1" aria-label="업무 영역 상세"><div class="brief-detail-head"><div><span class="brief-eyebrow">업무 영역 상세</span><h3>${esc(area.root.name)}</h3></div><button class="mini-btn" data-action="tree-area-close" aria-label="업무 영역 상세 닫기">닫기 ×</button></div>
+    <p class="brief-caption">하위 보드 포함 · 완료 ${stats.done}/${stats.total}건</p>${briefingProgress(stats)}
+    <div class="brief-detail-tabs" aria-label="업무 영역 상세 보기">${tab('tasks', '할 일', cards.length)}${tab('notes', '기록', notes.length)}${tab('boards', '보드', area.members.length)}</div>
+    <div class="brief-detail-body">${body}</div></aside>`;
+}
+function renderProjectBriefing() {
+  const gid = treeGroupId(), g = gid ? groupById(gid) : null;
+  const boards = state.projects.filter(b => (b.group || '') === gid), ids = new Set(boards.map(b => b.id));
+  const cards = state.cards.filter(c => ids.has(c.project));
+  const notes = (state.notes || []).filter(n => (n.group || '') === gid).slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const stats = briefingStats(cards), areas = projectBriefingAreas(boards);
+  const selected = areas.find(a => a.root.id === treeAreaId);
+  const overview = g ? g.overview : state.unGroupOverview;
+  const schedules = (state.schedules || []).filter(s => (s.group || '') === gid && !s.done && s.date && dday(s.date) >= 0).slice().sort(schedSort);
+  const next = schedules[0];
+  const areaCards = areas.map(area => {
+    const cs = cards.filter(c => area.ids.has(c.project)), s = briefingStats(cs);
+    const live = cs.filter(c => c.status === 'doing').sort(dueSort);
+    const upcoming = cs.filter(c => c.status !== 'done' && c.due).sort(dueSort)[0];
+    return `<article class="brief-area ${selected === area ? 'selected' : ''}"><div class="brief-area-heading"><span class="brief-area-icon">${workspaceIcon('folder')}</span><div><span class="brief-eyebrow">${area.root.folder ? '묶음 보드' : '상위 보드'}</span><h4>${esc(area.root.name)}</h4></div></div>
+      <div class="brief-area-content"><div class="brief-area-count"><span>할 일 완료율</span><strong>${s.done}<small> / ${s.total}건</small></strong></div>${briefingProgress(s)}
+      <p class="brief-caption">하위 보드 ${area.members.length - 1}개 포함${s.total ? ` · ${s.pct}% 완료` : ' · 등록된 할 일 없음'}</p>
+      <div class="brief-area-status"><span>진행 중 <b>${s.doing}</b></span><span class="${s.overdue ? 'has-overdue' : ''}">기한 지남 <b>${s.overdue}</b></span></div>
+      <div class="brief-area-work"><span>진행 중인 업무</span>${live.length ? `<ul>${live.slice(0, 2).map(c => `<li>${esc(c.title)}</li>`).join('')}</ul>${live.length > 2 ? `<small>외 ${live.length - 2}건 · 상세에서 확인</small>` : ''}` : '<p>현재 진행 중인 할 일이 없습니다.</p>'}</div>
+      ${upcoming ? `<p class="brief-area-due">${dday(upcoming.due) < 0 ? '지나간 마감' : '가장 가까운 마감'} · ${esc(upcoming.due)}</p>` : ''}
+      <button class="brief-area-open" data-action="tree-area" data-bid="${esc(area.root.id)}" aria-expanded="${selected === area}" aria-controls="brief-detail">상세 보기 <span>→</span></button></div></article>`;
+  }).join('');
+  const timeline = schedules.slice(0, 4).map(s => `<button class="brief-schedule" data-action="sched-edit" data-id="${esc(s.id)}"><span class="brief-schedule-date">${esc(s.date.slice(5).replace('-', '/'))}<small>${s.time ? esc(s.time) : '종일'}</small></span><strong>${esc(s.title)}</strong><span class="brief-dday">${dday(s.date) === 0 ? '오늘' : `D-${dday(s.date)}`}</span></button>`).join('');
+  return `${projectBriefingHeading()}${projectBriefingSelector(gid)}
+    <section class="brief-hero">${projectBriefingIdentity(g)}
+      <div class="brief-overview"><div class="brief-section-heading"><h4>프로젝트 개요</h4><button class="mini-btn" data-action="tree-overview-edit">${overview ? '개요 수정' : '개요 작성'} ↗</button></div><p class="brief-overview-text ${overview ? '' : 'is-empty'}">${overview ? esc(overview) : '프로젝트의 목적, 담당자, 주의사항을 적어두세요. 업무 기록의 프로젝트 개요와 함께 저장됩니다.'}</p></div></section>
+    <div class="brief-metrics"><section class="brief-metric completion"><span class="brief-metric-label">${workspaceIcon('check')}할 일 완료율</span><strong>${stats.total ? `${stats.pct}%` : '—'} <small>${stats.done}/${stats.total}건 완료</small></strong>${briefingProgress(stats)}<small>이 프로젝트의 모든 보드 기준</small></section><section class="brief-metric"><span class="brief-metric-label">${workspaceIcon('clock')}진행 중</span><strong>${stats.doing}<small>건</small></strong><small>전체 할 일 ${stats.total}건</small></section><section class="brief-metric ${stats.overdue ? 'has-overdue' : ''}"><span class="brief-metric-label">${workspaceIcon('alert')}기한 지남</span><strong>${stats.overdue}<small>건</small></strong><small>완료되지 않은 할 일 기준</small></section><section class="brief-metric next"><span class="brief-metric-label">${workspaceIcon('calendar')}다음 주요 일정</span>${next ? `<button data-action="sched-edit" data-id="${esc(next.id)}"><strong>${esc(next.date.slice(5).replace('-', '/'))}${next.time ? `<small>${esc(next.time)}</small>` : ''}</strong><span>${esc(next.title)}</span></button>` : '<strong class="brief-no-schedule">예정된 일정 없음</strong>'}</section></div>
+    <div class="brief-workspace ${selected ? 'has-detail' : ''}"><div class="brief-main"><section class="brief-areas"><div class="brief-section-heading"><div><h3>업무 영역 <span>${areas.length}</span></h3><p class="brief-caption">상위 보드별 요약 · 할 일 수에는 하위 보드가 포함됩니다.</p></div></div><div class="brief-area-grid">${areaCards || '<div class="brief-empty">보드를 만들면 이곳에 업무 영역이 표시됩니다.</div>'}</div></section>
+      <div class="brief-bottom"><section class="brief-section"><div class="brief-section-heading"><h3>최근 업무 기록 <span>${notes.length}</span></h3></div>${notes.slice(0, 3).map(n => briefingNote(n)).join('') || '<p class="brief-empty">아직 작성된 업무 기록이 없습니다.</p>'}${notes.length > 3 ? '<button class="brief-more" data-action="tree-mode" data-mode="all">전체 항목에서 기록 더 보기 →</button>' : ''}</section>
+      <section class="brief-section"><div class="brief-section-heading"><h3>다가오는 일정</h3></div>${timeline || '<p class="brief-empty">오늘 이후의 주요 일정이 없습니다.</p>'}${schedules.length > 4 ? '<button class="brief-more" data-action="tree-mode" data-mode="all">전체 일정 보기 →</button>' : ''}<p class="brief-caption">프로젝트 일정 기준 · 할 일 마감은 영역 상세에서 확인</p></section></div></div>
+      ${selected ? renderBriefingDetail(selected, cards.filter(c => selected.ids.has(c.project)), notes.filter(n => selected.ids.has(n.board))) : ''}</div>`;
+}
 function renderTree() {
-  const groups = state.groups || [];
+  if (state.sel.treeMode !== 'all') return renderProjectBriefing();
   const gid = treeGroupId();
   const g = gid ? groupById(gid) : null;
-  const color = g ? g.color : 'gray';
-  const pills = groups.map(x => `<button class="fpill ${gid === x.id ? 'on c-' + x.color : ''}" data-action="tree-group" data-gid="${x.id}">📁 ${esc(x.name)}</button>`).join('')
-    + `<button class="fpill ${gid === '' ? 'on c-gray' : ''}" data-action="tree-group" data-gid="">미분류</button>`;
-
   const boards = state.projects.filter(b => (b.group || '') === gid);
   const bIds = new Set(boards.map(b => b.id));
+  const cards = state.cards.filter(c => bIds.has(c.project));
+  const areas = projectBriefingAreas(boards);
+  const rootAreas = new Map(areas.map(a => [a.root.id, a]));
+  const rendered = new Set();
   const byParent = {};
   boards.forEach(b => { const p = (b.parent && bIds.has(b.parent)) ? b.parent : '__root'; (byParent[p] = byParent[p] || []).push(b); });
   const gNotes = (state.notes || []).filter(n => (n.group || '') === gid);
 
   // 개별 항목 노드
   const cardLeaf = c => {
-    const mark = c.status === 'done' ? '<span class="tr-mk done">✓</span>' : c.status === 'doing' ? '<span class="tr-mk doing">▶</span>' : '<span class="tr-mk">□</span>';
-    const due = (c.status !== 'done' && c.due) ? `<span class="tr-sub">${fmtDate(c.due)}</span>` : (c.doneAt ? `<span class="tr-sub">${fmtDate(c.doneAt)}</span>` : '');
-    return trLi(`<div class="tr-node item ${c.status}" data-action="card" data-id="${c.id}" title="클릭하면 수정">
-      <span class="tr-caret sp"></span>${mark}${fuBadgeHtml(c)}<span class="tr-t">${esc(c.title)}</span>${due}</div>`);
+    const overdue = c.status !== 'done' && c.due && dday(c.due) < 0;
+    const status = c.status === 'done' ? '완료' : c.status === 'doing' ? '진행 중' : '할 일';
+    const date = c.status !== 'done' && c.due ? `마감 ${fmtDate(c.due)}` : c.doneAt ? `완료 ${fmtDate(c.doneAt)}` : '';
+    return trLi(`<button class="tr-node item ${c.status} ${overdue ? 'is-overdue' : ''}" data-action="card" data-id="${c.id}" title="클릭하면 수정">
+      <span class="tr-item-state">${status}${overdue ? ' · 기한 지남' : ''}</span><span class="tr-t">${esc(c.title)}</span><span class="tr-item-meta">${fuBadgeHtml(c)}${esc(date)}</span></button>`);
   };
   const noteLeaf = n => {
     const nt = NOTE_TYPES[n.type] || NOTE_TYPES.memo;
@@ -1993,11 +2136,13 @@ function renderTree() {
     // 본문은 토글 영역 밖(형제)으로 — 본문 클릭·드래그로 접히지 않게
     const body = open ? `<div class="tr-note-body">${noteBodyForFeed(n.body) || '<span class="tr-sub">내용 없음</span>'}</div>` : '';
     return trLi(`<div class="tr-node note ${open ? 'open' : ''}">
-      <div class="tr-note-head" data-action="tree-note" data-id="${n.id}" title="클릭하면 본문 펼치기"><span class="tr-caret">${open ? '▾' : '▸'}</span><span class="tr-mk">${nt.icon}</span><span class="tr-t">${esc(n.title || '(제목 없음)')}</span>${n.date ? `<span class="tr-sub">${fmtDate(n.date)}</span>` : ''}
-        <button class="tr-go" data-action="tree-gonote" data-id="${n.id}" title="기록 편집">✎</button></div>${body}</div>`);
+      <div class="tr-note-head"><button class="tr-note-toggle" data-action="tree-note" data-id="${n.id}" aria-expanded="${open}" title="클릭하면 본문 펼치기"><span class="tr-note-meta">${esc(nt.label)}${n.date ? ` · ${fmtDate(n.date)}` : ''}</span><span class="tr-note-title"><span aria-hidden="true">${open ? '▾' : '▸'}</span><span class="tr-t">${esc(n.title || '(제목 없음)')}</span></span></button>
+        <button class="tr-go" data-action="tree-gonote" data-id="${n.id}" title="기록 편집">편집 ↗</button></div>${body}</div>`);
   };
   // 보드 노드(하위 보드 재귀 + 할일/기록 묶음)
-  const boardNode = b => {
+  const boardNode = (b, depth = 0) => {
+    if (rendered.has(b.id)) return '';
+    rendered.add(b.id);
     const kids = byParent[b.id] || [];
     const cs = state.cards.filter(c => c.project === b.id);
     const live = cs.filter(c => c.status !== 'done').sort((a, c) => (a.status === 'doing' ? -1 : 0) - (c.status === 'doing' ? -1 : 0));
@@ -2008,61 +2153,50 @@ function renderTree() {
     if (bOpen) {
       if (cs.length) {
         const tKey = 't:' + b.id, tOpen = treeOpen(tKey);
-        const dKey = 'd:' + b.id, dOpen = treeOpen(dKey, true);   // 완수 묶음은 기본 접힘
+        const dKey = 'd:' + b.id, dOpen = treeOpen(dKey, true);   // 완료 묶음은 기본 접힘
         let items = tOpen ? live.map(cardLeaf).join('') : '';
         if (tOpen && done.length) {
           items += trLi(`<div class="tr-node grp done-grp" data-action="tree-toggle" data-key="${dKey}">
-            ${trCaret(dKey, true, dOpen)}<span class="tr-t">✓ 완수</span><span class="tr-cnt">${done.length}</span></div>`,
+            ${trCaret(dKey, true, dOpen)}<span class="tr-t">완료한 할 일</span><span class="tr-cnt">${done.length}</span></div>`,
             dOpen ? done.map(cardLeaf).join('') : '');
         }
-        sub += trLi(`<div class="tr-node grp" data-action="tree-toggle" data-key="${tKey}">
-          ${trCaret(tKey, true, tOpen)}<span class="tr-t">✅ 할 일</span><span class="tr-cnt">${cs.length}</span></div>`, items);
+        sub += trLi(`<div class="tr-node grp task-grp" data-action="tree-toggle" data-key="${tKey}">
+          ${trCaret(tKey, true, tOpen)}${workspaceIcon('check')}<span class="tr-t">할 일</span><span class="tr-cnt">${cs.length}</span></div>`, items);
       }
       if (ns.length) {
         const nKey = 'n:' + b.id, nOpen = treeOpen(nKey);
-        sub += trLi(`<div class="tr-node grp" data-action="tree-toggle" data-key="${nKey}">
-          ${trCaret(nKey, true, nOpen)}<span class="tr-t">📝 기록</span><span class="tr-cnt">${ns.length}</span></div>`, nOpen ? ns.map(noteLeaf).join('') : '');
+        sub += trLi(`<div class="tr-node grp note-grp" data-action="tree-toggle" data-key="${nKey}">
+          ${trCaret(nKey, true, nOpen)}${workspaceIcon('note')}<span class="tr-t">업무 기록</span><span class="tr-cnt">${ns.length}</span></div>`, nOpen ? ns.map(noteLeaf).join('') : '');
       }
-      sub += kids.map(boardNode).join('');
+      sub += kids.map(child => boardNode(child, depth + 1)).join('');
     }
     const hasKids = !!(cs.length || ns.length || kids.length);
-    const doneMark = b.done ? '<span class="tr-sub">✓ 완료</span>' : '';
-    return trLi(`<div class="tr-node board c-${b.color} ${b.done ? 'is-done' : ''}">
-      ${trCaret(bKey, hasKids, bOpen)}<span class="tr-t">${b.folder ? '📚' : '🗂'} ${esc(b.name)}</span>${doneMark}
-      <button class="tr-go" data-action="tree-goboard" data-bid="${b.id}" title="이 보드로 이동">↗</button></div>`, sub);
+    const area = rootAreas.get(b.id);
+    const stats = area && briefingStats(cards.filter(c => area.ids.has(c.project)));
+    const summary = stats ? `<div class="tr-branch-summary"><div><span>하위 보드 포함</span><strong>완료 ${stats.done}/${stats.total}건</strong></div>${briefingProgress(stats)}<div class="tr-branch-status"><span>진행 중 ${stats.doing}</span>${stats.overdue ? `<span class="is-overdue">기한 지남 ${stats.overdue}</span>` : ''}<span>보드 ${area.members.length}개</span></div></div>` : '';
+    return `<li class="tr-branch ${depth ? 'is-child' : 'is-top'} ${depth >= 3 ? 'is-deep' : ''}" data-board="${esc(b.id)}"><div class="tr-node board ${b.done ? 'is-done' : ''}">
+      ${trCaret(bKey, hasKids, bOpen)}<span class="tr-board-icon">${workspaceIcon('folder')}</span><span class="tr-board-title"><span>${depth ? `하위 보드 · ${depth}단계` : '상위 보드'}${b.folder ? ' · 묶음' : ''}${b.done ? ' · 완료' : ''}</span><strong class="tr-t">${esc(b.name)}</strong></span>
+      <button class="tr-go" data-action="tree-goboard" data-bid="${b.id}" title="이 보드로 이동">열기 ↗</button></div>${summary}${sub ? `<ul class="tr-children tr-board-children">${sub}</ul>` : hasKids ? '' : '<p class="tr-board-empty">등록된 하위 보드·할 일·기록이 없습니다.</p>'}</li>`;
   };
 
-  let lvl2 = (byParent.__root || []).map(boardNode).join('');
-  const common = gNotes.filter(n => !n.board);
-  if (common.length) {
+  const branches = areas.map(a => boardNode(a.root)).join('');
+  const common = gNotes.filter(n => !bIds.has(n.board));
+  let resources = '';
+  {
     const cKey = 'c:' + gid, cOpen = treeOpen(cKey);   // 프로젝트별 키 — 접힘 상태가 서로 섞이지 않게
-    lvl2 += trLi(`<div class="tr-node board plain" data-action="tree-toggle" data-key="${cKey}">
-      ${trCaret(cKey, true, cOpen)}<span class="tr-t">📄 프로젝트 공통</span><span class="tr-cnt">${common.length}</span></div>`,
-      cOpen ? common.sort((a, c) => (c.date || '').localeCompare(a.date || '')).map(noteLeaf).join('') : '');
+    resources += `<section class="tr-resource"><div class="tr-resource-head">${trCaret(cKey, true, cOpen)}${workspaceIcon('note')}<h4>프로젝트 공통 기록</h4><span class="tr-cnt">${common.length}</span></div>${cOpen ? `<ul class="tr-resource-list">${common.sort((a, c) => (c.date || '').localeCompare(a.date || '')).map(noteLeaf).join('') || '<li class="brief-empty">보드에 연결되지 않은 프로젝트 기록이 표시됩니다.</li>'}</ul>` : ''}</section>`;
   }
   const scheds = (state.schedules || []).filter(s => (s.group || '') === gid).sort(schedSort);
-  if (scheds.length) {
+  {
     const sKey = 's:' + gid, sOpen = treeOpen(sKey);
-    const rows = scheds.map(s => trLi(`<div class="tr-node item" data-action="sched-edit" data-id="${s.id}" title="클릭하면 수정">
-      <span class="tr-caret sp"></span><span class="tr-mk">📌</span><span class="tr-t">${esc(s.title)}</span><span class="tr-sub">${s.date ? fmtDate(s.date) : ''}${s.time ? ' ' + s.time : ''}</span></div>`)).join('');
-    lvl2 += trLi(`<div class="tr-node board plain" data-action="tree-toggle" data-key="${sKey}">
-      ${trCaret(sKey, true, sOpen)}<span class="tr-t">📌 일정 · 마감</span><span class="tr-cnt">${scheds.length}</span></div>`, sOpen ? rows : '');
+    const rows = scheds.map(s => `<li><button class="brief-schedule ${s.done ? 'is-done' : s.date && dday(s.date) < 0 ? 'is-past' : ''}" data-action="sched-edit" data-id="${esc(s.id)}"><span class="brief-schedule-date">${s.date ? esc(s.date.slice(5).replace('-', '/')) : '미정'}<small>${esc(s.time || '종일')}</small></span><strong>${esc(s.title)}</strong><span class="brief-dday">${s.done ? '완료' : !s.date ? '미정' : dday(s.date) < 0 ? '지난 일정' : dday(s.date) === 0 ? '오늘' : `D-${dday(s.date)}`}</span></button></li>`).join('');
+    resources += `<section class="tr-resource tr-resource-schedules"><div class="tr-resource-head">${trCaret(sKey, true, sOpen)}${workspaceIcon('calendar')}<h4>프로젝트 전체 일정</h4><span class="tr-cnt">${scheds.length}</span></div>${sOpen ? `<ul class="tr-resource-list">${rows || '<li class="brief-empty">등록된 프로젝트 일정이 없습니다.</li>'}</ul>` : ''}</section>`;
   }
 
-  const cardCnt = state.cards.filter(c => c.project && bIds.has(c.project)).length;
-  const rootLabel = `<div class="tr-node root c-${color}">
-      <span class="tr-t">📁 ${esc(g ? g.name : '미분류')}</span>
-      <span class="tr-cnt">🗂 ${boards.length} · ✅ ${cardCnt} · 📝 ${gNotes.length}</span></div>`;
-  const body = lvl2
-    ? `<div class="tr-root">${rootLabel}<ul class="tr-children">${lvl2}</ul></div>`
-    : `<div class="tr-root">${rootLabel}</div><div class="empty">이 프로젝트에는 아직 보드·기록이 없어요</div>`;
-  return `<div class="tree-wrap">
-    <div class="cal-filter"><span class="fl-label">프로젝트</span>${pills}
-      <button class="fpill" data-action="tree-all" data-v="open" title="모든 노드 펼치기">⊞ 모두 펼치기</button>
-      <button class="fpill" data-action="tree-all" data-v="close" title="보드만 남기고 접기">⊟ 모두 접기</button>
-      <span class="fl-note">보드 클릭=펼치기 · 기록 클릭=본문 · 할 일 클릭=수정 · ↗=보드로 이동</span></div>
-    <div class="tree-canvas slim-scroll">${body}</div>
-  </div>`;
+  return `${projectBriefingHeading()}${projectBriefingSelector(gid)}<section class="brief-hero tr-project-root">${projectBriefingIdentity(g)}<div class="tr-inventory"><span>${workspaceIcon('folder')}보드 <b>${boards.length}</b></span><span>${workspaceIcon('check')}할 일 <b>${cards.length}</b></span><span>${workspaceIcon('note')}기록 <b>${gNotes.length}</b></span><span>${workspaceIcon('calendar')}일정 <b>${scheds.length}</b></span></div></section>
+    <div class="tree-wrap tree-atlas"><div class="tr-toolbar"><div><h3>프로젝트 구성 <span>${areas.length}개 업무 영역</span></h3><p class="brief-caption">상위 보드별로 연결된 하위 보드와 항목을 확인하세요.</p></div><div class="tr-toolbar-actions"><button class="mini-btn" data-action="tree-all" data-v="open">모두 펼치기</button><button class="mini-btn" data-action="tree-all" data-v="close" title="보드 구조만 남기고 세부 항목 접기">보드만 보기</button></div></div>
+    <div class="tr-legend"><span><i class="tr-key-top"></i>상위 보드</span><span><i class="tr-key-child"></i>하위 보드</span><small>▾ 접기·펼치기 · 기록 제목은 본문 보기 · 할 일은 수정</small></div>
+    <div class="tree-canvas slim-scroll"><ul class="tr-branches">${branches || '<li class="brief-empty tr-empty">보드를 만들면 이곳에 프로젝트 구성이 표시됩니다.</li>'}</ul><div class="tr-resources">${resources}</div></div></div>`;
 }
 
 function renderTbox() {
@@ -2076,14 +2210,13 @@ function renderTbox() {
   const slotCount = Math.max(3, d.big3.length);
   const rows = Array.from({ length: slotCount }, (_, i) => {
     const b = d.big3[i], c = tbColor(i);
-    if (!b) return `<div class="tb-big3-row empty" data-idx="${i}"><span class="tb-chip" style="background:${c.bg}"></span><span class="tb-empty-txt">Brain Dump에서 여기로 드래그</span>${i >= 3 ? `<button class="tb-x" data-action="tb-remove" data-idx="${i}" title="빈 우선순위 삭제">✕</button>` : ''}</div>`;
+    if (!b) return `<div class="tb-big3-row empty" data-idx="${i}"><span class="tb-chip" style="background:${c.bg}"></span><span class="tb-empty-txt">배정할 할 일에서 여기로 드래그</span>${i >= 3 ? `<button class="tb-x" data-action="tb-remove" data-idx="${i}" title="빈 우선순위 삭제">✕</button>` : ''}</div>`;
     const sum = tbSum(d, i);
     const hasActual = b.actual !== undefined && b.actual !== null && b.actual !== '';
     const diff = hasActual ? Math.round((b.actual - sum) * 100) / 100 : null;
     const diffHtml = !hasActual ? '' :
-      diff > 0 ? `<span class="tb-diff over">+${diff}h 초과</span>` :
-      diff < 0 ? `<span class="tb-diff under">${diff}h 단축</span>` :
-      `<span class="tb-diff even">정확</span>`;
+      diff !== 0 ? `<span class="tb-diff">계획 대비 ${diff > 0 ? '+' : '−'}${Math.round(Math.abs(diff) * 60)}분</span>` :
+      `<span class="tb-diff">계획과 동일</span>`;
     const done = tbDone(b);
     const bcard = b.cardId ? state.cards.find(x => x.id === b.cardId) : null;
     const bboard = bcard && bcard.project ? boardById(bcard.project) : null;
@@ -2092,19 +2225,21 @@ function renderTbox() {
     const boardBadge = bboard ? `<span class="tb-board-badge" title="보드">🗂 ${esc(bboard.name)}</span>` : '';
     return `<div class="tb-big3-row ${tbSel === i ? 'sel' : ''} ${done ? 'done' : ''}" data-idx="${i}" data-action="tb-select" title="클릭=선택 후 시간 칸 드래그로 배정">
       <span class="tb-grip" draggable="true" data-idx="${i}" title="드래그로 순서 변경">⠿</span>
-      <span class="tb-chip" style="background:${c.bg}"></span>
-      <input type="checkbox" data-action="tb-check" data-idx="${i}" ${done ? 'checked' : ''} title="완수 처리 (보드에도 반영)">
+      <span class="tb-chip" style="background:${c.bg}">${i + 1}</span>
+      <input type="checkbox" data-action="tb-check" data-idx="${i}" ${done ? 'checked' : ''} title="완료 처리 (보드에도 반영)">
       ${projBadge}${boardBadge}<span class="tb-title">${esc(tbTitle(b))}</span>
       <span class="tb-sum">${sum ? '계획 ' + sum + 'h' : ''}</span>
       <span class="tb-actual-wrap" title="실제 소요 시간 기록">실제 <input type="number" class="tb-actual-input" data-idx="${i}" step="0.5" min="0" placeholder="-" value="${hasActual ? b.actual : ''}">h</span>
       ${diffHtml}
+      <button class="tb-plan-btn" data-action="tb-order" data-idx="${i}" data-dir="-1" ${i === 0 ? 'disabled' : ''} title="우선순위 올리기">↑</button>
+      <button class="tb-plan-btn" data-action="tb-order" data-idx="${i}" data-dir="1" ${i === slotCount - 1 ? 'disabled' : ''} title="우선순위 내리기">↓</button>
       <button class="tb-x" data-action="tb-remove" data-idx="${i}" title="빼기 (배정 시간도 삭제)">✕</button>
     </div>`;
   }).join('') + `<button class="tb-add" data-action="tb-add" title="우선순위 항목 추가">＋ 우선순위 추가</button>`;
   let dumpHtml;
   if (inPlanWindow) {
     const dump = state.cards.filter(c => c.status !== 'done').sort(byProject(dueSort));
-    const sub = isToday ? '미완료 To-do 전체 · 클릭=수정 / 더블클릭=보드 / 드래그=Big3' : `D+${offset} · ${offset}일 뒤 계획 — 현재 미완료 To-do를 미리 배치`;
+    const sub = isToday ? '미완료 할 일 전체 · 클릭=수정 / 더블클릭=보드 / 드래그=핵심 업무' : `D+${offset} · ${offset}일 뒤 계획 — 현재 미완료 할 일을 미리 배치`;
     const dumpItem = c => {
       const b = c.project ? boardById(c.project) : null;
       const g = b && b.group ? groupById(b.group) : null;
@@ -2112,7 +2247,8 @@ function renderTbox() {
       const inBig = d.big3.some(x => x && x.cardId === c.id);
       return `<div class="tb-dump-item ${inBig ? 'in-big' : ''}" draggable="true" data-id="${c.id}" title="클릭=수정 · 더블클릭=보드로 이동">
         <span class="drow-prio" style="${pr.bg ? 'background:' + pr.bg : ''}"></span>
-        <span class="tb-dump-t">${esc(c.title)}</span>${b ? `<span class="drow-board">${esc(b.name)}</span>` : ''}${inBig ? '<span class="tb-star">★</span>' : ''}
+        <span class="tb-dump-t">${esc(c.title)}</span>${b ? `<span class="drow-board">${esc(b.name)}</span>` : ''}${inBig ? '<span class="tb-star">✓ 선택됨</span>' : ''}
+        <button class="tb-plan-btn" data-action="tb-plan-card" data-id="${c.id}" ${inBig ? 'disabled' : ''}>핵심 업무로 선택</button>
       </div>`;
     };
     // 프로젝트별 그룹핑
@@ -2130,13 +2266,13 @@ function renderTbox() {
         dumpBody += dumpItem(c);
       });
     } else dumpBody = '<div class="empty">미완료 할 일이 없어요 👍</div>';
-    dumpHtml = `<div class="tb-sec-h" style="margin-top:16px">Brain Dump <span class="cnt">${dump.length}</span><span class="dash-sub">${sub}</span></div>
+    dumpHtml = `<div class="tb-sec-h" style="margin-top:16px">배정할 할 일 <span class="cnt">${dump.length}</span><span class="dash-sub">${sub}</span></div>
       <div class="tb-dump">${dumpBody}</div>
-      <form class="quick" data-project="__inbox"><input name="t" placeholder="+ 쏟아내기 — 미배정 할 일로 추가" autocomplete="off"></form>`;
+      <form class="quick" data-project="__inbox"><input name="t" placeholder="+ 생각난 할 일 빠르게 추가 (미배정)" autocomplete="off"></form>`;
   } else {
     const msg = offset > 0
       ? `📅 ${TB_PLAN_DAYS}일 이후 날짜입니다 · 가까운 날짜에서 계획하세요`
-      : '📖 지난 날짜의 타임박스입니다';
+      : '📖 지난 날짜의 하루 계획입니다';
     dumpHtml = `<div class="tb-note-past">${msg} · <button class="mini-btn" data-action="tbox-today">오늘로 이동</button></div>`;
   }
   // 이 날짜의 시간 지정 일정 → 해당 시간칸에 📌 표시
@@ -2157,14 +2293,18 @@ function renderTbox() {
       const ss = schedBySlot[k];
       const mark = ss ? `<span class="tb-sched-mark" title="${esc(ss.map(x => x.time + ' ' + x.title).join('\n'))}">📌 ${esc(ss[0].title)}${ss.length > 1 ? ` 외 ${ss.length - 1}` : ''}</span>` : '';
       const num = v !== undefined ? `<span class="tb-cell-num">${v + 1}</span>` : '';
-      return `<div class="tb-cell${doneSlot ? ' done-slot' : ''}${ss ? ' has-sched' : ''}" data-slot="${k}" ${v !== undefined ? `style="background-color:${tbColor(v).bg};color:${tbColor(v).fg}"` : ''}>${num}${mark}</div>`;
+      const previous = half === 5 ? h + '.0' : (h - 1) + '.5';
+      const label = v !== undefined && d.big3[v] && d.slots[previous] !== v ? `<span class="tb-cell-label">${esc(tbTitle(d.big3[v]))}</span>` : '';
+      return `<div class="tb-cell${doneSlot ? ' done-slot' : ''}${ss ? ' has-sched' : ''}" data-slot="${k}" title="${h}:${half ? '30' : '00'}${v !== undefined && d.big3[v] ? ' · ' + esc(tbTitle(d.big3[v])) : ''}" ${v !== undefined ? `style="background-color:${tbColor(v).bg};color:${tbColor(v).fg}"` : ''}>${num}${label}${mark}</div>`;
     };
     grid += `<div class="tb-row"><span class="tb-hour">${h}</span>${cell(0)}${cell(5)}</div>`;
   }
   grid += '</div>';
   const selB = tbSel !== null ? d.big3[tbSel] : null;
-  const hint = selB ? `<b>${esc(tbTitle(selB))}</b> 배정 중 — 시간 칸을 드래그하세요 (칠한 칸 다시 드래그=지우기)` : 'Big 3 행을 클릭해 선택 → 오른쪽 시간 칸을 드래그해 배정';
-  return `<div class="cal-head">
+  const hint = selB ? `<b>${esc(tbTitle(selB))}</b> 배정 중 — 시간 칸을 드래그하세요 (칠한 칸 다시 드래그=지우기)` : '핵심 업무를 선택 → 오른쪽 시간 칸을 드래그해 배정';
+  return `<div class="view-heading"><h2>하루 계획</h2><p>핵심 업무를 고르고 시간을 배정하세요. 실제 소요 시간은 업무를 마친 뒤 기록합니다.</p></div>
+    <div class="tb-steps"><span><b>1</b> 핵심 업무 선택</span><span><b>2</b> 시간 배정</span><span><b>3</b> 실제 시간 기록</span></div>
+    <div class="cal-head">
       <span class="cal-title">⏱ ${date} (${dow})${isToday ? ' · 오늘' : ''}</span>
       <button class="pill" data-action="tbox-prev">◀</button>
       <button class="pill" data-action="tbox-today">오늘</button>
@@ -2173,11 +2313,11 @@ function renderTbox() {
     </div>
     <div class="tbox-wrap">
       <div class="tb-left">
-        <div class="tb-sec-h">Top Priorities — Big 3</div>
+        <div class="tb-sec-h">1. 핵심 업무 선택</div><p class="tb-section-hint">아래 할 일에서 선택하거나 드래그하세요. 순서대로 우선순위가 정해집니다.</p>
         ${rows}
         ${dumpHtml}
       </div>
-      <div class="tb-right">${grid}</div>
+      <div class="tb-right"><div class="tb-sec-h">2. 시간 배정</div><p class="tb-section-hint">업무를 선택하고 시간 칸을 누르거나 드래그하세요.</p>${grid}<button class="pill tb-time-btn" data-action="tb-time-open">시간 구간으로 배정·비우기</button><p class="tb-section-hint">3. 실제 시간은 왼쪽 핵심 업무의 ‘실제’ 칸에 기록합니다.</p></div>
     </div>`;
 }
 function tbApplyCell(cell) {
@@ -2217,9 +2357,10 @@ document.addEventListener('pointermove', e => {
 document.addEventListener('pointerup', () => {
   if (tbPaint) { tbPaint = null; save(); render(); }
 });
-// Brain Dump 항목: 한 번 클릭=내용 수정 / 더블클릭=보드로 이동 (드래그는 그대로)
+// 배정할 할 일 항목: 한 번 클릭=내용 수정 / 더블클릭=보드로 이동 (드래그는 그대로)
 let tbDumpClickTimer = null;
 document.addEventListener('click', e => {
+  if (e.target.closest('.tb-plan-btn')) return;
   const it = e.target.closest && e.target.closest('.tb-dump-item');
   if (!it) return;
   if (tbDumpClickTimer) { clearTimeout(tbDumpClickTimer); tbDumpClickTimer = null; return; }   // 더블클릭 첫 클릭 무시
@@ -2240,7 +2381,7 @@ document.addEventListener('click', e => {
   const it = e.target.closest && e.target.closest('.map-todo-item');
   if (it) openCardModal(it.dataset.id);
 });
-// 현황 To-do/일정 행: 한 번 클릭 = 수정 / 더블클릭 = 해당 보드로 이동
+// 현황 할 일/일정 행: 한 번 클릭 = 수정 / 더블클릭 = 해당 보드로 이동
 let dashClickTimer = null;
 function dashGoBoard(kind, id) {
   if (kind === 'card') {
@@ -2267,7 +2408,7 @@ document.addEventListener('dblclick', e => {
   dashGoBoard(row.dataset.kind, row.dataset.id);
 });
 
-/* ---------- 일지 (To-do·타임박스 기반 자동 일일 기록) ---------- */
+/* ---------- 일지 (할 일·하루 계획 기반 자동 일일 기록) ---------- */
 function journalDerive(date) {
   const done = state.cards.filter(c => c.status === 'done' && c.doneAt === date).map(c => {
     const b = c.project ? boardById(c.project) : null;
@@ -2353,10 +2494,10 @@ function journalProse(a) {
   if (a.planH || a.actualH) {
     if (a.actualH) {
       const diff = Math.round((a.actualH - a.planH) * 100) / 100;
-      s.push(diff > 0 ? `타임박스에 ${a.planH}시간을 계획했지만 실제로는 ${a.actualH}시간이 걸렸다(+${diff}시간).`
-        : diff < 0 ? `타임박스에 ${a.planH}시간을 계획했고 실제로는 ${a.actualH}시간 만에 끝냈다(${diff}시간).`
-        : `타임박스 계획대로 ${a.planH}시간을 썼다.`);
-    } else s.push(`타임박스에 ${a.planH}시간을 계획했다.`);
+      s.push(diff > 0 ? `하루 계획에 ${a.planH}시간을 계획했지만 실제로는 ${a.actualH}시간이 걸렸다(+${diff}시간).`
+        : diff < 0 ? `하루 계획에 ${a.planH}시간을 계획했고 실제로는 ${a.actualH}시간 만에 끝냈다(${diff}시간).`
+        : `하루 계획 계획대로 ${a.planH}시간을 썼다.`);
+    } else s.push(`하루 계획에 ${a.planH}시간을 계획했다.`);
   }
   if (a.notes.length) {
     const titles = a.notes.map(n => n.title);
@@ -2369,13 +2510,13 @@ function journalProse(a) {
 function journalMarkdown(a) {
   const L = [journalProse(a), ''];
   if (a.done.length) {
-    L.push('✅ **완수**');
+    L.push('✅ **완료**');
     const byP = {};
     a.done.forEach(d => { const k = d.proj || '미배정'; (byP[k] = byP[k] || []).push(d.title); });
     Object.keys(byP).forEach(k => L.push(`- ${k}: ${byP[k].join(', ')}`));
   }
   if (a.big3.length) {
-    L.push('🎯 **핵심 Big3**');
+    L.push('🎯 **핵심 업무**');
     a.big3.forEach(b => {
       const meta = [b.plan ? `계획 ${b.plan}h` : '', (b.actual != null ? `실제 ${b.actual}h` : '')].filter(Boolean).join('·');
       L.push(`- ${b.done ? '✓' : '○'} ${b.title}${meta ? ` (${meta})` : ''}`);
@@ -2415,8 +2556,8 @@ const jrAiBusy = new Set();
 function jrSleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 function buildJrPrompt(date, a) {
   const lines = [];
-  if (a.done.length) lines.push('완수: ' + a.done.map(d => (d.proj ? `[${d.proj}] ` : '') + d.title).join(', '));
-  if (a.big3.length) lines.push('오늘의 핵심 Big3: ' + a.big3.map(b => `${b.title}(${b.done ? '달성' : '미달성'}${b.plan ? `, 계획 ${b.plan}h` : ''}${b.actual != null ? `, 실제 ${b.actual}h` : ''})`).join(' / '));
+  if (a.done.length) lines.push('완료: ' + a.done.map(d => (d.proj ? `[${d.proj}] ` : '') + d.title).join(', '));
+  if (a.big3.length) lines.push('오늘의 핵심 업무: ' + a.big3.map(b => `${b.title}(${b.done ? '달성' : '미달성'}${b.plan ? `, 계획 ${b.plan}h` : ''}${b.actual != null ? `, 실제 ${b.actual}h` : ''})`).join(' / '));
   if (a.planH || a.actualH) lines.push(`시간: 계획 ${a.planH}h, 실제 ${a.actualH}h`);
   if (a.notes.length) lines.push('남긴 기록: ' + a.notes.map(n => n.title).join(', '));
   if (a.created) lines.push(`새로 등록한 할 일: ${a.created}건`);
@@ -2425,8 +2566,8 @@ function buildJrPrompt(date, a) {
 
 1) 첫 부분: 오늘 하루를 돌아보는 자연스러운 1인칭 서술 2~3문장("~했다" 체).
 2) 빈 줄 뒤: 카테고리별 불렛 정리. 아래 중 데이터가 있는 것만 소제목으로 쓰고, 각 항목은 "- "로 시작.
-   소제목은 반드시 이 표기 그대로: ✅ **완수** / 🎯 **핵심 Big3** / ⏱ **시간** / 📝 **기록**
-   - 완수는 프로젝트별로 묶고, 시간은 계획 대비 실제를 짚을 것.
+   소제목은 반드시 이 표기 그대로: ✅ **완료** / 🎯 **핵심 업무** / ⏱ **시간** / 📝 **기록**
+   - 완료는 프로젝트별로 묶고, 시간은 계획 대비 실제를 짚을 것.
 데이터에 없는 내용은 절대 만들지 마세요.
 
 [${date}] 오늘 한 일
@@ -2484,8 +2625,8 @@ function jrDayCard(date, a, entry, live) {
   const dowName = ['일', '월', '화', '수', '목', '금', '토'][new Date(date + 'T00:00:00').getDay()];
   const chips = [];
   if (a) {
-    if (a.done.length) chips.push(`<span class="prop-chip">✅ 완수 ${a.done.length}</span>`);
-    if (a.big3.length) chips.push(`<span class="prop-chip">🎯 Big3 ${a.big3.filter(b => b.done).length}/${a.big3.length}</span>`);
+    if (a.done.length) chips.push(`<span class="prop-chip">✅ 완료 ${a.done.length}</span>`);
+    if (a.big3.length) chips.push(`<span class="prop-chip">🎯 핵심 업무 ${a.big3.filter(b => b.done).length}/${a.big3.length}</span>`);
     if (a.planH || a.actualH) {
       const diff = Math.round((a.actualH - a.planH) * 100) / 100;
       chips.push(`<span class="prop-chip">⏱ 계획 ${a.planH}h${a.actualH ? ` → 실제 ${a.actualH}h (${diff > 0 ? '+' : ''}${diff}h)` : ''}</span>`);
@@ -2505,13 +2646,16 @@ function jrDayCard(date, a, entry, live) {
     bodyHtml = `<div class="jr-body jr-rich">${jrRichText(journalMarkdown(a))}</div>`;
     actions = `<button class="jr-mini" data-action="jr-ai" data-date="${date}" title="Gemini로 자연스럽게 다듬기">✨ AI로 다듬기</button>`;
   } else {
-    bodyHtml = `<div class="empty">${live ? '아직 오늘 활동이 없어요 — 완수·타임박스·기록이 자동으로 쌓입니다' : '기록 없음'}</div>`;
+    bodyHtml = `<div class="empty">${live ? '아직 오늘 활동이 없어요 — 완료·하루 계획·기록이 자동으로 쌓입니다' : '기록 없음'}</div>`;
   }
   return `<section class="jr-day ${live ? 'live' : ''}">
-    <div class="jr-head"><span class="jr-date">${fmtDate(date)} (${dowName})</span>${live ? '<span class="jr-live">오늘 · 실시간</span>' : ''}<div class="jr-chips">${chips.join('')}</div></div>
-    ${bodyHtml}
+    <div class="jr-head"><span class="jr-date">${fmtDate(date)} (${dowName})</span>${live ? '<span class="jr-live">오늘 · 자동 업데이트 중</span>' : '<span class="jr-live saved">활동 요약 저장됨</span>'}</div>
+    <div class="jr-summary">${a ? esc(journalProse(a)) : '저장된 활동 요약이 없습니다.'}</div>
     ${actions ? `<div class="jr-actions">${actions}</div>` : ''}
+    ${aiText || busy ? bodyHtml : ''}
+    <div class="jr-memo-label">내가 쓴 회고</div>
     <div class="jr-memo" data-action="jr-memo" data-date="${date}" title="클릭해서 회고 쓰기">${memo ? `💭 ${esc(memo)}` : '<span class="jr-memo-ph">💭 클릭해 한 줄 회고 남기기</span>'}</div>
+    <details class="jr-details"><summary>자동 활동 상세 보기</summary><div class="jr-chips">${chips.join('')}</div>${aiText || busy ? (a ? `<div class="jr-body jr-rich">${jrRichText(journalMarkdown(a))}</div>` : '') : bodyHtml}</details>
   </section>`;
 }
 // 주간 요약: 월요일 시작 주의 일지들을 합산
@@ -2536,8 +2680,8 @@ function jrWeekSummary(mondayStr, entries) {
   return `<div class="jr-week">
     <div class="jw-head">📊 주간 요약 <span class="jw-range">${fmtDate(mondayStr)} ~ ${fmtDate(dstr(end))}</span></div>
     <div class="jw-kpis">
-      <span class="jw-kpi"><b>${done}</b>완수</span>
-      ${b3tot ? `<span class="jw-kpi"><b>${b3done}/${b3tot}</b> Big3</span>` : ''}
+      <span class="jw-kpi"><b>${done}</b>완료</span>
+      ${b3tot ? `<span class="jw-kpi"><b>${b3done}/${b3tot}</b> 핵심 업무</span>` : ''}
       ${(plan || actual) ? `<span class="jw-kpi"><b>${actual}h</b> 실제<i class="jw-diff ${diff > 0 ? 'over' : diff < 0 ? 'under' : ''}">${plan ? `계획 ${plan}h${diff ? (diff > 0 ? ` · +${diff}` : ` · ${diff}`) : ''}` : ''}</i></span>` : ''}
       ${notes ? `<span class="jw-kpi"><b>${notes}</b>기록</span>` : ''}
       ${memos ? `<span class="jw-kpi"><b>${memos}</b>회고</span>` : ''}
@@ -2577,8 +2721,9 @@ function renderJournal() {
   const moreBtn = pastDates.length > limit ? `<button class="pill jr-more" data-action="jr-more">+ 이전 일지 더 보기 (${pastDates.length - limit}일)</button>` : '';
   const keyBtn = `<button class="jr-mini jr-key-btn" data-action="jr-key">🔑 AI 키 ${geminiKey() ? '✓' : '설정'}</button>`;
   return `<div class="journal">
+    <div class="view-heading"><h2>자동 업무일지</h2><p>자동으로 모인 활동을 돌아보고, 나만의 회고를 남기세요.</p></div>
     ${journalSeg('journal')}
-    <div class="jr-intro">📔 완수한 To-do·타임박스·기록을 토대로 하루가 자동 정리됩니다. 지난 날짜는 확정 저장되어 원본을 지워도 남아요.${keyBtn}</div>
+    <div class="jr-intro"><span>오늘 활동은 자동 업데이트됩니다. 지난 날짜의 활동 요약은 원본 업무를 지워도 남습니다.</span><details class="jr-settings"><summary>일지 설정</summary>${keyBtn}</details></div>
     ${feed}${moreBtn}
   </div>`;
 }
@@ -2715,7 +2860,13 @@ function maybeShowAlerts() {
 // 헤더 높이를 CSS 변수로 노출 (기록 에디터 툴바가 헤더 아래에 붙도록) + 스크롤 시 그림자
 function syncHeaderH() {
   const h = document.querySelector('header');
-  if (h) document.documentElement.style.setProperty('--hdr-h', Math.round(h.getBoundingClientRect().height) + 'px');
+  if (h) {
+    const nav = h.querySelector('.views');
+    const bottom = nav && matchMedia('(max-width:760px)').matches ? nav.getBoundingClientRect().bottom : h.getBoundingClientRect().bottom;
+    document.documentElement.style.setProperty('--hdr-h', Math.round(bottom) + 'px');
+    const noteTop = document.querySelector('.ne-top');
+    document.documentElement.style.setProperty('--note-top-h', noteTop ? Math.ceil(noteTop.getBoundingClientRect().height) + 'px' : '0px');
+  }
 }
 if (typeof window !== 'undefined') {
   const onScroll = () => {
@@ -2729,6 +2880,7 @@ if (typeof window !== 'undefined') {
 
 /* ---------- render ---------- */
 function render() {
+  const navScroll = document.querySelector('.views')?.scrollLeft || 0;
   let view = state.sel.view || 'board';
   if (view === 'devlog' && !isAdmin()) view = 'board';
   rollRepeats();        // 반복 일정은 지난 회차를 다음 주기로 전진
@@ -2744,16 +2896,29 @@ function render() {
   }
   // 개발일지만 일지 탭 안 세그먼트 → 나머지는 독립 헤더 버튼
   const navOwner = { devlog: 'journal' };
-  const vbtn = (k, label) => `<button class="${(navOwner[view] || view) === k ? 'on' : ''}" data-action="view" data-view="${k}">${label}</button>`;
-  const vsep = '<span class="vsep"></span>';
-  const nav = vbtn('dash', '대시보드') + vbtn('cal', '달력') + vsep + vbtn('map', '구조도') + vbtn('tree', '트리') + vbtn('board', '프로젝트') + vbtn('tbox', '타임박스') + vbtn('notes', '기록') + vsep + vbtn('journal', '일지');
+  const navIcons = {
+    dash: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+    cal: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 11h18M8 15h2m4 0h2"/>',
+    map: '<rect x="8" y="3" width="8" height="5" rx="1"/><path d="M12 8v5M5 16v-3h14v3"/><rect x="2" y="16" width="6" height="5" rx="1"/><rect x="16" y="16" width="6" height="5" rx="1"/>',
+    tree: '<path d="M5 3v14q0 2 2 2h4M5 7h6"/><rect x="11" y="4" width="10" height="6" rx="1"/><rect x="11" y="16" width="10" height="6" rx="1"/>',
+    board: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M15 4v16M6 8v4m6-4v7m6-7v3"/>',
+    tbox: '<circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/>',
+    notes: '<path d="M14 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-9M9 15l1-4L18 3l3 3-8 8-4 1Z"/>',
+    journal: '<path d="M12 5v16M12 5C8 2 5 3 2 4v15c3-1 6-2 10 2 4-4 7-3 10-2V4c-3-1-6-2-10 1Z"/>'
+  };
+  const vbtn = (k, label) => `<button class="${(navOwner[view] || view) === k ? 'on' : ''}" data-action="view" data-view="${k}" ${(navOwner[view] || view) === k ? 'aria-current="page"' : ''} title="${label}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${navIcons[k]}</svg><span>${label}</span></button>`;
+  const nav = '<span class="nav-group-label">현황 확인</span>' + vbtn('dash', '대시보드') + vbtn('cal', '일정·마감')
+    + '<span class="nav-group-label">업무 관리</span>' + vbtn('map', '업무 구조도') + vbtn('tree', '프로젝트 개관') + vbtn('board', '프로젝트') + vbtn('tbox', '하루 계획')
+    + '<span class="nav-group-label">기록과 회고</span>' + vbtn('notes', '업무 기록') + vbtn('journal', '자동 업무일지');
   document.getElementById('app').classList.toggle('wide', view === 'map' || view === 'tree');
+  document.getElementById('app').dataset.view = view;
   document.getElementById('app').innerHTML = `
     <header>
-      <h1>업무 보드</h1>
-      <nav class="views">${nav}</nav>
-      <button class="theme-toggle" data-action="search-open" title="전체 검색 (할 일·일정·기록)">🔍</button>
-      <span class="week-count">이번 주 ${weekDone()}개 완료</span>
+      <h1><span class="workspace-mark" aria-hidden="true">w<span>.</span></span>업무 보드</h1>
+      <nav class="views" aria-label="주 메뉴">${nav}</nav>
+      <span class="nav-scroll-hint" aria-hidden="true">메뉴 좌우로 밀기 ↔</span>
+      <button class="workspace-search" data-action="search-open" title="전체 검색 (Ctrl+K 또는 ⌘K)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></svg><span>업무 보드에서 검색</span><kbd>Ctrl K</kbd></button>
+      <span class="week-count"><span aria-hidden="true">✓</span> 이번 주 <b>${weekDone()}개</b> 완료</span>
       <button class="theme-toggle" data-action="theme-toggle" title="${document.documentElement.dataset.theme === 'dark' ? '밝은 테마로 전환' : '어두운 테마로 전환'}">${document.documentElement.dataset.theme === 'dark' ? '☀️' : '🌙'}</button>
     </header>
     ${view === 'map' ? renderMap() : view === 'tree' ? renderTree() : view === 'cal' ? renderCal() : view === 'devlog' ? renderDevlog() : view === 'dash' ? renderDash() : view === 'notes' ? (noteEditing !== undefined ? renderNoteEditor() : renderNotes()) : view === 'journal' ? renderJournal() : view === 'tbox' ? renderTbox() : renderBoardView()}
@@ -2775,6 +2940,16 @@ function render() {
     }
   }
   syncHeaderH();
+  const navigation = document.querySelector('.views');
+  if (navigation && matchMedia('(max-width:760px)').matches) {
+    navigation.scrollLeft = navScroll;
+    const active = navigation.querySelector('[aria-current="page"]');
+    if (active) {
+      const n = navigation.getBoundingClientRect(), a = active.getBoundingClientRect();
+      if (a.right > n.right - 8) navigation.scrollLeft += a.right - n.right + 8;
+      else if (a.left < n.left + 8) navigation.scrollLeft -= n.left + 8 - a.left;
+    }
+  }
   maybeShowAlerts();
   if (view === 'map') initMap();
   if (view === 'cal') markCalOverflow();
@@ -2852,18 +3027,18 @@ function openCardModal(id) {
       <label>보드<select id="m-cboard">${cardBoardOptions(gid, c.project || '')}</select></label>
     </div>
     <label>상태<div class="seg card-status">
-      ${[['todo', '📅 예정'], ['doing', '▶ 진행 중'], ['done', '✓ 완수']].map(([k, lb]) =>
+      ${[['todo', '□ 할 일'], ['doing', '▶ 진행 중'], ['done', '✓ 완료']].map(([k, lb]) =>
         `<button type="button" class="seg-btn ${c.status === k ? 'sel' : ''}" data-action="card-status" data-id="${c.id}" data-st="${k}">${lb}</button>`).join('')}
     </div></label>
     <label>중요도${prioPicker(c.priority || 'med')}</label>
-    <label>💬 메모 · FU (별도로 확인·기억할 것)<textarea id="m-note" rows="3" placeholder="예: 팀장 리뷰 후 재확인 / 자료 요청 대기중">${esc(c.note || '')}</textarea></label>
+    <label>💬 메모 · 후속 확인 (별도로 확인·기억할 것)<textarea id="m-note" rows="3" placeholder="예: 팀장 리뷰 후 재확인 / 자료 요청 대기중">${esc(c.note || '')}</textarea></label>
     <label>마감일 (선택)<input type="date" id="m-due" value="${c.due || ''}"></label>
-    ${c.status === 'done' ? `<label>완수일<input type="date" id="m-doneat" value="${c.doneAt || todayStr()}"></label>` : ''}
-    ${c.fuCount ? `<p class="restore-note">↩ ${fuNum(c.fuCount)} 후속 진행 중${(c.fuHistory || []).length ? ` — ${(c.fuHistory || []).map((d, i) => `${i + 1}차 완수 ${fmtDate(d)}`).join(' · ')}` : ''}</p>` : ''}
+    ${c.status === 'done' ? `<label>완료일<input type="date" id="m-doneat" value="${c.doneAt || todayStr()}"></label>` : ''}
+    ${c.fuCount ? `<p class="restore-note">↩ ${fuNum(c.fuCount)} 후속 진행 중${(c.fuHistory || []).length ? ` — ${(c.fuHistory || []).map((d, i) => `${i + 1}차 완료 ${fmtDate(d)}`).join(' · ')}` : ''}</p>` : ''}
     <div class="m-actions">
       <button class="danger" data-action="card-del" data-id="${c.id}">삭제</button>
-      ${c.status === 'done' ? `<button class="ghost" data-action="card-fu" data-id="${c.id}" title="완수 이력을 남기고 다시 진행중으로">↩ FU (다시 진행)</button>` : ''}
-      ${c.status !== 'done' && c.fuCount ? `<button class="ghost" data-action="card-fu-undo" data-id="${c.id}" title="FU를 취소하고 직전 완수 상태로 되돌립니다">⤺ FU 취소 (완수로 복귀)</button>` : ''}
+      ${c.status === 'done' ? `<button class="ghost" data-action="card-fu" data-id="${c.id}" title="완료 이력을 남기고 다시 진행중으로">↩ 다시 진행</button>` : ''}
+      ${c.status !== 'done' && c.fuCount ? `<button class="ghost" data-action="card-fu-undo" data-id="${c.id}" title="재개를 취소하고 직전 완료 상태로 되돌립니다">⤺ 재개 취소 (완료로 복귀)</button>` : ''}
       <button class="ghost" data-action="modal-close">취소</button>
       <button class="primary" data-action="card-save" data-id="${c.id}">저장</button>
     </div>`);
@@ -2880,6 +3055,8 @@ function openBoardModal(id) {
     <label>이름<input type="text" id="m-title" value="${esc(b.name)}"></label>
     <label>프로젝트 (분류)${groupOptions('m-bgroup', b.group || null)}</label>
     <label>상위 보드<select id="m-parent">${opts.join('')}</select></label>
+    <label>같은 단계의 보드 순서<select id="m-board-order"><option value="">현재 순서 유지</option><option value="first">맨 앞으로</option><option value="last">맨 뒤로</option></select></label>
+    <details class="board-position"><summary>구조도 위치 조정</summary><div class="two"><label>가로 위치<input type="number" min="0" id="m-board-x" value="${Number.isFinite(b.x) ? b.x : ''}"></label><label>세로 위치<input type="number" min="0" id="m-board-y" value="${Number.isFinite(b.y) ? b.y : ''}"></label></div></details>
     <div class="two">
       <label>수행 시작일<input type="date" id="m-start" value="${b.start || ''}"></label>
       <label>수행 종료일<input type="date" id="m-end" value="${b.end || ''}"></label>
@@ -2911,7 +3088,7 @@ function openCalAddModal(date, type, keepTitle) {
       <label>내용<input type="text" id="m-stitle" value="${kt}" placeholder="예: 반기검토 보고서 제출 / 감사보고서 마감"></label>
       <div class="two">
         <label>마감일<input type="date" id="m-sdate" value="${date}"></label>
-        <label title="입력하면 타임박스 해당 시간칸에 표시됩니다">시간 (선택)<input type="time" id="m-stime" value=""></label>
+        <label title="입력하면 하루 계획 해당 시간칸에 표시됩니다">시간 (선택)<input type="time" id="m-stime" value=""></label>
       </div>
       <label>프로젝트<select id="m-sgroup">
         ${(state.groups || []).map(g => `<option value="${g.id}">${esc(g.name)}</option>`).join('')}
@@ -3027,7 +3204,7 @@ function openGroupModal(id) {
   const periods = (g && g.periods) ? g.periods : [];
   showModal(`
     <h3>${g ? '프로젝트 설정' : '프로젝트 추가'}</h3>
-    <p class="restore-note">프로젝트는 보드를 묶는 분류 폴더예요 (To-do 없음). 여러 수행기간을 넣으면 달력에 표시됩니다.</p>
+    <p class="restore-note">프로젝트는 보드를 묶는 분류 폴더예요 (할 일 없음). 여러 수행기간을 넣으면 달력에 표시됩니다.</p>
     <label>이름<input type="text" id="m-title" value="${g ? esc(g.name) : ''}" placeholder="예: AK18호 / 하림지주"></label>
     <div class="periods-lbl">수행기간 (여러 개 가능 — 예: 이번 주 5일 + 다다음 주 5일)</div>
     <div id="m-periods">${periods.map(p => periodRowHtml(p.start, p.end)).join('')}</div>
@@ -3074,6 +3251,7 @@ document.addEventListener('click', e => {
   else if (act === 'logout') { if (window.firebase) firebase.auth().signOut(); }
   else if (act === 'view') { state.sel.view = el.dataset.view; render(); }
   else if (act === 'map-arrange') { autoLayout(); render(); }
+  else if (act === 'map-add-open') { const map = document.getElementById('map'); openAddBoardAt((map ? map.scrollLeft : 0) + 80, (map ? map.scrollTop : 0) + 80); }
   else if (act === 'kpi-go') {
     const sec = document.getElementById(el.dataset.target);
     if (sec) { sec.scrollIntoView({ behavior: 'smooth', block: 'start' }); sec.classList.add('flash'); setTimeout(() => sec.classList.remove('flash'), 1500); }
@@ -3152,7 +3330,7 @@ document.addEventListener('click', e => {
         // 체크 해제 시 원래 상태로 복귀(FU로 진행중이던 카드가 '예정'으로 떨어지지 않게)
         if (b.done) { c.prevStatus = c.status === 'done' ? (c.prevStatus || 'todo') : c.status; c.status = 'done'; c.doneAt = todayStr(); }
         else { c.status = c.prevStatus || 'todo'; c.doneAt = null; }
-        // 같은 카드가 담긴 모든 날짜의 Big3 완수 표시를 동기화(미래 계획 포함)
+        // 같은 카드가 담긴 모든 날짜의 Big3 완료 표시를 동기화(미래 계획 포함)
         Object.values(state.timebox || {}).forEach(day => (day.big3 || []).forEach(x => { if (x && x.cardId === c.id) x.done = b.done; }));
       }
     }
@@ -3169,8 +3347,35 @@ document.addEventListener('click', e => {
   }
   else if (act === 'tb-add') {
     const d = tbData(state.sel.tboxDate || todayStr());
-    d.big3.push(null);   // 빈 우선순위 슬롯 추가 → Brain Dump에서 드래그
+    d.big3.push(null);   // 빈 우선순위 슬롯 추가 → 배정할 할 일에서 드래그
     render();
+  }
+  else if (act === 'tb-plan-card') {
+    const d = tbData(state.sel.tboxDate || todayStr());
+    const c = state.cards.find(x => x.id === el.dataset.id);
+    if (c && !d.big3.some(x => x && x.cardId === c.id)) {
+      let i = d.big3.findIndex(x => !x);
+      if (i < 0) i = d.big3.length;
+      d.big3[i] = {cardId:c.id, title:c.title, done:c.status === 'done'};
+      tbSel = i; render();
+    }
+  }
+  else if (act === 'tb-order') { tbMoveBig3(+el.dataset.idx, +el.dataset.idx + +el.dataset.dir); }
+  else if (act === 'tb-time-open') openTimeRange();
+  else if (act === 'tb-time-save' || act === 'tb-time-clear') {
+    const minutes = id => { const [h,m] = document.getElementById(id).value.split(':').map(Number); return h * 60 + m; };
+    const start = minutes('m-time-start'), end = minutes('m-time-end');
+    const i = +document.getElementById('m-time-task').value;
+    const d = tbData(state.sel.tboxDate || todayStr());
+    if (end <= start || (act === 'tb-time-save' && !d.big3[i])) {
+      document.getElementById('m-time-error').textContent = '핵심 업무와 시작 이후의 종료 시간을 선택하세요.'; return;
+    }
+    for (let m = start; m < end; m += 30) {
+      const k = Math.floor(m / 60) + '.' + (m % 60 ? 5 : 0);
+      if (act === 'tb-time-clear') delete d.slots[k]; else d.slots[k] = i;
+    }
+    if (act === 'tb-time-save') tbSel = i;
+    closeModal(); render();
   }
   else if (act === 'dash-big3-go') { state.sel.view = 'tbox'; state.sel.tboxDate = todayStr(); render(); }
   else if (act === 'dash-week-go') { state.sel.view = 'cal'; state.sel.calYm = todayStr().slice(0, 7); render(); }
@@ -3243,7 +3448,7 @@ document.addEventListener('click', e => {
     render();
   }
   else if (act === 'sched-past-toggle') { pastSchedOpen = !pastSchedOpen; render(); }
-  // FU 취소: 직전 완수 상태로 복귀 (fuHistory 마지막 날짜 복원, 회차 -1)
+  // FU 취소: 직전 완료 상태로 복귀 (fuHistory 마지막 날짜 복원, 회차 -1)
   else if (act === 'card-status') {
     const c = state.cards.find(x => x.id === el.dataset.id);
     if (c) {
@@ -3255,7 +3460,7 @@ document.addEventListener('click', e => {
       } else {
         c.status = st; c.doneAt = null;
       }
-      Object.values(state.timebox || {}).forEach(day => (day.big3 || []).forEach(x => {   // 타임박스 체크와 동기화
+      Object.values(state.timebox || {}).forEach(day => (day.big3 || []).forEach(x => {   // 하루 계획 체크와 동기화
         if (x && x.cardId === c.id) x.done = (st === 'done');
       }));
     }
@@ -3272,7 +3477,7 @@ document.addEventListener('click', e => {
     }
     closeModal(); render();
   }
-  // FU: 완수된 카드를 다시 진행중으로 — 완수 이력을 남겨 '몇 차 후속인지' 표시
+  // FU: 완료된 카드를 다시 진행중으로 — 완료 이력을 남겨 '몇 차 후속인지' 표시
   else if (act === 'card-fu') {
     const c = state.cards.find(x => x.id === el.dataset.id);
     if (c) {
@@ -3320,7 +3525,7 @@ document.addEventListener('click', e => {
   else if (act === 'overview-edit') openOverviewModal();
   else if (act === 'overview-save') {
     const v = document.getElementById('m-overview').value.trim();
-    const gid = currentNoteGroup();
+    const gid = el.dataset.gid ?? currentNoteGroup();
     const g = gid ? groupById(gid) : null;
     if (g) g.overview = v || null; else state.unGroupOverview = v || null;
     closeModal(); render();
@@ -3339,7 +3544,20 @@ document.addEventListener('click', e => {
   else if (act === 'alert-close') { document.querySelector('.alert-toast')?.remove(); }
   else if (act === 'alert-card') openCardModal(el.dataset.id);
   else if (act === 'alert-sched') openSchedModal(el.dataset.id);
-  else if (act === 'tree-group') { state.sel.treeGroup = el.dataset.gid; render(); }
+  else if (act === 'tree-group') { state.sel.treeGroup = el.dataset.gid; treeAreaId = null; render(); }
+  else if (act === 'tree-mode') { state.sel.treeMode = el.dataset.mode === 'all' ? 'all' : 'summary'; render(); }
+  else if (act === 'tree-overview-edit') openOverviewModal(treeGroupId());
+  else if (act === 'tree-area') {
+    treeAreaId = el.dataset.bid; treeDetailTab = 'tasks'; render();
+    const panel = document.getElementById('brief-detail');
+    panel?.focus({ preventScroll: true });
+    if (matchMedia('(max-width:1100px)').matches) panel?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }
+  else if (act === 'tree-area-close') {
+    const previous = treeAreaId; treeAreaId = null; render();
+    [...document.querySelectorAll('[data-action="tree-area"]')].find(b => b.dataset.bid === previous)?.focus({ preventScroll: !matchMedia('(max-width:1100px)').matches });
+  }
+  else if (act === 'tree-detail-tab') { treeDetailTab = ['tasks', 'notes', 'boards'].includes(el.dataset.tab) ? el.dataset.tab : 'tasks'; render(); }
   else if (act === 'tree-toggle') {
     const k = el.dataset.key;
     treeClosed.has(k) ? treeClosed.delete(k) : treeClosed.add(k);
@@ -3445,6 +3663,16 @@ document.addEventListener('click', e => {
       const par = document.getElementById('m-parent').value || null;
       if (par !== b.id && !isAncestor(b.id, par)) {
         if (par) setParent(b.id, par); else b.parent = null;
+      }
+      const order = document.getElementById('m-board-order').value;
+      if (order) {
+        const peers = state.projects.filter(x => x.id !== b.id && (x.group || '') === (b.group || '') && (x.parent || '') === (b.parent || ''));
+        const target = order === 'first' ? peers[0] : peers[peers.length - 1];
+        if (target) reorderBoard(b.id, target.id, order === 'last');
+      }
+      for (const axis of ['x', 'y']) {
+        const field = document.getElementById('m-board-' + axis);
+        if (field.value !== '' && Number.isFinite(field.valueAsNumber)) b[axis] = Math.max(0, field.valueAsNumber);
       }
       b.start = document.getElementById('m-start').value || null;
       b.end = document.getElementById('m-end').value || null;
@@ -3581,6 +3809,9 @@ document.getElementById('import-file').addEventListener('change', e => {
 
 // 모달 키보드: 입력창에서 Enter=저장(기본 버튼), Esc=닫기 (textarea·검색창 제외)
 document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k' && document.querySelector('.workspace-search')) {
+    e.preventDefault(); openSearchModal(''); return;
+  }
   const ov = document.querySelector('.overlay');
   if (!ov) return;
   if (e.key === 'Escape') { e.preventDefault(); closeModal(); return; }
@@ -3640,7 +3871,12 @@ document.addEventListener('dragstart', e => {
   const bd = e.target.closest('.board-drag');
   if (bd) { dragItem = { kind: 'board', id: bd.dataset.id }; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', 'board'); document.body.classList.add('dragging-board'); }
 });
-document.addEventListener('dragend', () => { dragItem = null; document.body.classList.remove('dragging-board', 'dragging-card'); clearDropHints(); });
+function endDrag() {
+  dragItem = null;
+  document.body.classList.remove('dragging-board', 'dragging-card');
+  clearDropHints();
+}
+document.addEventListener('dragend', endDrag);
 document.addEventListener('dragover', e => {
   if (dragItem && dragItem.kind === 'big3') {
     const row = e.target.closest('.tb-big3-row');
@@ -3686,7 +3922,7 @@ document.addEventListener('dragover', e => {
   const col = e.target.closest('.col');
   if (col) { e.preventDefault(); col.classList.add('dragover'); return; }
   const cp = e.target.closest('.compact-panel');
-  if (cp) { e.preventDefault(); cp.classList.add('dragover'); return; }   // 컴팩트 보드에 드롭 = To-do로
+  if (cp) { e.preventDefault(); cp.classList.add('dragover'); return; }   // 컴팩트 보드에 드롭 = 할 일로
   // 보드 영역 밖(패널 사이 여백·하단 힌트 바)에 놓으면 미배정
   if (dragItem && dragItem.kind === 'card' && document.body.classList.contains('dragging-card')
       && !e.target.closest('.board-panel') && !e.target.closest('.notes-side')
@@ -3732,7 +3968,7 @@ document.addEventListener('drop', e => {
     dragItem = null; clearDropHints(); render();
     return;
   }
-  if (dragItem && dragItem.kind === 'tbdump') {      // Brain Dump → Big 3
+  if (dragItem && dragItem.kind === 'tbdump') {      // 배정할 할 일 → Big 3
     e.preventDefault();
     const row = e.target.closest('.tb-big3-row');
     if (row) {
@@ -3817,6 +4053,9 @@ document.addEventListener('drop', e => {
     moveCard(cid, col.dataset.status, panel ? panel.dataset.board : null);
   }
 });
+
+// A drop can replace the dragged DOM node before dragend reaches document.
+document.addEventListener('drop', endDrag);
 
 /* ---------- Google Calendar 단방향 동기화 (앱 → 구글) ---------- */
 const GCAL_OK = !!(window.gcalClientId && !/PASTE|YOUR_/.test(window.gcalClientId));
@@ -3931,7 +4170,7 @@ async function syncGCal() {
 let noteBubbleEl = null;
 function showNoteBubble(target, text) {
   if (!noteBubbleEl) { noteBubbleEl = document.createElement('div'); noteBubbleEl.className = 'note-bubble'; document.body.appendChild(noteBubbleEl); }
-  noteBubbleEl.innerHTML = `<div class="nb-head">💬 메모 · FU</div><div class="nb-body">${esc(text)}</div>`;
+  noteBubbleEl.innerHTML = `<div class="nb-head">💬 메모 · 후속 확인</div><div class="nb-body">${esc(text)}</div>`;
   noteBubbleEl.style.display = 'block';
   const r = target.getBoundingClientRect();
   const bw = noteBubbleEl.offsetWidth, bh = noteBubbleEl.offsetHeight;
@@ -3966,7 +4205,7 @@ document.addEventListener('input', e => {
     });
     return;
   }
-  if (e.target.id === 'arch-q') {                 // 완수 아카이브 검색 — 동일 패턴
+  if (e.target.id === 'arch-q') {                 // 완료 내역 검색 — 동일 패턴
     const q = e.target.value.trim().toLowerCase();
     document.querySelectorAll('.arch-row').forEach(it => {
       it.style.display = !q || (it.dataset.text || '').includes(q) ? '' : 'none';
