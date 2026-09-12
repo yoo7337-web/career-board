@@ -1441,11 +1441,8 @@ function dashRow(c, hidePill, showReason) {
     : c.status === 'done' ? '<span class="st-pill done">완료</span>'
       : '<span class="st-pill todo">할 일</span>');
   const overdue = c.status !== 'done' && c.due && dday(c.due) < 0 ? ' overdue' : '';
-  const reasons = [];
-  if (showReason) {
-    if (c.due && dday(c.due) <= 3) reasons.push(dday(c.due) < 0 ? '기한 지남' : dday(c.due) === 0 ? '오늘 마감' : '3일 이내 마감');
-    if (c.priority === 'high') reasons.push('중요도 높음');
-  }
+  // 마감 관련 사유는 옆의 D-day 뱃지와 같은 말이라 생략 — 뱃지로 알 수 없는 '중요도'만 남긴다
+  const reasons = (showReason && c.priority === 'high') ? ['중요'] : [];
   const metaInner = `${board}${tag}${reasons.map(r => `<span class="attention-reason">${r}</span>`).join('')}`;
   const meta = metaInner ? `<div class="drow-meta">${metaInner}</div>` : '';
   return `<div class="drow${overdue}" data-kind="card" data-id="${c.id}" title="클릭=수정 · 더블클릭=보드로 이동">
@@ -1491,7 +1488,8 @@ function renderDash() {
   const todo = cards.filter(c => c.status === 'todo').sort(byProject(dueSort));
   const doing = cards.filter(c => c.status === 'doing').sort(byProject(dueSort));
   const urgent = incomplete.filter(isUrgent).sort(byProject(dueSort));
-  const kpi = (label, val, cls, target, icon) => `<${target ? 'button' : 'div'} class="kpi ${target ? 'kpi-link' : ''} ${cls}" ${target ? `data-action="kpi-go" data-target="${target}"` : ''}><span class="kpi-lbl">${workspaceIcon(icon)}${label}${target ? ' ↗' : ''}</span><span class="kpi-val">${val}</span></${target ? 'button' : 'div'}>`;
+  // 숫자를 먼저 읽고 라벨로 확인하는 순서 — 아이콘은 왼쪽에 붙여 타일 높이를 반으로 줄인다
+  const kpi = (label, val, cls, target, icon) => `<${target ? 'button' : 'div'} class="kpi ${target ? 'kpi-link' : ''} ${cls}" ${target ? `data-action="kpi-go" data-target="${target}"` : ''}><span class="kpi-ico">${workspaceIcon(icon)}</span><span class="kpi-txt"><span class="kpi-val">${val}</span><span class="kpi-lbl">${label}${target ? ' ↗' : ''}</span></span></${target ? 'button' : 'div'}>`;
   // 프로젝트별 진행률 + 다음 마감 D-day
   const nextSchedOf = gid => (state.schedules || []).filter(s => (s.group || '') === gid && !s.done && !schedIsStale(s))
     .sort((a, b) => (a.date || '').localeCompare(b.date || ''))[0] || null;
@@ -1533,7 +1531,10 @@ function renderDash() {
       <span class="dw-marks">${dueCnt ? `<span class="dw-badge">${dueCnt}</span>` : ''}${schedCnt ? `<span class="dw-sched">📌${schedCnt}</span>` : ''}</span>
     </div>`);
   }
-  const weekStrip = `<div class="dash-week">${weekCells.join('')}</div>`;
+  const weekStrip = `<div class="dash-weekcard">
+    <div class="dwc-head">${workspaceIcon('calendar')}<span class="dwc-title">이번 주</span><span class="dwc-sub">숫자=마감 · 📌=일정</span></div>
+    <div class="dash-week">${weekCells.join('')}</div>
+  </div>`;
   const td = (state.timebox || {})[today];
   const hasBig3 = td && td.big3 && td.big3.some(Boolean);
   const big3Strip = `<div class="dash-big3" data-action="dash-big3-go" title="하루 계획로 이동">
@@ -1544,20 +1545,27 @@ function renderDash() {
                    : `<span class="db3 empty">우선순위 ${i + 1}</span>`; }).join('')
       : '<span class="db3 empty">하루 계획에서 핵심 업무를 정해보세요 →</span>'}
   </div>`;
+  // 배치 의도: ①요약 숫자 ②오늘·이번 주 ③해야 할 일 2단 ④프로젝트 완료율
+  // — 한 화면에서 위→아래로 좁혀 읽도록. 목록은 넓은 가로폭을 쓰는 대신 세로로는 내부 스크롤로 묶는다.
   return `<div class="dash">
-    <div class="view-heading"><h2>대시보드</h2><p>지금 집중할 업무와 챙겨야 할 마감을 확인하세요.</p></div>
-    ${big3Strip}
-    ${dashSection('주의가 필요한 업무', '기한 지남 · 3일 이내 마감 · 중요도 높음', urgent, '주의가 필요한 업무가 없어요', null, { id: 'sec-urgent', full: true, showReason: true })}
-    ${dashSection('진행 중', '지금 하고 있는 일', doing, '진행 중인 업무가 없어요', null, { id: 'sec-doing', stage: 'doing', hidePill: true, full: true })}
-    <div class="section-caption">이번 주 일정과 전체 현황</div>
-    ${weekStrip}
-    <div class="dash-kpis">
-      ${kpi('할 일', todo.length, 'k-todo', null, 'folder')}
-      ${kpi('진행 중', doing.length, 'k-doing', 'sec-doing', 'clock')}
-      ${kpi('이번 주 완료', weekDone(), 'k-done', null, 'check')}
-      ${kpi('주의 필요', urgent.length, 'k-urgent', 'sec-urgent', 'alert')}
+    <div class="dash-hero">
+      <div class="view-heading"><h2>대시보드</h2><p>지금 집중할 업무와 챙겨야 할 마감을 확인하세요.</p></div>
+      <div class="dash-kpis">
+        ${kpi('할 일', todo.length, 'k-todo', null, 'folder')}
+        ${kpi('진행 중', doing.length, 'k-doing', 'sec-doing', 'clock')}
+        ${kpi('이번 주 완료', weekDone(), 'k-done', null, 'check')}
+        ${kpi('주의 필요', urgent.length, 'k-urgent', 'sec-urgent', 'alert')}
+      </div>
     </div>
-    ${gpRows.length ? `<section class="dash-sec"><div class="dash-sec-head"><h2>프로젝트별 할 일 완료율</h2><span class="dash-sub">완료 건수 / 전체 건수 · 작업량 기준이 아닙니다</span></div><div class="dash-list slim-scroll gp-list">${gpRows.join('')}</div></section>` : ''}
+    <div class="dash-strips">
+      ${big3Strip}
+      ${weekStrip}
+    </div>
+    <div class="dash-cols">
+      ${dashSection('주의가 필요한 업무', '기한 지남 · 3일 이내 마감 · 중요도 높음', urgent, '주의가 필요한 업무가 없어요', null, { id: 'sec-urgent', full: true, showReason: true })}
+      ${dashSection('진행 중', '지금 하고 있는 일', doing, '진행 중인 업무가 없어요', null, { id: 'sec-doing', stage: 'doing', hidePill: true, full: true })}
+    </div>
+    ${gpRows.length ? `<section class="dash-sec"><div class="dash-sec-head"><h2>프로젝트별 할 일 완료율</h2><span class="dash-sub">완료 건수 / 전체 건수 · 작업량 기준이 아닙니다</span></div><div class="dash-list slim-scroll gp-grid">${gpRows.join('')}</div></section>` : ''}
   </div>`;
 }
 

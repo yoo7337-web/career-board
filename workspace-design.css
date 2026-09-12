@@ -125,28 +125,46 @@ body {background:var(--bg)}
 .modal h3 {letter-spacing:-.4px}
 .alert-toast,.search-box {border-radius:14px;border-color:var(--border);background:var(--surface);color:var(--text)}
 
-/* Dashboard: report-like metrics and clear, semantic status accents. */
-#app[data-view="dash"] .dash {gap:18px}
-#app[data-view="dash"] .dash>.view-heading {padding-bottom:6px}
-#app[data-view="dash"] .dash-big3 {padding:18px 20px;border-radius:14px;border-top:3px solid var(--pd-blue);box-shadow:var(--pd-shadow);gap:10px}
-#app[data-view="dash"] .db3 {border-radius:7px;padding:5px 9px;font-size:12px}
-#app[data-view="dash"] .db3-label {font-size:13px;color:var(--text)}
-#app[data-view="dash"] .dash-sec {padding:20px;border-radius:14px;box-shadow:var(--pd-shadow)}
+/* Dashboard: report-like metrics and clear, semantic status accents.
+   Density rule — the page is wide, so information spreads sideways and the
+   page itself stays about one screen tall. */
+#app[data-view="dash"] .dash {gap:14px}
+#app[data-view="dash"] .dash-hero .view-heading {margin-bottom:0}
+#app[data-view="dash"] .dash-hero .view-heading h2 {font-size:23px;letter-spacing:-.7px}
+#app[data-view="dash"] .dash-hero .view-heading p {font-size:12.5px;line-height:1.6;margin-top:4px}
+#app[data-view="dash"] .dash-big3 {padding:11px 14px;border-radius:12px;border-top:3px solid var(--pd-blue);box-shadow:var(--pd-shadow);gap:8px}
+#app[data-view="dash"] .db3 {border-radius:7px;padding:4px 9px;font-size:12px}
+#app[data-view="dash"] .db3.empty {max-width:none}   /* the prompt must not be cut off */
+#app[data-view="dash"] .db3-label {font-size:12.5px;color:var(--text)}
+#app[data-view="dash"] .dash-weekcard {border-radius:12px;box-shadow:var(--pd-shadow)}
+#app[data-view="dash"] .dash-sec {padding:13px 15px;border-radius:12px;box-shadow:var(--pd-shadow)}
 #app[data-view="dash"] #sec-urgent {border-top:3px solid var(--pd-amber)}
-#app[data-view="dash"] .dash-sec-head {margin-bottom:14px;gap:9px}
-#app[data-view="dash"] .dash-sec-head h2 {font-size:17px;font-weight:700;letter-spacing:-.4px}
+#app[data-view="dash"] .dash-sec-head {margin-bottom:9px;gap:8px}
+#app[data-view="dash"] .dash-sec-head h2 {font-size:15px;font-weight:700;letter-spacing:-.3px}
 #app[data-view="dash"] .dash-sec-head .cnt {border:0;border-radius:6px;padding:2px 7px;background:var(--pd-blue-soft);color:var(--pd-blue);font-size:11px}
-#app[data-view="dash"] .drow {padding:11px 12px;border:1px solid var(--border);border-radius:9px;background:var(--surface)}
+#app[data-view="dash"] #sec-urgent .cnt {background:var(--pd-amber-soft);color:var(--pd-amber)}
+#app[data-view="dash"] .drow {padding:6px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface);align-items:center}
 #app[data-view="dash"] .drow:hover {background:var(--bg);border-color:var(--pd-blue)}
 #app[data-view="dash"] .drow.overdue {background:var(--surface);box-shadow:inset 3px 0 0 var(--pd-coral)}
-#app[data-view="dash"] .drow-title {white-space:normal;overflow-wrap:anywhere;line-height:1.65}
-#app[data-view="dash"] .drow-body {gap:5px}
+#app[data-view="dash"] .drow-prio {margin-top:0}
+#app[data-view="dash"] .drow-title {line-height:1.6}
+/* One line per task: title on the left, context pushed to the right edge. */
+#app[data-view="dash"] .drow-body {flex-direction:row;align-items:center;gap:12px}
+#app[data-view="dash"] .drow-l1 {flex:1 1 auto;min-width:0}
+#app[data-view="dash"] .drow-meta {flex:0 1 auto;margin-left:auto;flex-wrap:nowrap;justify-content:flex-end;min-width:0}
+#app[data-view="dash"] .drow-board {max-width:150px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#app[data-view="dash"] .drow-meta .tag {flex:none}
+/* Only the deadline badge gets to shout — priority stays a quiet outline
+   so two amber chips never sit side by side. */
+#app[data-view="dash"] .attention-reason {flex:none;background:transparent;color:var(--muted);border:1px solid var(--border);font-weight:600}
 #app[data-view="dash"] .dash-grp {margin-top:8px;margin-bottom:3px}
-#app[data-view="dash"] .dash-kpis {gap:14px;grid-template-columns:repeat(4,minmax(0,1fr))}
-#app[data-view="dash"] .kpi {display:flex;flex-direction:column;gap:14px;padding:18px 20px;text-align:left;border-radius:13px;box-shadow:var(--pd-shadow);min-width:0}
-#app[data-view="dash"] .kpi-lbl {display:flex;align-items:center;gap:9px;font-size:12px;line-height:1.6;margin:0}
-#app[data-view="dash"] .kpi-lbl .workspace-icon {width:32px;height:32px;box-sizing:border-box;padding:7px;border-radius:9px;background:var(--pd-blue-soft);color:var(--pd-blue)}
-#app[data-view="dash"] .kpi-val {font-size:32px;line-height:1.2;letter-spacing:-1px;font-variant-numeric:tabular-nums;color:var(--text)}
+#app[data-view="dash"] .dash-kpis {gap:10px}
+#app[data-view="dash"] .kpi {display:flex;flex-direction:row;align-items:center;gap:11px;padding:10px 13px;text-align:left;border-radius:12px;box-shadow:var(--pd-shadow);min-width:0}
+#app[data-view="dash"] .kpi-ico {flex:none;display:grid;place-items:center}
+#app[data-view="dash"] .kpi-txt {display:flex;flex-direction:column;min-width:0;line-height:1.2}
+#app[data-view="dash"] .kpi-lbl {font-size:11.5px;line-height:1.45;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#app[data-view="dash"] .kpi .workspace-icon {width:30px;height:30px;box-sizing:border-box;padding:7px;border-radius:9px;background:var(--pd-blue-soft);color:var(--pd-blue)}
+#app[data-view="dash"] .kpi-val {font-size:24px;line-height:1.15;letter-spacing:-.8px;font-variant-numeric:tabular-nums;color:var(--text)}
 #app[data-view="dash"] .k-done :is(.kpi-val,.workspace-icon) {color:var(--pd-teal)}
 #app[data-view="dash"] .k-done .workspace-icon {background:var(--pd-teal-soft)}
 #app[data-view="dash"] .k-urgent :is(.kpi-val,.workspace-icon) {color:var(--pd-amber)}
@@ -154,9 +172,13 @@ body {background:var(--bg)}
 #app[data-view="dash"] .k-doing .kpi-val {color:var(--pd-blue)}
 #app[data-view="dash"] .gp-track {height:6px;border:0;background:var(--border)}
 #app[data-view="dash"] .gp-fill {background:var(--pd-teal)}
-#app[data-view="dash"] .gp-row {gap:12px;padding:9px 0}
-#app[data-view="dash"] .dw-cell {border-radius:10px;padding:10px 6px}
+#app[data-view="dash"] .gp-row {gap:10px;padding:6px 0}
+#app[data-view="dash"] .dw-cell {border-radius:9px;padding:7px 6px;min-height:46px;gap:3px}
 #app[data-view="dash"] .dw-cell.today {box-shadow:0 0 0 1px var(--pd-blue)}
+/* Filled chips read against the page, not against white: in dark mode the
+   accent is the light tone, so the label has to flip to the surface color. */
+#app[data-view="dash"] .dw-badge,#app[data-view="dash"] .st-pill.doing {background:var(--pd-blue);color:var(--surface)}
+#app[data-view="dash"] .st-pill.done {background:var(--pd-teal);color:var(--surface)}
 
 /* Project boards: blue identity, neutral work lanes and teal completion. */
 #app[data-view="board"] :is(.board-panel,.sched-panel,.archive-panel) {border-radius:14px;box-shadow:var(--pd-shadow);border-color:var(--border)}
@@ -230,7 +252,8 @@ body {background:var(--bg)}
 #app[data-view="journal"] .jr-week .gp-fill {background:var(--pd-teal)}
 #app:is([data-view="devlog"],[data-view="timeplan"]) :is(.dl-item,.dl-note,.tp-panel) {background:var(--surface);border-color:var(--border);border-radius:14px;box-shadow:var(--pd-shadow)}
 
-@media(max-width:1100px) {
+/* The compact tiles keep all four on one row far longer than the old tall ones. */
+@media(max-width:820px) {
   #app[data-view="dash"] .dash-kpis {grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 @media(max-width:760px) {
@@ -239,9 +262,23 @@ body {background:var(--bg)}
   #app[data-view] .cal-title {font-size:19px}
   #app[data-view="dash"] :is(.dash-sec,.dash-big3) {padding:15px}
   #app[data-view="dash"] .dash-sec-head h2 {font-size:15px}
-  #app[data-view="dash"] .kpi {padding:14px;gap:10px}
-  #app[data-view="dash"] .kpi-lbl {font-size:11px;gap:7px}
-  #app[data-view="dash"] .kpi-val {font-size:28px}
+  #app[data-view="dash"] .kpi {padding:10px 11px;gap:9px}
+  #app[data-view="dash"] .kpi-lbl {font-size:11px}
+  #app[data-view="dash"] .kpi-val {font-size:22px}
+  #app[data-view="dash"] .kpi .workspace-icon {width:26px;height:26px;padding:6px}
+  /* Seven cells across a phone: shrink the type so a day still fits on one line. */
+  #app[data-view="dash"] .dash-weekcard {padding:9px 8px}
+  #app[data-view="dash"] .dw-cell {padding:6px 2px;min-height:42px}
+  #app[data-view="dash"] .dw-day {font-size:10px;white-space:nowrap}
+  #app[data-view="dash"] .dw-day b {font-size:11.5px;margin-left:1px}
+  #app[data-view="dash"] :is(.dw-badge,.dw-sched) {font-size:9px;padding:0 4px;line-height:14px}
+  #app[data-view="dash"] .dw-marks {flex-wrap:wrap;justify-content:center;gap:2px;min-height:14px}
+  /* Too narrow for one line — let the task title and its context stack again. */
+  #app[data-view="dash"] .drow {align-items:flex-start}
+  #app[data-view="dash"] .drow-prio {margin-top:5px}
+  #app[data-view="dash"] .drow-body {flex-direction:column;align-items:stretch;gap:3px}
+  #app[data-view="dash"] .drow-title {white-space:normal;overflow-wrap:anywhere}
+  #app[data-view="dash"] .drow-meta {margin-left:0;flex-wrap:wrap;justify-content:flex-start}
   #app[data-view="dash"] .gp-row {flex-wrap:wrap;gap:8px}
   #app[data-view="dash"] .gp-track {min-width:65px}
   #app[data-view="board"] .board-panel {padding:11px}

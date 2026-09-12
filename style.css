@@ -488,21 +488,32 @@ footer button:hover{border-color:var(--accent);color:var(--text)}
 /* 현황: 전 구역 세로 간격 14px 통일 */
 .dash{display:flex;flex-direction:column;gap:14px}
 .dash>*{margin:0!important}
-.dash-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}
+/* 제목과 요약 숫자를 한 줄에 — 첫 화면에서 현황을 바로 읽게 */
+.dash-hero{display:flex;align-items:flex-end;justify-content:space-between;gap:18px 28px;flex-wrap:wrap}
+.dash-hero .view-heading{flex:1 1 240px;min-width:0}
+.dash-kpis{flex:1 1 620px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;max-width:820px}
 .kpi{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;text-align:center}
 .kpi-val{font-size:26px;font-weight:700;line-height:1.1}
 .kpi-lbl{font-size:12px;color:var(--muted);margin-top:3px}
+/* 오늘의 핵심 3 + 이번 주를 좌우로 — 세로로 쌓지 않아 두 배 압축 */
+.dash-strips{display:grid;grid-template-columns:minmax(0,1fr) minmax(400px,600px);gap:14px;align-items:stretch}
+.dash-weekcard{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;display:flex;flex-direction:column;gap:7px}
+.dwc-head{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted)}
+.dwc-head .workspace-icon{width:15px;height:15px}
+.dwc-title{font-weight:700;color:var(--text);font-size:12.5px}
+.dwc-sub{margin-left:auto;font-size:11px;color:var(--faint)}
+/* 주의 필요 · 진행 중을 2단으로 — 가로 여백을 목록 두 개로 채운다 */
+.dash-cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;align-items:stretch}
+.dash-cols .dash-sec{display:flex;flex-direction:column;min-height:0}
+.dash-cols .dash-list{flex:1;min-height:0;overflow-y:auto;max-height:min(46vh,430px);padding-right:4px}
+/* minmax(0,…) — 기본 1fr은 내용 최소폭에 밀려 좁은 화면에서 가로 넘침이 생긴다 */
+@media (max-width:1080px){.dash-strips,.dash-cols{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:1080px){.dash-cols .dash-list{max-height:330px}}
 .kpi.k-todo .kpi-val{color:var(--muted)}
 .kpi.k-doing .kpi-val{color:var(--accent)}
 .kpi.k-urgent .kpi-val{color:var(--danger-fg)}
 .kpi.k-done .kpi-val{color:var(--ok)}
-.dash-flow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:stretch}
-/* 나란한 구역: 카드 높이 균일 + 목록만 내부 스크롤 */
-.dash-top .dash-sec,.dash-flow .dash-sec{display:flex;flex-direction:column;min-height:0}
-.dash-top .dash-list{flex:1;min-height:0;overflow-y:auto;max-height:340px;padding-right:4px}
-.dash-flow .dash-list{flex:1;min-height:0;overflow-y:auto;max-height:400px;padding-right:4px}
 #sched-list{max-height:260px;overflow-y:auto;padding-right:4px}
-@media (max-width:820px){.dash-flow{grid-template-columns:1fr}}
 .dash-sec.stage-todo{border-top:3px solid var(--faint)}
 .dash-sec.stage-doing{border-top:3px solid var(--accent)}
 .dash-sec.stage-done{border-top:3px solid var(--ok)}
@@ -535,9 +546,6 @@ footer button:hover{border-color:var(--accent);color:var(--text)}
 .dash-sec.flash{outline:2px solid var(--accent);outline-offset:2px}
 .drow.overdue{box-shadow:inset 3px 0 0 var(--danger-fg);background:var(--danger-bg)}
 .drow.overdue:hover{background:var(--danger-bg);filter:brightness(1.05)}
-.dash-top{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:stretch}
-@media (max-width:820px){.dash-top{grid-template-columns:1fr}}
-.gp-list{display:flex;flex-direction:column;gap:2px}
 .gp-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:2px 22px}
 .gp-row{display:flex;align-items:center;gap:8px;padding:5px 4px}
 .gp-track{flex:1;height:10px;background:var(--bg);border-radius:5px;overflow:hidden;border:1px solid var(--border)}
@@ -1088,8 +1096,7 @@ footer button{font-size:11px;padding:5px 9px;border-radius:5px;color:var(--muted
 .nav-scroll-hint{display:none}
 .view-heading{margin-bottom:20px}.view-heading h2{font-size:25px;letter-spacing:-.6px;margin:0 0 5px}
 .view-heading p{font-size:13px;color:var(--muted);margin:0}
-.dash>.view-heading{margin-bottom:2px}
-.section-caption{font-size:13px;font-weight:650;color:var(--muted);margin:9px 0 0}
+.dash .view-heading{margin-bottom:2px}
 .side-explain{display:block;color:var(--muted);font-size:11px;font-weight:400;line-height:1.8;letter-spacing:0;margin:6px 8px}
 .side-h .side-explain{margin:3px 0 0}
 .card{flex-wrap:wrap;align-items:flex-start;gap:7px;min-height:52px;border-left:3px solid var(--priority-color,var(--border));padding:10px}
@@ -1099,8 +1106,7 @@ footer button{font-size:11px;padding:5px 9px;border-radius:5px;color:var(--muted
 .card .meta{margin-left:auto;flex-wrap:wrap;max-width:100%}
 .card .stamp{position:static;transform:none;font-size:10px;border:0;padding:0;color:var(--ok);background:transparent;order:3}
 .card .fu-badge{font-size:10px;margin:0;flex-basis:100%;background:transparent;padding:0}
-.kpi-link{font:inherit;text-align:center;color:var(--text);cursor:pointer}
-.kpi-link .kpi-val,.kpi-link .kpi-lbl{display:block}
+.kpi-link{font:inherit;text-align:left;color:var(--text);cursor:pointer}
 .kpi:not([data-action]){cursor:default}
 .kpi:not([data-action]):hover{border-color:var(--border);box-shadow:none;transform:none}
 .kpi-link:hover{border-color:var(--accent);background:var(--accent-soft)}
